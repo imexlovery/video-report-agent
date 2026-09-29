@@ -18,7 +18,7 @@ def test_silent_duration_filter_exit(tmp_path, monkeypatch):
             runner=lambda *a, **kw: SimpleNamespace(returncode=101, stdout="", stderr=""),
         )
     assert error.value.category == "VIDEO_DURATION_INVALID"
-    assert "3 小时" in str(error.value)
+    assert "5 小时" in str(error.value)
 
 
 @pytest.mark.parametrize(

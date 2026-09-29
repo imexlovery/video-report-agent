@@ -7,7 +7,7 @@ import pytest
 from video_report_agent.ingest import UrlIngestError, probe_bilibili_video, validate_bilibili_url
 
 
-@pytest.mark.parametrize("duration", [599, 600, 659, 1139, 1140, 10800])
+@pytest.mark.parametrize("duration", [599, 600, 659, 1139, 1140, 10800, 10801, 18000])
 def test_probe_selected_part_without_download(monkeypatch, duration):
     monkeypatch.setattr("video_report_agent.ingest.shutil.which", lambda _: "/bin/yt-dlp")
 
@@ -27,7 +27,7 @@ def test_probe_selected_part_without_download(monkeypatch, duration):
     assert result["duration"] == duration
 
 
-@pytest.mark.parametrize("duration", [None, True, 0, -1, "600", float("nan"), 10801])
+@pytest.mark.parametrize("duration", [None, True, 0, -1, "600", float("nan"), 18000.1, 18001])
 def test_probe_rejects_unknown_or_unsupported_duration(monkeypatch, duration):
     monkeypatch.setattr("video_report_agent.ingest.shutil.which", lambda _: "/bin/yt-dlp")
     with pytest.raises(UrlIngestError):

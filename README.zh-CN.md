@@ -158,7 +158,7 @@ uv run video-report generate 'https://www.bilibili.com/video/BV...' --transcript
 
 - 默认 ASR-only，关闭 OCR。可选 `fused` 模式用于字幕导入、OCR 与融合；相关依赖通过 `uv sync --extra enhancement` 安装，使用 MLX 时同时保留 `--extra mlx`。
 - 每次生成使用独立的 `runs/<run-id>/` 工作目录，Pi 负责 Agent 循环、工具调用与上下文管理，Skill 负责报告编辑要求。
-- 视频最长 3 小时，单次任务执行期限为 30 分钟，不含排队时间。本地任务停止后，已提交的云端 ASR 可能继续执行并计费。
+- 视频最长 5 小时，单次任务执行期限为 30 分钟，不含排队时间。本地任务停止后，已提交的云端 ASR 可能继续执行并计费。
 - 下载入口支持公开 Bilibili 视频，不提供登录或私有视频访问。生成的内容仍需结合原始来源判断准确性。
 - Pi 使用本机文件与命令工具；独立工作目录是一种工作约定，不是操作系统沙箱。
 

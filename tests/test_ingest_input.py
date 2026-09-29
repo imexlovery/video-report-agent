@@ -124,13 +124,13 @@ def test_download_selects_audio_only_when_requested(tmp_path, monkeypatch, audio
     assert result.media_path.suffix == (".m4a" if audio_only else ".mp4")
 
 
-@pytest.mark.parametrize("duration,allowed", [(10800, True), (10800.1, False), (None, False)])
+@pytest.mark.parametrize("duration,allowed", [(10800, True), (10801, True), (18000, True), (18000.1, False), (None, False)])
 def test_duration_limit(tmp_path, duration, allowed):
     from video_report_agent.ingest import _metadata
     from yt_dlp.utils import match_filter_func
 
     info = {"title": "Test", "uploader": "UP", "duration": duration}
-    assert (match_filter_func("duration <= 10800")(info) is None) == allowed
+    assert (match_filter_func("duration <= 18000")(info) is None) == allowed
     path = tmp_path / "info.json"
     path.write_text(json.dumps(info))
     if allowed:

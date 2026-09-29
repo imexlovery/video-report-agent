@@ -9,7 +9,7 @@
 ## 当前能力
 
 - 两条使用路径：独立复制 Skill 与模板，用自己的 Coding Agent 阅读完整转写；或通过 `video-report generate` 执行下载到报告的完整流水线。
-- 流水线支持公开 Bilibili 视频及受限短链解析，最长 3 小时；默认 `asr-only`、OCR 关闭。可选 `fused` 支持字幕/OCR 文字融合，不是全面视频视觉理解。
+- 流水线支持公开 Bilibili 视频及受限短链解析，最长 5 小时；默认 `asr-only`、OCR 关闭。可选 `fused` 支持字幕/OCR 文字融合，不是全面视频视觉理解。
 - 内置 ASR 为 Apple Silicon MLX Whisper 与百炼 `paraformer` 适配（含代码支持的 Fun-ASR 模型）。云端长音频在满足时长与静音条件时分两段并行识别，恢复原时间轴。
 - 默认 Standard 用于理解与查阅；Brief 用于快速掌握结论、依据和限制。两个模式读完整转写，各有规则与模板，可以复用同一来源转写。
 - Pi 负责单 Agent 循环；Python 负责确定性前后处理、进程生命周期与产物校验。生成 HTML 后尝试输出 PNG 长图。

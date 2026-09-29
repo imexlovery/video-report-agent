@@ -167,7 +167,7 @@ Outputs are saved in `runs/<run-id>/`, including `transcript.md`, provenance rec
 
 - ASR-only with OCR off is the default. Optional `fused` mode supports subtitle import, OCR, and fusion. Install its dependencies with `uv sync --extra enhancement`; include `--extra mlx` as well when using MLX.
 - Every generation uses its own `runs/<run-id>/` working directory. Pi owns the Agent loop, tools, and context management; the Skill defines report-editing requirements.
-- Videos are limited to 3 hours. Tasks have a 30-minute execution deadline, excluding queue time. Already-submitted cloud ASR may continue and incur charges after a local task stops.
+- Videos are limited to 5 hours. Tasks have a 30-minute execution deadline, excluding queue time. Already-submitted cloud ASR may continue and incur charges after a local task stops.
 - Ingestion supports public Bilibili videos, without login or private-video access. Check generated content against the original source as needed.
 - Pi uses local file and shell tools. A dedicated working directory is a workspace convention, not an operating-system sandbox.
 
