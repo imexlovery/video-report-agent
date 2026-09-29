@@ -140,6 +140,46 @@ def validate_bilibili_url(value: object) -> BilibiliSource:
     )
 
 
+def probe_bilibili_video(
+    source: BilibiliSource, *, runner: CommandRunner | None = None,
+) -> dict:
+    """Read the selected part's metadata without downloading media or writing files."""
+    executable = shutil.which("yt-dlp")
+    if executable is None:
+        raise UrlIngestError("VIDEO_METADATA_UNAVAILABLE", "视频时长查询暂不可用。")
+    command = [
+        executable, "--ignore-config", "--no-playlist", "--skip-download",
+        "--dump-single-json", "--socket-timeout", "15", "--retries", "0",
+        source.canonical_url,
+    ]
+    try:
+        result = (runner or subprocess.run)(
+            command, capture_output=True, text=True, check=False, shell=False, timeout=45,
+        )
+        if result.returncode != 0:
+            raise ValueError("metadata command failed")
+        payload = json.loads(result.stdout)
+        if not isinstance(payload, dict) or payload.get("_type") in {"playlist", "multi_video"}:
+            raise ValueError("expected a single video part")
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        raise UrlIngestError(
+            "VIDEO_METADATA_UNAVAILABLE", "无法查询视频时长，请稍后重试。",
+        ) from exc
+    duration = payload.get("duration")
+    if (
+        isinstance(duration, bool) or not isinstance(duration, (int, float))
+        or not math.isfinite(duration) or duration <= 0
+    ):
+        raise UrlIngestError("VIDEO_DURATION_INVALID", "无法确认视频时长，不能处理此视频。")
+    if duration > MAX_VIDEO_SECONDS:
+        raise UrlIngestError("VIDEO_TOO_LONG", "单个视频最长支持 3 小时。")
+    return {
+        "bvid": source.bvid, "page_number": source.page_number,
+        "video_id": source.video_id, "url": source.canonical_url,
+        "title": str(payload.get("title") or source.bvid), "duration": duration,
+    }
+
+
 def _run_command(command: list[str], runner: CommandRunner | None, *, category: str) -> Any:
     active_runner = runner or subprocess.run
     try:
