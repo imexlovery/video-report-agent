@@ -1,12 +1,15 @@
 import json
+import os
+import time
 from types import SimpleNamespace
 
 import pytest
 
 from video_report_agent import pipeline
-from video_report_agent.asr import DEFAULT_ASR_MODEL
+from video_report_agent.asr import DEFAULT_ASR_MODEL, normalize_asr_segments
 from video_report_agent.ingest import validate_bilibili_url
-from video_report_agent.reuse import reuse_download, reuse_transcript
+from video_report_agent.reuse import reuse_download, reuse_transcript, validated_asr
+from video_report_agent.retention import cleanup_media
 from video_report_agent.transcript_foundation import FUSION_VERSION, NORMALIZER_VERSION
 
 URL = "https://www.bilibili.com/video/BV1cZ8x6sEhF/"
@@ -58,11 +61,21 @@ def completed(tmp_path):
 @pytest.mark.parametrize("source_mode,target_mode", [
     ("standard", "brief"), ("brief", "standard"), ("brief", None),
 ])
+@pytest.mark.parametrize("gapped_ordinals", [False, True])
 @pytest.mark.parametrize("media_pruned", [False, True])
 def test_pipeline_reuses_inputs_and_generates_new_report(
-    completed, monkeypatch, source_mode, target_mode, media_pruned,
+    completed, monkeypatch, source_mode, target_mode, media_pruned, gapped_ordinals,
 ):
     previous, metadata = completed
+    if gapped_ordinals:
+        normalized = normalize_asr_segments([
+            {"start": 0, "end": 1, "text": "hello"},
+            {"start": 1, "end": 2, "text": " "},
+            {"start": 2, "end": 3, "text": "world"},
+        ])
+        pipeline.write_json(previous / "asr.json", {
+            "segments": [segment.model_dump() for segment in normalized.segments],
+        })
     metadata.update(report_mode=source_mode, uploader="UP")
     pipeline.write_json(previous / "input.json", metadata)
     info = previous / "download/source.info.json"
@@ -70,7 +83,12 @@ def test_pipeline_reuses_inputs_and_generates_new_report(
     source_info["description"] = "Original description"
     pipeline.write_json(info, source_info)
     if media_pruned:
-        (previous / "download/source.mp4").unlink()
+        monkeypatch.setenv("MEDIA_KEEP_LAST", "0")
+        monkeypatch.setenv("MEDIA_MAX_AGE_DAYS", "7")
+        expired = time.time() - 8 * 86400
+        os.utime(previous / "status.json", (expired, expired))
+        cleanup_media(previous.parent)
+        assert not (previous / "download/source.mp4").exists()
     run = pipeline.create_run(
         previous.parent, URL + "?p=1&share_source=copy", report_mode=target_mode or "standard",
     )
@@ -280,3 +298,14 @@ def test_audio_download_reuse_does_not_supply_video_mode(completed):
     result, origin = reuse_download(source, run, request_subtitles=False, audio_only=True)
     assert origin == previous.name
     assert result.media_path.name == "source.m4a"
+
+
+@pytest.mark.parametrize("ordinals", [[0, 0], [2, 1]])
+def test_duplicate_or_reversed_asr_ordinals_are_not_reused(completed, ordinals):
+    previous, metadata = completed
+    pipeline.write_json(previous / "asr.json", {"segments": [
+        {"ordinal": ordinal, "start_ms": i * 1000, "end_ms": (i + 1) * 1000,
+         "text": "hello", "words": []}
+        for i, ordinal in enumerate(ordinals)
+    ]})
+    assert validated_asr(previous, metadata) is None

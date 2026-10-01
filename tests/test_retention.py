@@ -2,6 +2,8 @@ import json
 import os
 import time
 
+import pytest
+
 from video_report_agent import pipeline
 from video_report_agent.retention import cleanup_cancelled_run, cleanup_media
 from video_report_agent.transcript_foundation import FUSION_VERSION, NORMALIZER_VERSION
@@ -23,40 +25,65 @@ def make_run(root, name, state="RENDERED", age=0):
     return run
 
 
-def test_default_keeps_twenty_terminal_media_and_preserves_evidence(tmp_path, monkeypatch):
+def complete_transcript(run):
+    metadata = {"video_id": "test", "asr_backend": "test", "asr_model": "test"}
+    pipeline.write_json(run / "input.json", metadata)
+    pipeline.write_json(run / "asr.json", {"segments": [
+        {"ordinal": 0, "start_ms": 0, "end_ms": 1000, "text": "text", "words": []},
+    ]})
+    (run / "canonical-transcript.jsonl").write_text(json.dumps({
+        "unit_id": "unit-1", "start_ms": 0, "end_ms": 1000, "canonical_text": "text",
+    }) + "\n")
+    pipeline.write_json(run / "transcript-manifest.json", {
+        "status": "READY", "video_id": "test", "transcript_mode": "asr-only",
+        "normalizer_version": NORMALIZER_VERSION, "fusion_version": FUSION_VERSION,
+        "canonical_unit_count": 1,
+        "artifacts": {"canonical_transcript": "canonical-transcript.jsonl"},
+    })
+
+
+@pytest.mark.parametrize("state", ["RENDERED", "FAILED", "CANCELLED"])
+def test_media_older_than_seven_days_removed_and_transcript_preserved(tmp_path, monkeypatch, state):
     monkeypatch.delenv("MEDIA_KEEP_LAST", raising=False)
     monkeypatch.delenv("MEDIA_MAX_AGE_DAYS", raising=False)
-    runs = [make_run(tmp_path, str(i), age=i) for i in range(21)]
-    failed = make_run(tmp_path, "failed", "FAILED", age=30)
-    active = make_run(tmp_path, "active", "TRANSCRIBING", age=30)
+    run = make_run(tmp_path, "complete", state, age=8)
+    complete_transcript(run)
     cleanup_media(tmp_path)
-    assert all((run / "download/source.mp4").exists() for run in runs[:20])
-    old = runs[-1]
-    assert not (old / "download/source.mp4").exists()
-    assert not (old / "download/source.m4a").exists()
-    assert not (old / "audio.wav").exists()
+    for name in ("download/source.mp4", "download/source.m4a", "audio.wav"):
+        assert not (run / name).exists()
     for name in (
-        "report.html", "transcript.md", "download/source.info.json",
+        "report.html", "transcript.md", "asr.json", "canonical-transcript.jsonl",
+        "transcript-manifest.json", "input.json", "download/source.info.json",
         "download/source.zh.srt", "assets/image.png", "failure.log", "status.json",
     ):
-        assert (old / name).exists()
-    assert not (failed / "audio.wav").exists()
-    assert (active / "audio.wav").exists()
-    cleanup_media(tmp_path)  # Repeated cleanup is harmless.
+        assert (run / name).exists()
+    cleanup_media(tmp_path)
 
 
-def test_age_and_disabled_limits(tmp_path, monkeypatch):
+@pytest.mark.parametrize("state", ["RENDERED", "FAILED", "CANCELLED"])
+def test_recent_media_kept_even_with_complete_transcript(tmp_path, monkeypatch, state):
+    monkeypatch.delenv("MEDIA_KEEP_LAST", raising=False)
+    monkeypatch.delenv("MEDIA_MAX_AGE_DAYS", raising=False)
+    runs = [make_run(tmp_path, str(i), state, age=6) for i in range(25)]
+    for run in runs:
+        complete_transcript(run)
+    cleanup_media(tmp_path)
+    assert all((run / "download/source.m4a").exists() for run in runs)
+    assert all((run / "audio.wav").exists() for run in runs)
+
+
+def test_active_media_and_disabled_age_limit_are_preserved(tmp_path, monkeypatch):
     monkeypatch.setenv("MEDIA_KEEP_LAST", "0")
-    monkeypatch.setenv("MEDIA_MAX_AGE_DAYS", "0")
+    monkeypatch.setenv("MEDIA_MAX_AGE_DAYS", "7")
+    active = make_run(tmp_path, "active", "TRANSCRIBING", age=400)
     old = make_run(tmp_path, "old", age=8)
-    recent = make_run(tmp_path, "recent", age=6)
+    monkeypatch.setenv("MEDIA_MAX_AGE_DAYS", "0")
     cleanup_media(tmp_path)
     assert (old / "audio.wav").exists()
     monkeypatch.setenv("MEDIA_MAX_AGE_DAYS", "7")
     cleanup_media(tmp_path)
-    assert not (old / "download/source.m4a").exists()
+    assert (active / "audio.wav").exists()
     assert not (old / "audio.wav").exists()
-    assert (recent / "audio.wav").exists()
 
 
 def test_cancel_keeps_reusable_inputs_and_removes_partial_outputs(tmp_path):
@@ -102,16 +129,17 @@ def test_cancel_keeps_reusable_inputs_and_removes_partial_outputs(tmp_path):
     (run / "sessions").mkdir()
     (run / "sessions/partial.jsonl").write_text("partial")
 
+    pipeline.write_json(run / "status.json", {"state": "CANCELLED"})
     cleanup_cancelled_run(run)
 
     for name in (
-        "download/source.m4a", "download/source.info.json", "asr.json",
+        "download/source.m4a", "audio.wav", "download/source.info.json", "asr.json",
         "canonical-transcript.jsonl", "source-text-events.jsonl",
         "transcript-manifest.json", "transcript.md", "input.json", "status.json",
     ):
         assert (run / name).exists()
     for name in (
-        "download/source.m4a.part", "audio.wav", "report.html", "report.png",
+        "download/source.m4a.part", "report.html", "report.png",
         "pi.events.jsonl", "asr-task.json", "sessions",
     ):
         assert not (run / name).exists()
@@ -137,6 +165,11 @@ def test_cancel_removes_incomplete_download_and_transcript(tmp_path):
 
 def test_cancel_keeps_completed_asr_before_transcript_is_ready(tmp_path):
     run = pipeline.create_run(tmp_path, "BV1cZ8x6sEhF")
+    (run / "download").mkdir()
+    (run / "download/source.m4a").write_bytes(b"media")
+    pipeline.write_json(run / "download/source.info.json", {"title": "Test", "uploader": "UP", "duration": 60})
+    (run / "audio.wav").write_bytes(b"audio")
+    pipeline.write_json(run / "status.json", {"state": "CANCELLED"})
     pipeline.write_json(
         run / "asr.json",
         {
@@ -149,5 +182,7 @@ def test_cancel_keeps_completed_asr_before_transcript_is_ready(tmp_path):
 
     cleanup_cancelled_run(run)
 
+    assert (run / "download/source.m4a").exists()
+    assert (run / "audio.wav").exists()
     assert (run / "asr.json").exists()
     assert not (run / "canonical-transcript.jsonl").exists()

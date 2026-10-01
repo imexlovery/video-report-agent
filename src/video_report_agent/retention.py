@@ -17,10 +17,10 @@ _MEDIA_SUFFIXES = {
 
 
 def cleanup_media(root: Path) -> None:
-    """Zero disables each limit; when both are set, either limit expires media."""
+    """Keep terminal runs' media for seven days by default; zero disables a limit."""
     try:
-        keep = int(os.getenv("MEDIA_KEEP_LAST", "20"))
-        days = int(os.getenv("MEDIA_MAX_AGE_DAYS", "0"))
+        keep = int(os.getenv("MEDIA_KEEP_LAST", "0"))
+        days = int(os.getenv("MEDIA_MAX_AGE_DAYS", "7"))
         trace_days = int(os.getenv("PI_TRACE_FULL_MAX_AGE_DAYS", "7"))
         if keep < 0 or days < 0 or trace_days < 0:
             raise ValueError("media retention limits must be non-negative")
@@ -113,6 +113,9 @@ def cleanup_cancelled_run(run: Path) -> None:
         keep.add("transcript.md")
     elif metadata and validated_asr(run, metadata) is not None:
         keep.add("asr.json")
+
+    if "download" in keep:
+        keep.add("audio.wav")
 
     for path in run.iterdir():
         if path.name in keep:

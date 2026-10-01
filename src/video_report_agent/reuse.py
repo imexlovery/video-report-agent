@@ -50,7 +50,10 @@ def validated_asr(candidate: Path, metadata: dict):
         ):
             return None
         parsed = [AsrSegment.model_validate(segment) for segment in segments]
-        if [segment.ordinal for segment in parsed] != list(range(len(parsed))):
+        # ASR normalization drops invalid rows but retains their source ordinals.
+        # Gaps are valid; duplicate or reversed ordinals are not.
+        ordinals = [segment.ordinal for segment in parsed]
+        if any(left >= right for left, right in zip(ordinals, ordinals[1:])):
             return None
         return candidate / "asr.json"
     except (OSError, ValueError, TypeError, AttributeError, ValidationError):

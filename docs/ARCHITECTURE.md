@@ -25,7 +25,9 @@
 
 `create_run` 保存 `input.json`（来源、ASR 配置、报告模式、模型选择）与初始 `status.json`；`generate(run)` 执行管线，外层 execution 监督 Worker。
 
-每个 `runs/<run-id>/` 保存媒体、`asr.json`、`source-text-events.jsonl`、`canonical-transcript.jsonl`、`transcript-manifest.json`、`transcript.md`、所选 Skill 资产、Pi 会话与最终报告。条件路径和失败任务不会拥有所有产物。
+每个 `runs/<run-id>/` 保存媒体、`asr.json`、`source-text-events.jsonl`、`canonical-transcript.jsonl`、`transcript-manifest.json`、`transcript.md`、所选 Skill 资产、Pi 会话与最终报告。条件路径和失败任务不会拥有所有产物。 终态任务的原始媒体和转换音频默认按状态文件修改时间滚动保留七天（`MEDIA_KEEP_LAST=0`、`MEDIA_MAX_AGE_DAYS=7`），在现有清理时机删除过期媒体；运行中任务不清理。完整 ASR、整套转写及输入配置长期保留。
+
+ASR 片段编号保留原始来源位置，过滤空白或无效片段后允许间断；复用检查要求编号严格递增，不要求从零连续编号。
 
 规范单元具有 ID、时间范围与来源关系，`transcript.md` 为模型可读视图；报告的 `data-source-units` 用来定位来源，不能单凭绑定合法判断内容忠实。
 
