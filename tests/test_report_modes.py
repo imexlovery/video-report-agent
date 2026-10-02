@@ -69,7 +69,9 @@ print(json.dumps({"type":"agent_settled"}), flush=True)
     copied = tmp_path / "copied-skill"
     if copied_skill:
         shutil.copytree(SKILL, copied)
-    asyncio.run(PiRunner(review=False, skill_dir=copied if copied_skill else None).run(run))
+    asyncio.run(PiRunner(
+        review=False, skill_dir=copied if copied_skill else None, isolation="local",
+    ).run(run))
     assert (run / "input.json").read_bytes() == original
 
 
@@ -99,5 +101,5 @@ def test_packaged_brief_never_falls_back_to_standard(tmp_path, monkeypatch):
     run = create_run(tmp_path / "runs", "BV1aTtb6uE7d", report_mode="brief")
     (run / "transcript.md").write_text("Source")
     with pytest.raises(PiError, match="Selected template is missing"):
-        asyncio.run(PiRunner().run(run))
+        asyncio.run(PiRunner(isolation="local").run(run))
     assert not (run / "assets/report-template.html").exists()

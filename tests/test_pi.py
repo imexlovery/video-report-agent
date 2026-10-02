@@ -406,7 +406,7 @@ print(json.dumps({"type":"agent_settled"}),flush=True)
     workspace.mkdir()
     (workspace / "transcript.md").write_text("sample")
     with pytest.raises(PiError, match="without report.html"):
-        asyncio.run(PiRunner(review=True).run(workspace))
+        asyncio.run(PiRunner(review=True, isolation="local").run(workspace))
     invocation = json.loads((workspace / "invocation.json").read_text())
     assert Path(invocation["cwd"]) == workspace
     assert "read,write,edit,bash,inspect_report" in invocation["command"]
@@ -440,7 +440,7 @@ print(json.dumps({"type":"agent_settled"}),flush=True)
     workspace.mkdir()
     (workspace / "transcript.md").write_text("sample")
 
-    asyncio.run(PiRunner(thinking="high").run(workspace))
+    asyncio.run(PiRunner(thinking="high", isolation="local").run(workspace))
 
     assert Path((workspace / "received-agent-dir.txt").read_text()) == PI_AGENT_DIR
     assert PI_AGENT_DIR.is_absolute()
@@ -507,6 +507,6 @@ print(json.dumps({"type":"agent_settled"}), flush=True)
     workspace.mkdir()
     (workspace / "transcript.md").write_text("fixture")
     (workspace / "input.json").write_text(json.dumps({"report_mode": report_mode}))
-    runner = PiRunner(skill_dir=custom if explicit else None)
+    runner = PiRunner(skill_dir=custom if explicit else None, isolation="local")
     assert asyncio.run(runner.run(workspace)) == workspace / "report.html"
     assert (tmp_path / "config/models.json").is_file()

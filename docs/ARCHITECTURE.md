@@ -45,6 +45,22 @@ Pi consumer 等待 `agent_settled`，并要求最终 assistant 的 `stopReason =
 
 `REPORT_REVIEW` 默认关闭。开启后向同一 Agent 提供检查工具；工具返回 `semantic_review: not_performed`、`visual_quality: not_scored`，不保证模型调用、修复或质量提升。
 
+## Pi 任务容器（2026-10-02 本地实现，未部署）
+
+`PiRunner` 默认使用 Docker；仅显式 `PI_TASK_ISOLATION=local` 或 `isolation="local"` 才在本机直接运行 Pi。隔离启动失败使任务失败，不回退。下载、ASR 和交付后的简介填充/PNG 仍在可信 Worker 中运行。
+
+每个任务仅挂载 `.generation/` 到 `/workspace`，材料为完整转写（含来源 ID）、来源/模式元数据、简介及选定 Skill/template。当前与备用模型由可信侧使用已安装 Pi 的离线目录解析；API-key 配置快照单独只读挂载，并复制到容器 tmpfs 中供 Pi 使用。不提供共享认证目录、OAuth、其他任务或调用方环境；不支持隔离模式中的 OAuth 模型。只有报告、assets、sessions、inspection 回传原 run，回传拒绝符号链接及非普通文件。
+
+容器复用调用方配置的 `PI_TASK_IMAGE`（默认 `video-report-agent:linux-amd64`），以控制端的非 root UID/GID 运行；只读根文件系统、无 capabilities、no-new-privileges、受限 tmpfs，默认 2 GiB 内存、2 CPU、256 PID。每个任务创建独立 bridge，无端口发布、host PID/IPC/network 或 Docker socket。任务 bridge 与服务及其他任务分离；这没有实现所有宿主机/局域网私网出站封锁。模型凭证可被任务 bash 读取，是当前保留风险。
+
+`task_container.py` 的可信监督进程位于 Worker 进程组之外，Pi 完成、失败、超时、取消或 Worker 被 SIGKILL 后执行 Docker force-remove 并删除任务网络。execution 必须收到原子写入的清理完成记录后才清除取消产物；启动前先写 pending 标记，未发布 PID、清理失败或结果未知时保留现场。监督进程非零退出不回传不可信输出。Docker create 客户端超时不等于 daemon 请求取消，这种结果不标记清理成功。
+
+独立 `task_cleaner.py` 只做定时扫描，不调度任务。它复用应用镜像，只有此可信清理器和调用方控制服务持有 Docker socket，Pi 完全不持有。容器与网络在创建时写入 `video-report.scope`、`video-report.task-id` 和绝对 `video-report.deadline`；Pi 无权修改这些 daemon 标签、清理器代码或配置。清理器按部署 scope 每 2 秒重新发现过期资源，先删容器再删网络，包括尚未启动的 Created 容器。因此控制服务整体被强杀或 create 超时后晚到创建仍有独立回收责任方。正常可用的 daemon 下以截止后 30 秒为验收宽限；Docker API 不可用时不可能即时物理删除，清理器恢复连接后从标签补扫。主服务启动任务前必须发现匹配 scope 的健康清理器，否则失败关闭。
+
+清理器使用非 root、只读根文件系统、无网络、无任务/凭证卷、cap-drop/no-new-privileges、受限 tmpfs 及 CPU/内存/PID 限制。其 socket 仍是高权限控制接口，标签筛选是程序行为限制而非 daemon API 权限降级。此权限例外已单独批准。若清理器本身也被移除，必须先恢复它；不声称所有控制进程与 daemon 同时永久不可用时仍能删除资源。
+
+Docker 调用方使用 `PI_TASK_RUNS_VOLUME` 和 `PI_TASK_RUNS_ROOT` 选择已有命名卷的当前任务子目录（需要支持 volume-subpath 的 Engine）；本机调用默认 bind 当前生成子目录。Pi RPC、同 session 有限续跑及完成契约保持原有逻辑。隔离 fixture 通过不证明真实供应商生成质量。
+
 ## 配置与费用
 
 CLI 从当前运行目录加载 `.env`，进程环境优先；调用方可传模型选择，或通过 `PiRunner(skill_dir=...)` / `VIDEO_REPORT_SKILL_DIR` 指定完整 Skill。Pi 状态存于运行目录的 `config/pi/`（可由环境指定），初始化默认模型配置不覆盖已有设置。安装与依赖细节沿用 [README](../README.md)。

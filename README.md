@@ -88,6 +88,13 @@ On GitHub, the HTML link opens the file page; download it and open it in a brows
 
 ## Optional: run the pipeline
 
+Pi generation now defaults to a per-task Docker container. Supply a built application
+image via `PI_TASK_IMAGE`, a running Docker daemon, and an independently running
+healthy task cleaner with the same `PI_TASK_SCOPE` (default `video-report`). For explicit local development
+with Pi running directly on your machine, set `PI_TASK_ISOLATION=local`; the local
+path has no task sandbox. See [architecture](docs/ARCHITECTURE.md) for mounts,
+API-key requirements and limitations. Standalone Skill use above is unchanged.
+
 Use the CLI to automate downloading, transcription, and report generation without a website server.
 
 > Bilibili URL → yt-dlp → FFmpeg → ASR → Canonical Transcript → Pi RPC + Skill → report.html

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .pipeline import write_json
 from .retention import cleanup_cancelled_run
+from .task_container import wait_for_cleanup
 from .trace import RunTrace
 
 RUN_TIMEOUT_SECONDS = 30 * 60
@@ -54,6 +55,9 @@ def generate(run: Path, *, timeout=RUN_TIMEOUT_SECONDS, env: dict[str, str] | No
             except ProcessLookupError:
                 pass
             process.wait()
+            # Docker tasks are supervised outside this process group. Wait for
+            # parent-death cleanup before cancellation deletes generation files.
+            wait_for_cleanup(run)
     path = run / "status.json"
     status = json.loads(path.read_text())
     if cancelled:

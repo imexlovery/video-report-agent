@@ -79,6 +79,8 @@ my-report/
 
 ## 可选：运行 pipeline
 
+Pi 生成默认在每任务独立 Docker 容器内执行，需要运行中的 daemon、通过 `PI_TASK_IMAGE` 指定的应用镜像，以及与 `PI_TASK_SCOPE`（默认 `video-report`）匹配的独立健康清理器。显式本地开发可设置 `PI_TASK_ISOLATION=local` 在本机直接执行 Pi，此路径没有任务沙箱。挂载、API-key 要求及边界见 [架构说明](docs/ARCHITECTURE.md)。上方独立使用 Skill 的方式不受影响。
+
 使用 CLI 自动下载、转写并生成报告；无需网站服务。
 
 > Bilibili URL → yt-dlp → FFmpeg → ASR → Canonical Transcript → Pi RPC + Skill → report.html
