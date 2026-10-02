@@ -79,7 +79,9 @@ my-report/
 
 ## 可选：运行 pipeline
 
-Pi 生成默认在每任务独立 Docker 容器内执行，需要运行中的 daemon、通过 `PI_TASK_IMAGE` 指定的应用镜像，以及与 `PI_TASK_SCOPE`（默认 `video-report`）匹配的独立健康清理器。显式本地开发可设置 `PI_TASK_ISOLATION=local` 在本机直接执行 Pi，此路径没有任务沙箱。挂载、API-key 要求及边界见 [架构说明](docs/ARCHITECTURE.md)。上方独立使用 Skill 的方式不受影响。
+下方本地 CLI 入门流程在本机直接执行 Pi，无需 Docker 或任务清理器。随仓库提供的 `.env.example` 显式设置 `PI_TASK_ISOLATION=local`；Pi 的文件与命令工具使用你的本机用户权限，此路径没有任务沙箱。上方独立使用 Skill 的方式不受影响。
+
+需要每任务独立 Docker 隔离时，设置 `PI_TASK_ISOLATION=docker`，并准备运行中的 Docker daemon、通过 `PI_TASK_IMAGE` 指定的兼容应用镜像，以及与 `PI_TASK_SCOPE`（默认 `video-report`）匹配的独立健康清理器。不配置隔离选项时，代码仍默认使用 Docker；隔离失败不会自动转为本机执行。托管服务的 Public 模式始终强制使用 Docker。挂载、API-key 要求及边界见 [架构说明](docs/ARCHITECTURE.md)；公开 Core 不包含托管服务的 Dockerfile 或 Compose 部署配置。
 
 使用 CLI 自动下载、转写并生成报告；无需网站服务。
 
@@ -117,12 +119,13 @@ uv sync
 uv run playwright install chromium
 ```
 
-首次安装时将 `.env.example` 复制为 `.env`；已有文件应保留，仅修改所需配置。设置报告模型：
+首次安装时将 `.env.example` 复制为 `.env`；已有文件应保留，仅修改所需配置。设置报告模型，并显式选择本机执行：
 
 ```dotenv
 PI_PROVIDER=deepseek
 PI_MODEL=deepseek-flash
 PI_API_KEY=your-api-key
+PI_TASK_ISOLATION=local
 ```
 
 ### 选择 ASR
@@ -150,9 +153,13 @@ DASHSCOPE_API_KEY=your-dashscope-api-key
 
 ### 启动与生成
 
+使用上面的 `.env` 配置后，以下命令无需 Docker：
+
 ```sh
 uv run video-report generate 'https://www.bilibili.com/video/BV...' --transcript-mode asr-only
 ```
+
+保留已有 `.env` 时，也可以用 `PI_TASK_ISOLATION=local uv run video-report generate '<url>'` 仅为本次运行选择本机执行。
 
 产物保存在 `runs/<run-id>/`，包括 `transcript.md`、来源记录和 `report.html`。流水线还会尝试通过 Chromium 导出报告长图 `report.png`。导出失败时 HTML 仍可标记为 `RENDERED`，需检查 `status.json` 中的 `image_error`，不能仅凭完成状态判断 PNG 已生成。
 
@@ -162,7 +169,7 @@ uv run video-report generate 'https://www.bilibili.com/video/BV...' --transcript
 - 每次生成使用独立的 `runs/<run-id>/` 工作目录，Pi 负责 Agent 循环、工具调用与上下文管理，Skill 负责报告编辑要求。
 - 视频最长 5 小时，单次任务执行期限为 30 分钟，不含排队时间。本地任务停止后，已提交的云端 ASR 可能继续执行并计费。
 - 下载入口支持公开 Bilibili 视频，不提供登录或私有视频访问。生成的内容仍需结合原始来源判断准确性。
-- Pi 使用本机文件与命令工具；独立工作目录是一种工作约定，不是操作系统沙箱。
+- Local 模式下，Pi 的文件与命令工具使用本机用户权限；独立工作目录不是操作系统沙箱。Docker 模式按架构说明隔离 Pi 生成进程。
 
 ## 开发检查
 

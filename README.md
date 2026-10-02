@@ -88,12 +88,19 @@ On GitHub, the HTML link opens the file page; download it and open it in a brows
 
 ## Optional: run the pipeline
 
-Pi generation now defaults to a per-task Docker container. Supply a built application
-image via `PI_TASK_IMAGE`, a running Docker daemon, and an independently running
-healthy task cleaner with the same `PI_TASK_SCOPE` (default `video-report`). For explicit local development
-with Pi running directly on your machine, set `PI_TASK_ISOLATION=local`; the local
-path has no task sandbox. See [architecture](docs/ARCHITECTURE.md) for mounts,
-API-key requirements and limitations. Standalone Skill use above is unchanged.
+The local CLI quickstart below runs Pi directly on your machine, without Docker
+or a task cleaner. The supplied `.env.example` explicitly sets
+`PI_TASK_ISOLATION=local`; Pi's file and shell tools use your local user permissions.
+Standalone Skill use above is unchanged.
+
+For per-task Docker isolation, set `PI_TASK_ISOLATION=docker` and supply a compatible
+built application image via `PI_TASK_IMAGE`, a running Docker daemon, and an
+independently running healthy task cleaner with the same `PI_TASK_SCOPE`
+(default `video-report`). The runtime defaults to Docker when the isolation setting
+is omitted, and isolation failures do not fall back to local execution. Hosted
+Public mode always requires Docker. See [architecture](docs/ARCHITECTURE.md) for
+mounts, API-key requirements and limitations; the public Core does not include
+the hosted service's Dockerfile or Compose deployment.
 
 Use the CLI to automate downloading, transcription, and report generation without a website server.
 
@@ -131,12 +138,14 @@ uv sync
 uv run playwright install chromium
 ```
 
-For a new setup, copy `.env.example` to `.env`; preserve an existing `.env`. Configure the report model:
+For a new setup, copy `.env.example` to `.env`; preserve an existing `.env`.
+Set the report model and explicitly select local execution:
 
 ```dotenv
 PI_PROVIDER=deepseek
 PI_MODEL=deepseek-flash
 PI_API_KEY=your-api-key
+PI_TASK_ISOLATION=local
 ```
 
 ### Choose ASR
@@ -164,9 +173,14 @@ For audio at least 60 minutes long, this backend looks for a quiet pause of at l
 
 ### Start and generate
 
+With the `.env` settings above, this command runs without Docker:
+
 ```sh
 uv run video-report generate 'https://www.bilibili.com/video/BV...' --transcript-mode asr-only
 ```
+
+If you are keeping an existing `.env`, you can select local execution for one run
+with `PI_TASK_ISOLATION=local uv run video-report generate '<url>'`.
 
 Outputs are saved in `runs/<run-id>/`, including `transcript.md`, provenance records, and `report.html`. The pipeline also attempts to export `report.png` using Chromium. If export fails, the HTML can still be marked `RENDERED`; inspect `image_error` in `status.json` before assuming the PNG exists.
 
@@ -176,7 +190,7 @@ Outputs are saved in `runs/<run-id>/`, including `transcript.md`, provenance rec
 - Every generation uses its own `runs/<run-id>/` working directory. Pi owns the Agent loop, tools, and context management; the Skill defines report-editing requirements.
 - Videos are limited to 5 hours. Tasks have a 30-minute execution deadline, excluding queue time. Already-submitted cloud ASR may continue and incur charges after a local task stops.
 - Ingestion supports public Bilibili videos, without login or private-video access. Check generated content against the original source as needed.
-- Pi uses local file and shell tools. A dedicated working directory is a workspace convention, not an operating-system sandbox.
+- In local mode, Pi's file and shell tools use your local user permissions; a dedicated working directory is not an operating-system sandbox. Docker mode isolates the Pi generation process as described in the architecture document.
 
 ## Development checks
 
