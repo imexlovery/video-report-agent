@@ -30,6 +30,7 @@ from .reuse import (
     validated_transcript,
 )
 from .storage import Store
+from .term_correction import TERM_DOCUMENTS
 from .trace import RunTrace
 from .transcript import build_transcript
 from .transcript_foundation import parse_roi
@@ -46,6 +47,7 @@ def create_run(
     url: str,
     *,
     report_mode="standard",
+    term_correction: bool = False,
     transcript_mode="asr-only",
     ocr_mode="off",
     ocr_roi=None,
@@ -81,6 +83,7 @@ def create_run(
         "url": source.canonical_url,
         "video_id": source.video_id,
         "report_mode": report_mode,
+        "term_correction": term_correction,
         "transcript_mode": transcript_mode,
         "ocr_mode": ocr_mode,
         "ocr_roi": ocr_roi,
@@ -331,7 +334,8 @@ def generate(run: Path, *, database_path=None, execution_id=None) -> dict:
                     transcript_key,
                     run.name,
                     execution_id,
-                    {"documents": documents, "metadata": metadata},
+                    {"documents": {k: v for k, v in documents.items() if k not in TERM_DOCUMENTS},
+                     "metadata": metadata},
                 )
                 detail.update(
                     output={

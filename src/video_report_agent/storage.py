@@ -26,6 +26,9 @@ TEXT_FILES = (
     "subtitle-ocr-events.jsonl",
     "subtitle-ocr-frame-candidates.jsonl",
     "download/source.info.json",
+    "source-context.json",
+    "term-review.json",
+    "transcript.corrected.md",
 )
 SCHEMA_VERSION = 1
 SCHEMA = (

@@ -21,6 +21,7 @@ from .task_container import (
     snapshot_models,
     stage_inputs,
 )
+from .term_correction import prepare_term_correction
 
 PROJECT_ROOT = Path.cwd()
 PI_AGENT_DIR = Path(os.getenv("PI_CODING_AGENT_DIR", str(PROJECT_ROOT / "config" / "pi"))).resolve()
@@ -252,6 +253,11 @@ class PiRunner:
 
     async def run(self, workspace: Path) -> Path:
         workspace = workspace.resolve()
+        input_path = workspace / "input.json"
+        if self.isolation == "docker" and input_path.is_file() and (
+            json.loads(input_path.read_text()).get("term_correction", False)
+        ):
+            raise PiError("INPUT_REJECTED", "Term correction currently requires local Pi")
         generation = None
         config = workspace / ".generation-config"
         try:
@@ -302,6 +308,9 @@ class PiRunner:
         env["VIDEO_REPORT_PYTHON"] = sys.executable
         metadata_path = workspace / "input.json"
         metadata = json.loads(metadata_path.read_text()) if metadata_path.is_file() else {}
+        term_correction = metadata.get("term_correction", False)
+        if term_correction:
+            prepare_term_correction(workspace, metadata)
         report_mode = metadata.get("report_mode", "standard")
         if report_mode not in ("standard", "brief"):
             raise PiError("INPUT_REJECTED", "report_mode must be standard or brief")
@@ -332,6 +341,11 @@ class PiRunner:
             if Path(directory).parent == self.skill_dir else [],
         )
         (skill / "assets").mkdir(exist_ok=True)
+        tools = ["read", "write", "edit", "bash"]
+        if self.review:
+            tools.append("inspect_report")
+        if term_correction:
+            tools.extend(["lookup_term", "record_term_review"])
         command = [
             executable,
             "--mode",
@@ -341,7 +355,7 @@ class PiRunner:
             "--model",
             self.model,
             "--tools",
-            "read,write,edit,bash,inspect_report" if self.review else "read,write,edit,bash",
+            ",".join(tools),
             "--no-extensions",
             "--no-skills",
             "--skill",
@@ -366,6 +380,10 @@ class PiRunner:
             extension = skill / "report_inspect.ts"
             shutil.copy2(Path(__file__).with_name("report_inspect.ts"), extension)
             command.extend(["--extension", str(runtime_path / extension.name)])
+        if term_correction:
+            extension = skill / "term_correction.ts"
+            shutil.copy2(Path(__file__).with_name(extension.name), extension)
+            command.extend(["--extension", str(runtime_path / extension.name)])
         if self.thinking is not None:
             command.extend(["--thinking", self.thinking])
         if self.api_key and generation is None:
@@ -375,7 +393,18 @@ class PiRunner:
             "生成完整报告，写入 report.html。"
             f"读取 assets/{template_name} 作为本次唯一模板，"
             "原样保留其中的 {{VIDEO_DESCRIPTION}} 占位符一次，"
-            "放在题头之后、正文之前；不要读取、改写或自行生成视频简介，运行时会按原始元数据填充。"
+            "放在题头之后、正文之前；"
+        )
+        prompt += (
+            "不要改写或自行生成视频简介，运行时会按原始元数据填充。"
+            "本次开启术语修正：先读取 source-context.json 与完整原转写，"
+            "写提纲前检查名称、术语及元数据与语境冲突，写作过程中也可处理新疑点。"
+            "自身知识仅提出候选；元数据证据不足时按需调用 lookup_term，最多三次。"
+            "通过 record_term_review 记录 supported/candidate/unresolved 及原文定位、证据和理由，"
+            "只使用有依据的局部修正；报告阅读 transcript.corrected.md，保留原来源ID和时间。"
+            "无法确认时保留原词，不为存疑核心概念自行补定义，不修改原始转写。"
+            if term_correction else
+            "不要读取、改写或自行生成视频简介，运行时会按原始元数据填充。"
         )
         prompt += (
             f"本任务 report_mode={report_mode}，是任务自身保存的不可变输入；"
@@ -396,9 +425,11 @@ class PiRunner:
                 "确认确实遮挡正文才修复，不为消除告警删除内容或来源绑定。"
                 "允许一次集中局部修订，然后再次调用 inspect_report，之后停止修改并交付。"
                 "首次检查无实际问题则直接交付。最多两次检查，不增加独立评审角色，"
-                "不改原始转写，不调用外部搜索或ASR。检查失败时诚实说明，不能声称检查通过。"
+                "不改原始转写，不调用ASR。检查失败时诚实说明，不能声称检查通过。"
                 "若工具没有返回图片，只能声称完成程序检查。"
             )
+            if not term_correction:
+                prompt += "不调用外部搜索。"
         logged_command = list(command)
         if self.api_key and generation is None:
             api_key_index = logged_command.index("--api-key")

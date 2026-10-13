@@ -3,6 +3,7 @@
 - [PROJECT：目标、当前能力与限制](PROJECT.md)
 - [ARCHITECTURE：模块、流程与数据](ARCHITECTURE.md)
 - [SQLite 执行存储与嵌入事务](sqlite-storage.md)
+- [本地名称与术语修正（真实验收待完成）](term-correction.md)
 - [PLAN：候选方向与待办](PLAN.md)
 - [DECISIONS：重要选择、原因与代价](DECISIONS.md)
 - [领域词汇](../CONTEXT.md)

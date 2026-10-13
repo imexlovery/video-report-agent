@@ -14,6 +14,7 @@
 | [asr.py](../src/video_report_agent/asr.py)、[paraformer.py](../src/video_report_agent/paraformer.py) | 本地/云端 ASR、云任务轮询、两段结果与时间戳合并 |
 | [transcript.py](../src/video_report_agent/transcript.py)、[transcript_foundation.py](../src/video_report_agent/transcript_foundation.py) | 来源事件、规范单元、可选字幕/OCR 融合 |
 | [pi.py](../src/video_report_agent/pi.py)、[产品 Skill](../src/video_report_agent/skills/video-report/SKILL.md) | 选择模式资产、Pi RPC 和完成判断；Skill 规定内容与表达 |
+| [term_correction.py](../src/video_report_agent/term_correction.py)、[term_correction.ts](../src/video_report_agent/term_correction.ts) | 可选本地术语取证工具、修正记录与独立阅读视图；真实接口和语义效果待验收 |
 | [report_content.py](../src/video_report_agent/report_content.py)、[report_image.py](../src/video_report_agent/report_image.py) | 原始简介处理、HTML 后处理与长图导出 |
 | [storage.py](../src/video_report_agent/storage.py) | SQLite 正文、执行身份、缓存认领与结构化事实；支持调用方活动事务 |
 | [reuse.py](../src/video_report_agent/reuse.py)、[retention.py](../src/video_report_agent/retention.py) | 兼容输入复用与媒体清理 |
@@ -51,6 +52,8 @@ Agent 日志默认保留每轮结束消息与 usage、工具参数/结果、生�
 Pi consumer 等待 `agent_settled`，并要求最终 assistant 的 `stopReason == "stop"`；`agent_end` 可能出现在重试或压缩之前。受控续跑只处理调用方明确配置且可识别的模型请求错误，沿用当前 Pi session 和任务工作区；报告仍须通过完整 HTML 检查才返回成功。整个 Worker 仍受调用方传入的总 deadline 限制。截图失败记录 `image_error`，HTML 仍可进入 `RENDERED`。
 
 `REPORT_REVIEW` 默认关闭。开启后向同一 Agent 提供检查工具；工具返回 `semantic_review: not_performed`、`visual_quality: not_scored`，不保证模型调用、修复或质量提升。
+
+CLI `--term-correction` / `create_run(term_correction=True)` 为任务显式开启本地名称与术语修正，默认关闭。元数据供同一 Agent 辨识疑点；百炼原生搜索作为按需工具调用，不改变报告模型。修正写入独立阅读视图，原转写、来源 ID 与时间保留；记录进入 `run_documents`，不进入共享转写缓存。Docker 开启此选项会在 staging 前拒绝。接口、预算与待验收边界见 [术语修正](term-correction.md)。
 
 ## Pi 任务容器
 
