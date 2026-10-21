@@ -4,11 +4,12 @@ export default function (pi) {
   let request;
   // Use the supported RPC notification channel: Pi guards extension stdout.
   const emit = (ctx, event) => ctx.ui.notify("video-report-trace:" + JSON.stringify(event), "info");
-  pi.on("before_provider_request", (_event, ctx) => {
+  pi.on("before_provider_request", (event, ctx) => {
     request = { id: ++sequence, clock: performance.now(), first: false };
     emit(ctx, { type: "request_start", request_id: request.id,
       timestamp: Date.now() / 1000, boundary: "before_provider_request",
-      provider: ctx.model?.provider, model: ctx.model?.id });
+      provider: ctx.model?.provider, model: ctx.model?.id,
+      input_bytes: new TextEncoder().encode(JSON.stringify(event.payload)).length });
   });
   pi.on("message_update", (event, ctx) => {
     const update = event.assistantMessageEvent;

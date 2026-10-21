@@ -628,6 +628,7 @@ class PiRunner:
                         "provider": event.get("provider"),
                         "model": event.get("model"),
                         "requested_at": event.get("timestamp"),
+                        "input_bytes": event.get("input_bytes"),
                     }
                     if pending_recovery:
                         model_state["recovery_count"] += 1
@@ -696,6 +697,14 @@ class PiRunner:
                                     "provider_error_code": provider_code,
                                     "http_status": http_status,
                                     "usage": _usage_summary(message),
+                                    # Only sizes are retained for rough interrupted-call estimates.
+                                    "output_bytes": sum(
+                                        len((part.get("text") or part.get("thinking") or (
+                                            json.dumps(part.get("arguments"), ensure_ascii=False)
+                                            if part.get("type") == "toolCall" else ""
+                                        )).encode("utf-8"))
+                                        for part in message.get("content", [])
+                                    ),
                                 })
                                 active_request = None
                             if message.get("stopReason") == "error":
