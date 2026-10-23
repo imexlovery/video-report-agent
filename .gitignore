@@ -29,6 +29,6 @@ config/pi/*
 
 /.impeccable/
 
-# Real-source evaluation data belongs in the private service repository
+# Real-source evaluation data belongs in the ignored .local/evals/ directory
 /evals/asr/
 /evals/private/

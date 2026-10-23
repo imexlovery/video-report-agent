@@ -6,7 +6,7 @@
 - [PLAN：候选方向与待办](PLAN.md)
 - [稀疏画面辅助理解：候选方案与实验设计](sparse-visual-understanding.md)
 - [DECISIONS：重要选择、原因与代价](DECISIONS.md)
-- [领域词汇](../CONTEXT.md)
+- [报告与评测口径](PROJECT.md#评测口径)
 - [报告设计偏好](report-design-preferences.md)
 - [安装与使用](../README.md)
 - [独立 Skill 下载包使用说明](skill-bundle/README.md)
