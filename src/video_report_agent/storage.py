@@ -14,10 +14,11 @@ import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
-TERMINAL = {"RENDERED", "FAILED", "CANCELLED"}
+TERMINAL = {"RENDERED", "TRANSCRIPT_READY", "FAILED", "CANCELLED"}
 TEXT_FILES = (
     "asr.json",
     "asr-task.json",
+    "bilibili-subtitles.json",
     "source-text-events.jsonl",
     "canonical-transcript.jsonl",
     "transcript-manifest.json",

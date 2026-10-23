@@ -2,7 +2,8 @@
 
 The module deliberately keeps acquisition, normalization, alignment, and the
 small local fusion rule together.  It does not make semantic decisions: ASR
-segments remain the continuity anchors and every canonical character comes
+segments are the legacy continuity anchors; selected-source mode can use subtitle cues.
+Every canonical character comes
 from an ASR, subtitle, or OCR event (apart from named presentation
 normalization).
 """
@@ -50,8 +51,8 @@ SUPPORTED_SUBTITLE_CODECS = {
     "mov_text": ".srt",
 }
 
-SourceKind = Literal["asr", "subtitle_track", "ocr"]
-TranscriptMode = Literal["asr-only", "fused"]
+SourceKind = Literal["asr", "subtitle_track", "bilibili_ai", "ocr"]
+TranscriptMode = Literal["asr-only", "fused", "selected"]
 
 
 class TranscriptFoundationError(RuntimeError):
@@ -124,7 +125,7 @@ class SourceTextEvent(BaseModel):
 
 
 class TranscriptUnit(BaseModel):
-    """An ASR-anchored canonical transcript unit with source provenance."""
+    """A timestamped canonical transcript unit with its actual source provenance."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -132,9 +133,10 @@ class TranscriptUnit(BaseModel):
     start_ms: int = Field(ge=0)
     end_ms: int = Field(ge=1)
     canonical_text: str
-    asr_text: str
+    asr_text: str | None = None
     ocr_text: str | None = None
     subtitle_text: str | None = None
+    bilibili_ai_text: str | None = None
     resolution: str = Field(min_length=1)
     flags: tuple[str, ...] = ()
     provenance: dict[str, Any] = Field(default_factory=dict)
@@ -143,7 +145,9 @@ class TranscriptUnit(BaseModel):
     def validate_unit(self) -> "TranscriptUnit":
         if self.end_ms <= self.start_ms:
             raise ValueError("transcript unit end_ms must be greater than start_ms")
-        if not self.canonical_text.strip() or not self.asr_text.strip():
+        if not self.canonical_text.strip() or (
+            self.asr_text is not None and not self.asr_text.strip()
+        ):
             raise ValueError("transcript unit text must not be blank")
         return self
 
@@ -164,6 +168,8 @@ class TranscriptManifest(BaseModel):
     status: Literal["READY", "DEGRADED", "FAILED"]
     warnings: tuple[str, ...] = ()
     artifacts: dict[str, str] = Field(default_factory=dict)
+    selected_sources: tuple[SourceKind, ...] = ()
+    primary_source: SourceKind | None = None
 
 
 @dataclass(frozen=True)
@@ -1607,23 +1613,29 @@ def _build_unit(
     ocr_events: Sequence[SourceTextEvent],
     repeated_candidate_support: Mapping[str, int] | None = None,
 ) -> TranscriptUnit:
-    subtitle = _choose_event(subtitle_events)
+    all_events = [asr_event, *subtitle_events, *ocr_events]
+    subtitle = _choose_event([e for e in all_events if e.source == "subtitle_track"])
+    ai_subtitle = _choose_event([e for e in all_events if e.source == "bilibili_ai"])
+    actual_asr = _choose_event([e for e in all_events if e.source == "asr"])
+    base_source = asr_event.source
     ocr = _choose_event(ocr_events)
     asr_text = _presentation_text(asr_event.text)
     candidate_events = [*subtitle_events, *ocr_events]
     candidate_ids = [event.event_id for event in candidate_events]
     provenance: dict[str, Any] = {
-        "asr_event_ids": [asr_event.event_id],
-        "asr_backend": asr_event.provenance.get("backend"),
-        "asr_provider": asr_event.provenance.get("provider"),
-        "asr_model": asr_event.provenance.get("model"),
+        "asr_event_ids": [actual_asr.event_id] if actual_asr else [],
+        "asr_backend": actual_asr.provenance.get("backend") if actual_asr else None,
+        "asr_provider": actual_asr.provenance.get("provider") if actual_asr else None,
+        "asr_model": actual_asr.provenance.get("model") if actual_asr else None,
         "candidate_event_ids": candidate_ids,
-        "asr_ordinals": _asr_ordinals(asr_event),
-        "canonical_text_source": "asr",
+        "asr_ordinals": _asr_ordinals(actual_asr) if actual_asr else [],
+        "canonical_text_source": base_source,
+        "anchor_event_id": asr_event.event_id,
+        "anchor_source": base_source,
         "normalization_version": NORMALIZER_VERSION,
     }
     flags: list[str] = []
-    resolution = "asr_only"
+    resolution = f"{base_source}_only"
     canonical_text = asr_text
     selected_source_ids: list[str] = []
 
@@ -1720,6 +1732,10 @@ def _build_unit(
                 if has_subtitle and has_ocr
                 else ("subtitle_track" if has_subtitle else "ocr")
             )
+            correction_sources = sorted({event.source for event, _ in accepted})
+            if base_source != "asr" or "bilibili_ai" in correction_sources:
+                provenance["canonical_text_source"] = "+".join(correction_sources)
+                resolution = f'{"+".join(correction_sources)}_corrected_{base_source}'
             provenance["selected_source_event_ids"] = selected_source_ids
             accepted_spans = [
                 _span_record(event, span)
@@ -1747,7 +1763,7 @@ def _build_unit(
                     candidate.event_id for candidate in rejected_ocr
                 ]
         elif any(
-            event.source == "subtitle_track" or event in stable_ocr_events
+            event.source != "ocr" or event in stable_ocr_events
             for event in candidate_events
         ):
             resolution = (
@@ -1782,9 +1798,10 @@ def _build_unit(
         start_ms=asr_event.start_ms,
         end_ms=asr_event.end_ms,
         canonical_text=normalize_text(canonical_text),
-        asr_text=asr_text,
+        asr_text=_presentation_text(actual_asr.text) if actual_asr is not None else None,
         ocr_text=_presentation_text(ocr.text) if ocr is not None else None,
         subtitle_text=_presentation_text(subtitle.text) if subtitle is not None else None,
+        bilibili_ai_text=_presentation_text(ai_subtitle.text) if ai_subtitle is not None else None,
         resolution=resolution,
         flags=tuple(dict.fromkeys(flags)),
         provenance=provenance,
@@ -1881,8 +1898,51 @@ def build_canonical_transcript(
     )
 
 
+def build_selected_transcript(
+    *, video_id, duration_ms, selected_sources, source_events, source_status,
+) -> TranscriptBuild:
+    """Use the first available selected source as the timeline, retaining all evidence."""
+    groups = {
+        source: sorted(source_events.get(source, ()), key=_event_sort_key)
+        for source in selected_sources
+    }
+    primary = next((source for source in selected_sources if groups[source]), None)
+    if primary is None:
+        raise TranscriptFoundationError("所选来源均未取得可用文字稿；没有调用未选择的 ASR。")
+    anchors = groups[primary]
+    optional = [
+        event for source in selected_sources if source != primary for event in groups[source]
+    ]
+    assignments = _assign_optional_events(anchors, optional)
+    units = tuple(
+        _build_unit(index, anchor, assignments[anchor.event_id], ())
+        for index, anchor in enumerate(anchors, start=1)
+    )
+    warnings = [
+        f"{source}:{source_status[source]['status']}"
+        for source in selected_sources if source_status[source]["status"] != "READY"
+    ]
+    if primary != selected_sources[0]:
+        warnings.append(f"PRIMARY_UNAVAILABLE:using_{primary}")
+    aligned = {event.event_id for events in assignments.values() for event in events}
+    if len(aligned) != len(optional):
+        warnings.append(f"UNALIGNED_OPTIONAL_EVENTS:{len(optional) - len(aligned)}")
+    return TranscriptBuild(
+        source_events=tuple(sorted(
+            (event for events in groups.values() for event in events), key=_event_sort_key,
+        )),
+        canonical_units=units,
+        manifest=TranscriptManifest(
+            video_id=video_id, duration_ms=duration_ms, transcript_mode="selected",
+            source_status=source_status, canonical_unit_count=len(units),
+            status="DEGRADED" if warnings else "READY", warnings=tuple(warnings),
+            selected_sources=tuple(selected_sources), primary_source=primary,
+        ),
+    )
+
+
 def _event_sort_key(event: SourceTextEvent) -> tuple[int, int, int, str]:
-    source_order = {"asr": 0, "subtitle_track": 1, "ocr": 2}
+    source_order = {"asr": 0, "subtitle_track": 1, "ocr": 2, "bilibili_ai": 3}
     return event.start_ms, event.end_ms, source_order[event.source], event.event_id
 
 

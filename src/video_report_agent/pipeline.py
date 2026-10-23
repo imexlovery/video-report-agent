@@ -13,6 +13,7 @@ from pathlib import Path
 
 from .asr import AsrError, transcribe_audio
 from .audio import AudioExtractionError, extract_audio
+from .bilibili_subtitles import SubtitleError, fetch_subtitles, validate_sources
 from .failures import asr_failure
 from .ingest import UrlIngestError, download_bilibili_video, validate_bilibili_url
 from .media_config import resolve_media_config
@@ -29,7 +30,7 @@ from .reuse import (
     valid_asr_payload,
     validated_transcript,
 )
-from .storage import Store
+from .storage import CacheProductionFailed, Store
 from .trace import RunTrace
 from .transcript import build_transcript
 from .transcript_foundation import parse_roi
@@ -47,6 +48,8 @@ def create_run(
     *,
     report_mode="standard",
     transcript_mode="asr-only",
+    transcript_sources=None,
+    transcript_only=False,
     ocr_mode="off",
     ocr_roi=None,
     subtitle_file=None,
@@ -71,7 +74,20 @@ def create_run(
         raise ValueError("ocr_mode must be off, auto or roi")
     if transcript_mode == "fused" and ocr_mode == "roi":
         parse_roi(ocr_roi)
-    media_config = resolve_media_config(asr_backend, asr_model, ocr_backend)
+    if transcript_sources is not None:
+        validate_sources(transcript_sources)
+        if ocr_mode != "off":
+            raise ValueError("自选文字稿来源暂不启用 OCR")
+        if (
+            subtitle_file or subtitle_content is not None
+        ) and "subtitle_track" not in transcript_sources:
+            raise ValueError("导入字幕时请选择字幕轨来源")
+        transcript_mode = "selected"
+    media_config = (
+        resolve_media_config(asr_backend, asr_model, ocr_backend)
+        if transcript_sources is None or "asr" in transcript_sources
+        else {}
+    )
     source = validate_bilibili_url(url)
     run = root.resolve() / uuid.uuid4().hex
     metadata = {
@@ -82,6 +98,8 @@ def create_run(
         "video_id": source.video_id,
         "report_mode": report_mode,
         "transcript_mode": transcript_mode,
+        **({"transcript_sources": transcript_sources} if transcript_sources is not None else {}),
+        **({"transcript_only": True} if transcript_only else {}),
         "ocr_mode": ocr_mode,
         "ocr_roi": ocr_roi,
         "subtitle_file": "subtitle" + Path(subtitle_file).suffix if subtitle_file else None,
@@ -126,16 +144,82 @@ def generate(run: Path, *, database_path=None, execution_id=None) -> dict:
     status.update(video_id=metadata["video_id"])
 
     def update(stage: str, **fields):
-        if stage in {"RENDERED", "FAILED"}:
+        if stage in {"RENDERED", "TRANSCRIPT_READY", "FAILED"}:
             fields["finished_at"] = time.time()
         status.update(state=stage, stage=stage, **fields)
-        if stage not in {"RENDERED", "FAILED"}:
+        if stage not in {"RENDERED", "TRANSCRIPT_READY", "FAILED"}:
             store.stage(run.name, execution_id, status)
         write_json(run / "status.json", status)
 
     trace = RunTrace(run)
     try:
         documents = store.documents(run.name)
+        selected = metadata.get("transcript_sources")
+        needs_asr = selected is None or "asr" in selected
+        asr_failed = False
+
+        def continue_without_asr(exc):
+            nonlocal needs_asr, asr_failed
+            if (
+                not selected
+                or not metadata.get("duration_ms")
+                or not (
+                    metadata.get("subtitle_file")
+                    or any(
+                        source.get("status") == "READY"
+                        for source in status.get("transcript_source_status", {}).values()
+                    )
+                )
+            ):
+                return False
+            needs_asr, asr_failed = False, True
+            status.setdefault("transcript_source_status", {})["asr"] = {
+                "status": "FAILED",
+                "count": 0,
+                "error_code": type(exc).__name__,
+            }
+            return True
+
+        source = validate_bilibili_url(metadata["url"])
+        if selected and (not needs_asr or any(s != "asr" for s in selected)):
+            update("TRANSCRIBING")
+            with trace.span("subtitles", input={"sources": selected}) as detail:
+                requested = [
+                    s
+                    for s in selected
+                    if s != "asr" and not (s == "subtitle_track" and metadata.get("subtitle_file"))
+                ]
+                try:
+                    subtitle_snapshot = fetch_subtitles(source, requested)
+                except SubtitleError as exc:
+                    if not needs_asr:
+                        raise
+                    subtitle_snapshot = {
+                        "sources": {
+                            s: {
+                                "status": "LOGIN_REQUIRED"
+                                if exc.category == "SUBTITLE_LOGIN_REQUIRED"
+                                else "FAILED",
+                                "count": 0,
+                            }
+                            for s in requested
+                        }
+                    }
+                write_json(run / "bilibili-subtitles.json", subtitle_snapshot)
+                store.document(run.name, "bilibili-subtitles.json", json.dumps(subtitle_snapshot))
+                documents["bilibili-subtitles.json"] = json.dumps(subtitle_snapshot)
+                metadata.update(
+                    {
+                        key: subtitle_snapshot[key]
+                        for key in ("title", "uploader", "attribution", "duration_ms")
+                        if key in subtitle_snapshot
+                    }
+                )
+                status["transcript_source_status"] = {
+                    key: {k: v for k, v in value.items() if k != "body"}
+                    for key, value in subtitle_snapshot["sources"].items()
+                }
+                detail.update(output=status["transcript_source_status"])
         snapshot = store.cache("download", cache_key("download", metadata))
         if snapshot and snapshot["state"] == "READY":
             documents.update(json.loads(snapshot["payload_json"]).get("documents", {}))
@@ -145,178 +229,213 @@ def generate(run: Path, *, database_path=None, execution_id=None) -> dict:
         ):
             transcript_claim = "DEFER"
         else:
-            transcript_claim, _ = acquire_cache(
-                store, "transcript", transcript_key, run, execution_id
-            )
+            try:
+                transcript_claim, _ = acquire_cache(
+                    store, "transcript", transcript_key, run, execution_id
+                )
+            except CacheProductionFailed as exc:
+                # A waiter has its own captions and can finish without the producer's ASR.
+                # Cancellation, deadlines and unrelated cache errors must still propagate.
+                if str(exc) != "Selected ASR source failed" or not continue_without_asr(exc):
+                    raise
+                transcript_claim = "UNCLAIMED"
         transcript_source = (
             reuse_transcript(run, metadata, database_path=store.path, key=transcript_key)
             if transcript_claim == "READY"
             else None
         )
         status["download_reused_from"] = None
-        if transcript_source is None:
-            update("DOWNLOADING")
-            with trace.span("download", input={"video_id": metadata["video_id"]}) as detail:
-                source = validate_bilibili_url(metadata["url"])
-                request_subtitles = metadata.get("transcript_mode") == "fused"
-                audio_only = metadata.get("transcript_mode", "asr-only") == "asr-only"
-                download_key = cache_key("download", metadata)
-                download_claim, cache = acquire_cache(
-                    store,
-                    "download",
-                    download_key,
-                    run,
-                    execution_id,
-                )
-                while True:
-                    downloaded, download_source = reuse_download(
-                        source,
-                        run,
-                        request_subtitles=request_subtitles,
-                        audio_only=audio_only,
-                        database_path=store.path,
+        try:
+            if transcript_source is None and needs_asr:
+                update("DOWNLOADING")
+                with trace.span("download", input={"video_id": metadata["video_id"]}) as detail:
+                    source = validate_bilibili_url(metadata["url"])
+                    request_subtitles = metadata.get("transcript_mode") == "fused"
+                    audio_only = (
+                        bool(selected) or metadata.get("transcript_mode", "asr-only") == "asr-only"
                     )
-                    if downloaded is not None:
-                        break
-                    if download_claim == "PRODUCE":
-                        downloaded = download_bilibili_video(
-                            source, run, request_subtitles=request_subtitles, audio_only=audio_only
-                        )
-                        break
-                    store.invalidate_media(
-                        "download", download_key, cache["producer_run"], cache["execution_id"]
-                    )
+                    download_key = cache_key("download", metadata)
                     download_claim, cache = acquire_cache(
-                        store, "download", download_key, run, execution_id
-                    )
-                store.artifact(
-                    run.name,
-                    "download/" + downloaded.media_path.name,
-                    downloaded.media_path,
-                    "media",
-                )
-                for path in (run / "download").glob("source.*"):
-                    if path.suffix in {".json", ".srt", ".vtt", ".ass"}:
-                        store.document(run.name, "download/" + path.name, path.read_text())
-                if download_claim == "PRODUCE":
-                    store.ready_cache(
+                        store,
                         "download",
                         download_key,
-                        run.name,
+                        run,
                         execution_id,
-                        {
-                            "media": str(downloaded.media_path),
-                            "documents": {
-                                name: body
-                                for name, body in store.documents(run.name).items()
-                                if name.startswith("download/")
-                            },
-                        },
                     )
-                else:
-                    store.use_cache(run.name, "download", download_key, download_source)
-                detail.update(
-                    output={"media": downloaded.media_path.name},
-                    reused_from=download_source,
-                )
-            status["download_reused_from"] = download_source
-            metadata.update(
-                download_audio_only=audio_only,
-                title=downloaded.title,
-                uploader=downloaded.uploader,
-                attribution=downloaded.attribution,
-            )
-            if metadata.get("transcript_mode") == "fused":
-                actual_key = cache_key("transcript", metadata, store.documents(run.name))
-                if transcript_claim == "DEFER" or actual_key != transcript_key:
-                    if transcript_claim == "PRODUCE":
-                        store.release_cache(
-                            "transcript",
-                            transcript_key,
+                    while True:
+                        downloaded, download_source = reuse_download(
+                            source,
+                            run,
+                            request_subtitles=request_subtitles,
+                            audio_only=audio_only,
+                            database_path=store.path,
+                        )
+                        if downloaded is not None:
+                            break
+                        if download_claim == "PRODUCE":
+                            downloaded = download_bilibili_video(
+                                source,
+                                run,
+                                request_subtitles=request_subtitles,
+                                audio_only=audio_only,
+                            )
+                            break
+                        store.invalidate_media(
+                            "download", download_key, cache["producer_run"], cache["execution_id"]
+                        )
+                        download_claim, cache = acquire_cache(
+                            store, "download", download_key, run, execution_id
+                        )
+                    store.artifact(
+                        run.name,
+                        "download/" + downloaded.media_path.name,
+                        downloaded.media_path,
+                        "media",
+                    )
+                    for path in (run / "download").glob("source.*"):
+                        if path.suffix in {".json", ".srt", ".vtt", ".ass"}:
+                            store.document(run.name, "download/" + path.name, path.read_text())
+                    if download_claim == "PRODUCE":
+                        store.ready_cache(
+                            "download",
+                            download_key,
                             run.name,
                             execution_id,
-                            "Downloaded subtitle snapshot changed",
+                            {
+                                "media": str(downloaded.media_path),
+                                "documents": {
+                                    name: body
+                                    for name, body in store.documents(run.name).items()
+                                    if name.startswith("download/")
+                                },
+                            },
                         )
-                    transcript_key = actual_key
-                    transcript_claim, _ = acquire_cache(
-                        store, "transcript", transcript_key, run, execution_id
+                    else:
+                        store.use_cache(run.name, "download", download_key, download_source)
+                    detail.update(
+                        output={"media": downloaded.media_path.name},
+                        reused_from=download_source,
                     )
-                    if transcript_claim == "READY":
-                        transcript_source = reuse_transcript(
-                            run, metadata, database_path=store.path, key=transcript_key
+                status["download_reused_from"] = download_source
+                metadata.update(
+                    download_audio_only=audio_only,
+                    title=downloaded.title,
+                    uploader=downloaded.uploader,
+                    attribution=downloaded.attribution,
+                )
+                if metadata.get("transcript_mode") == "fused":
+                    actual_key = cache_key("transcript", metadata, store.documents(run.name))
+                    if transcript_claim == "DEFER" or actual_key != transcript_key:
+                        if transcript_claim == "PRODUCE":
+                            store.release_cache(
+                                "transcript",
+                                transcript_key,
+                                run.name,
+                                execution_id,
+                                "Downloaded subtitle snapshot changed",
+                            )
+                        transcript_key = actual_key
+                        transcript_claim, _ = acquire_cache(
+                            store, "transcript", transcript_key, run, execution_id
                         )
+                        if transcript_claim == "READY":
+                            transcript_source = reuse_transcript(
+                                run, metadata, database_path=store.path, key=transcript_key
+                            )
+        except (UrlIngestError, AudioExtractionError, AsrError, CloudAsrError) as exc:
+            if not continue_without_asr(exc):
+                raise
         write_json(run / "input.json", metadata)
         store.metadata(run.name, metadata, execution_id=execution_id)
         status["title"] = metadata.get("title")
         status["transcript_reused_from"] = transcript_source
         if transcript_source is None:
             update("TRANSCRIBING")
-            with trace.span("ffmpeg", input={"media": downloaded.media_path.name}) as detail:
-                audio = extract_audio(downloaded.media_path, run / "audio.wav")
-                store.artifact(run.name, "audio.wav", run / "audio.wav", "media")
-                detail.update(
-                    output={
-                        "audio": audio.path.name,
-                        "duration_ms": audio.probe.duration_ms,
-                    }
-                )
-            with trace.span(
-                "asr",
-                backend=metadata["asr_backend"],
-                model=metadata["asr_model"],
-                input={"audio": audio.path.name},
-            ) as detail:
-                asr_key = cache_key("asr", metadata)
-                asr_claim, _ = acquire_cache(store, "asr", asr_key, run, execution_id)
-                asr_source = (
-                    reuse_asr(run, metadata, database_path=store.path)
-                    if asr_claim == "READY"
-                    else None
-                )
-                status["asr_reused_from"] = asr_source
-                if asr_source is None:
-                    asr = transcribe_audio(
-                        audio.path,
-                        model=metadata["asr_model"],
+            try:
+                if needs_asr:
+                    with trace.span(
+                        "ffmpeg", input={"media": downloaded.media_path.name}
+                    ) as detail:
+                        audio = extract_audio(downloaded.media_path, run / "audio.wav")
+                        store.artifact(run.name, "audio.wav", run / "audio.wav", "media")
+                        detail.update(
+                            output={
+                                "audio": audio.path.name,
+                                "duration_ms": audio.probe.duration_ms,
+                            }
+                        )
+                    with trace.span(
+                        "asr",
                         backend=metadata["asr_backend"],
-                        base_url=metadata["asr_base_url"],
-                        language=metadata["asr_language"],
-                        parameters=metadata["asr_parameters"],
-                        task_path=run / "asr-task.json",
-                    )
-                    write_json(run / "asr.json", asr.to_dict())
-                    if not valid_asr_payload(asr.to_dict()):
-                        raise ValueError("ASR produced no valid ordered segments")
-                    store.capture(run, execution_id, names=("asr.json", "asr-task.json"))
-                    store.ready_cache(
-                        "asr", asr_key, run.name, execution_id, {"asr": asr.to_dict()}
-                    )
-                    segments = len(asr.segments)
-                else:
-                    segments = len(json.loads((run / "asr.json").read_text())["segments"])
-                detail.update(
-                    output={"artifact": "asr.json", "segments": segments},
-                    reused_from=asr_source,
-                )
+                        model=metadata["asr_model"],
+                        input={"audio": audio.path.name},
+                    ) as detail:
+                        asr_key = cache_key("asr", metadata)
+                        asr_claim, _ = acquire_cache(store, "asr", asr_key, run, execution_id)
+                        asr_source = (
+                            reuse_asr(run, metadata, database_path=store.path)
+                            if asr_claim == "READY"
+                            else None
+                        )
+                        status["asr_reused_from"] = asr_source
+                        if asr_source is None:
+                            status["asr_performed"] = True
+                            asr = transcribe_audio(
+                                audio.path,
+                                model=metadata["asr_model"],
+                                backend=metadata["asr_backend"],
+                                base_url=metadata["asr_base_url"],
+                                language=metadata["asr_language"],
+                                parameters=metadata["asr_parameters"],
+                                task_path=run / "asr-task.json",
+                            )
+                            write_json(run / "asr.json", asr.to_dict())
+                            if not valid_asr_payload(asr.to_dict()):
+                                raise AsrError("ASR produced no valid ordered segments")
+                            store.capture(run, execution_id, names=("asr.json", "asr-task.json"))
+                            store.ready_cache(
+                                "asr", asr_key, run.name, execution_id, {"asr": asr.to_dict()}
+                            )
+                            segments = len(asr.segments)
+                        else:
+                            segments = len(json.loads((run / "asr.json").read_text())["segments"])
+                        detail.update(
+                            output={"artifact": "asr.json", "segments": segments},
+                            reused_from=asr_source,
+                        )
+            except (AudioExtractionError, AsrError, CloudAsrError) as exc:
+                if not continue_without_asr(exc):
+                    raise
             with trace.span("transcript") as detail:
                 options = argparse.Namespace(
                     transcript_mode=metadata.get("transcript_mode", "asr-only"),
+                    transcript_sources=selected,
+                    asr_failed=asr_failed,
                     ocr_mode=metadata.get("ocr_mode", "off"),
                     ocr_roi=metadata.get("ocr_roi"),
-                    ocr_backend=metadata["ocr_backend"],
+                    ocr_backend=metadata.get("ocr_backend", "rapidocr"),
                     subtitle_file=(
                         run / metadata["subtitle_file"] if metadata.get("subtitle_file") else None
                     ),
                 )
                 build, _, _ = build_transcript(
                     options,
-                    source_path=downloaded.media_path,
+                    source_path=downloaded.media_path if needs_asr else None,
                     artifact_root=run,
                     asr_path=run / "asr.json",
-                    source_duration_ms=audio.probe.duration_ms,
+                    source_duration_ms=audio.probe.duration_ms
+                    if needs_asr
+                    else metadata["duration_ms"],
                     manifest=metadata,
                 )
-                transcript = [f"# {downloaded.title}", downloaded.attribution, ""]
+                transcript = [f"# {metadata['title']}", metadata["attribution"], ""]
+                if selected:
+                    status["transcript_primary_source"] = build.manifest.primary_source
+                    status["transcript_source_status"] = build.manifest.source_status
+                    status.setdefault(
+                        "asr_performed", needs_asr and not bool(status.get("asr_reused_from"))
+                    )
+                    transcript += [f"文字稿主来源：{build.manifest.primary_source}", ""]
                 transcript.extend(
                     f"[{u.unit_id} | {u.start_ms / 1000:.3f}–{u.end_ms / 1000:.3f}s] "
                     f"{u.canonical_text}"
@@ -326,13 +445,23 @@ def generate(run: Path, *, database_path=None, execution_id=None) -> dict:
                 if validated_transcript(run, metadata) is None:
                     raise ValueError("Transcript is incomplete or incompatible")
                 documents = store.capture(run, execution_id)
-                store.ready_cache(
-                    "transcript",
-                    transcript_key,
-                    run.name,
-                    execution_id,
-                    {"documents": documents, "metadata": metadata},
-                )
+                if asr_failed:
+                    if transcript_claim == "PRODUCE":
+                        store.release_cache(
+                            "transcript",
+                            transcript_key,
+                            run.name,
+                            execution_id,
+                            "Selected ASR source failed",
+                        )
+                else:
+                    store.ready_cache(
+                        "transcript",
+                        transcript_key,
+                        run.name,
+                        execution_id,
+                        {"documents": documents, "metadata": metadata},
+                    )
                 detail.update(
                     output={
                         "artifact": "transcript.md",
@@ -342,32 +471,40 @@ def generate(run: Path, *, database_path=None, execution_id=None) -> dict:
         else:
             with trace.span("transcript") as detail:
                 detail.update(reused_from=transcript_source, output={"artifact": "transcript.md"})
-        update("GENERATING")
-        runner_options = dict(metadata.get("model_selection", {}))
-        if metadata.get("model_recovery"):
-            runner_options["model_recovery"] = metadata["model_recovery"]
-        runner = PiRunner(**runner_options)
-        with trace.span(
-            "agent",
-            backend=runner.provider,
-            model=runner.model,
-            input={"artifact": "transcript.md"},
-        ) as detail:
-            asyncio.run(runner.run(run))
-            detail.update(output={"artifact": "report.html"})
-        store.save_report(run, execution_id, (run / "report.html").read_text())
-        for asset in (run / "assets").rglob("*"):
-            if asset.is_file() and not asset.is_symlink():
-                store.artifact(run.name, str(asset.relative_to(run)), asset, "resource")
-        update("GENERATING_IMAGE")
-        try:
-            with trace.span("render", input={"artifact": "report.html"}) as detail:
-                render_report_image(run)
-                store.artifact(run.name, "report.png", run / "report.png", "image")
-                detail.update(output={"artifact": "report.png"})
-        except Exception as exc:
-            status["image_error"] = str(exc)
-        update("RENDERED")
+            if selected:
+                manifest = json.loads((run / "transcript-manifest.json").read_text())
+                status["transcript_primary_source"] = manifest.get("primary_source")
+                status["transcript_source_status"] = manifest["source_status"]
+                status["asr_performed"] = False
+        if metadata.get("transcript_only"):
+            update("TRANSCRIPT_READY")
+        else:
+            update("GENERATING")
+            runner_options = dict(metadata.get("model_selection", {}))
+            if metadata.get("model_recovery"):
+                runner_options["model_recovery"] = metadata["model_recovery"]
+            runner = PiRunner(**runner_options)
+            with trace.span(
+                "agent",
+                backend=runner.provider,
+                model=runner.model,
+                input={"artifact": "transcript.md"},
+            ) as detail:
+                asyncio.run(runner.run(run))
+                detail.update(output={"artifact": "report.html"})
+            store.save_report(run, execution_id, (run / "report.html").read_text())
+            for asset in (run / "assets").rglob("*"):
+                if asset.is_file() and not asset.is_symlink():
+                    store.artifact(run.name, str(asset.relative_to(run)), asset, "resource")
+            update("GENERATING_IMAGE")
+            try:
+                with trace.span("render", input={"artifact": "report.html"}) as detail:
+                    render_report_image(run)
+                    store.artifact(run.name, "report.png", run / "report.png", "image")
+                    detail.update(output={"artifact": "report.png"})
+            except Exception as exc:
+                status["image_error"] = str(exc)
+            update("RENDERED")
     except Exception as exc:
         if isinstance(exc, CloudAsrError):
             write_json(run / "asr-error.json", exc.to_dict())

@@ -26,6 +26,8 @@
 
 ## 任务数据与接口
 
+自选文字稿入口接收有序的 `transcript_sources`：ASR、非 AI 字幕轨、B站 `ai-zh`。第一路可用来源提供时间轴，其余已选来源参与局部校对；未选 ASR 时跳过媒体下载、音频提取与 ASR。字幕获取、来源状态、缓存及对照命令见 [可选文字稿来源](subtitle-sources.md)。`transcribe` 在 `TRANSCRIPT_READY` 结束，不启动后续 Agent/报告阶段；默认 `generate` 的既有行为保持兼容。
+
 `create_run` 登记数据库中的输入与初始状态，再导出任务材料；独立运行默认 `runs/state.sqlite3`，嵌入调用显式传 `database_path`。受监督 execution 原子认领 run，并把数据库路径与执行 ID 传给可信 Python Worker。调用方持有业务事务时，Core 方法使用同一个 `db`，不另开连接或提交；提交后才导出与派发。详见 [SQLite 存储](sqlite-storage.md)。
 
 视频、任务、ASR/cloud task、来源事件、规范单元、转写正文、报告 HTML、缓存和结构化统计入库。`input.json`、`status.json`、转写和 HTML 是可重建执行导出；媒体、PNG、资源、Pi 会话/配置快照和原始诊断仍存文件。SQL 缓存区分下载、ASR 和完整转写，认领记录生产 run、执行 ID 与 deadline；READY 正文原子保存，活跃生产者不能被接管，退出后释放未完成占用，旧 ID 不得覆盖后续生产者。媒体清理沿用七天/数量策略，同步产物可用状态，不使 READY 转写或 HTML 失效。

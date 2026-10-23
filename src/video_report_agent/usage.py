@@ -135,8 +135,10 @@ def _asr_costs(run, status, asr_rate, asr=None):
     if asr is None:
         asr = read_object(run / "asr.json")
     duration = asr.get("usage", {}).get("content_duration_ms")
-    if status.get("transcript_reused_from"):
+    if status.get("transcript_reused_from") or status.get("asr_reused_from"):
         asr_cost, asr_basis = 0, "reused"
+    elif status.get("asr_performed") is False:
+        asr_cost, asr_basis = 0, "not_used"
     elif asr.get("backend") == "mlx":
         asr_cost, asr_basis = 0, "local"
     elif asr.get("backend") == "paraformer" and number(duration) and asr_rate is not None:

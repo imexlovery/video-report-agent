@@ -7,12 +7,15 @@ from typing import Any
 from .transcript_foundation import (
     OcrError,
     RapidOcrBackend,
+    SourceTextEvent,
     TranscriptFoundationError,
     asr_events_from_payload,
     build_canonical_transcript,
+    build_selected_transcript,
     detect_auto_roi,
     discover_subtitle_source,
     extract_subtitle_ocr_events,
+    normalize_text,
     parse_roi,
     parse_subtitle_file,
     read_json_object,
@@ -29,6 +32,8 @@ def build_transcript(
     source_duration_ms: int,
     manifest: dict[str, Any],
 ) -> tuple[Any, dict[str, Path], dict[str, dict[str, Any]]]:
+    if getattr(args, "transcript_sources", None):
+        return _build_selected(args, artifact_root, asr_path, source_duration_ms, manifest)
     transcript_mode = getattr(args, "transcript_mode", "asr-only")
     ocr_mode = getattr(args, "ocr_mode", "off")
     if transcript_mode not in {"asr-only", "fused"}:
@@ -159,3 +164,76 @@ def build_transcript(
         write_ocr_events=write_ocr_events,
     )
     return build, paths, source_status
+
+
+def _build_selected(args, root, asr_path, duration_ms, metadata):
+    from .bilibili_subtitles import SOURCE_NAMES, SubtitleError
+
+    selected = args.transcript_sources
+    snapshot_path = root / "bilibili-subtitles.json"
+    snapshot = read_json_object(snapshot_path) if snapshot_path.exists() else {"sources": {}}
+    groups = {}
+    statuses = {
+        source: {"status": "OFF", "count": 0}
+        for source in ("asr", "subtitle_track", "bilibili_ai", "ocr")
+    }
+    for source in selected:
+        if source == "asr":
+            if getattr(args, "asr_failed", False):
+                groups[source] = []
+                statuses[source] = {"status": "FAILED", "count": 0}
+                continue
+            groups[source] = asr_events_from_payload(
+                read_json_object(asr_path), payload_path=asr_path
+            )
+            statuses[source] = {"status": "READY", "count": len(groups[source]), "path": "asr.json"}
+        elif source == "subtitle_track" and args.subtitle_file:
+            groups[source] = parse_subtitle_file(Path(args.subtitle_file))
+            statuses[source] = {
+                "status": "READY",
+                "count": len(groups[source]),
+                "path": Path(args.subtitle_file).name,
+            }
+        else:
+            item = snapshot["sources"].get(source, {"status": "ABSENT", "count": 0})
+            statuses[source] = {k: v for k, v in item.items() if k != "body"}
+            groups[source] = [
+                SourceTextEvent(
+                    event_id=f"{source}-{index:06d}",
+                    source=source,
+                    start_ms=round(cue["from"] * 1000),
+                    end_ms=round(cue["to"] * 1000),
+                    text=cue["content"],
+                    normalized_text=normalize_text(cue["content"]),
+                    provenance={
+                        "path": "bilibili-subtitles.json",
+                        "cue_index": cue.get("cue_index", index - 1),
+                        "bvid": snapshot["bvid"],
+                        "cid": snapshot["cid"],
+                        "track_id": item.get("track_id"),
+                        "language": item.get("language"),
+                    },
+                )
+                for index, cue in enumerate(item.get("body", []), 1)
+            ]
+    if not any(groups.values()):
+        labels = {
+            "LOGIN_REQUIRED": "需要 B站登录态",
+            "ABSENT": "未发现字幕轨",
+            "FAILED": "获取失败",
+            "EMPTY": "字幕为空",
+        }
+        detail = "；".join(
+            f"{SOURCE_NAMES[source]}："
+            f"{labels.get(statuses[source]['status'], statuses[source]['status'])}"
+            for source in selected
+        )
+        raise SubtitleError("TRANSCRIPT_SOURCE_UNAVAILABLE", detail + "。未调用未选择的 ASR。")
+    build = build_selected_transcript(
+        video_id=metadata["video_id"],
+        duration_ms=duration_ms,
+        selected_sources=selected,
+        source_events=groups,
+        source_status=statuses,
+    )
+    return build, write_transcript_artifacts(build, root), statuses

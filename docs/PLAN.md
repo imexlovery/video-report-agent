@@ -2,7 +2,6 @@
 
 ## 待解决问题
 
-- **ASR 费用估算**：`usage.py::_asr_costs` 仅将 `transcript_reused_from` 计为复用零费用，未覆盖独立 `asr_reused_from`。需要避免复用 ASR 被估成新调用；尚未安排修复。
 - **Brief 表格视觉验证**：短标签与长说明方案已采纳，但候选桌面、窄屏与交互验证因先前浏览器限制未完成。继续时沿用原模板和实际内容，见 [设计偏好](report-design-preferences.md#brief短标签与长说明表格)。
 
 ## 候选方向（未整体采纳、未排期）
