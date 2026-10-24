@@ -165,7 +165,7 @@ uv run video-report generate 'https://www.bilibili.com/video/BV...' --report-mod
 
 Outputs live in `runs/<run-id>/`. Read `report.html` or `report.png`; use `transcript.md` for source review. HTML can complete even if image export fails, so check `image_error` in `status.json` before assuming the PNG exists.
 
-ASR-only with OCR off is the default. For subtitle/OCR fusion, install `uv sync --extra enhancement` and use `--transcript-mode fused` with the relevant subtitle/OCR options. Include `--extra mlx` for local MLX. Run `uv run video-report generate --help` for all options.
+The CLI defaults to creator-provided subtitles → Bilibili ai-zh → ASR and stops collecting once usable subtitles are available. Choose `--sources asr` for ASR alone, or list multiple sources for manual comparison/fusion. Web source controls are available only in Local advanced settings; Web OCR is disabled. The Core CLI retains legacy `--transcript-mode fused` subtitle/OCR support with `uv sync --extra enhancement`; include `--extra mlx` for local MLX. See the [source selection guide](docs/subtitle-sources.md) for subtitle login and transcript-only commands, or run `uv run video-report generate --help` for all options.
 
 ## Runtime and data
 

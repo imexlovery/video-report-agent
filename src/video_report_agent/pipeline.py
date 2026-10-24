@@ -66,8 +66,8 @@ def create_run(
 ) -> Path:
     if report_mode not in ("standard", "brief"):
         raise ValueError("report_mode must be standard or brief")
-    if transcript_mode not in {"asr-only", "fused"}:
-        raise ValueError("transcript_mode must be asr-only or fused")
+    if transcript_mode not in {"auto", "asr-only", "fused"}:
+        raise ValueError("transcript_mode must be auto, asr-only or fused")
     if ocr_mode == "on":
         ocr_mode = "roi"
     if ocr_mode not in {"off", "auto", "roi"}:
@@ -83,8 +83,17 @@ def create_run(
         ) and "subtitle_track" not in transcript_sources:
             raise ValueError("导入字幕时请选择字幕轨来源")
         transcript_mode = "selected"
+    if transcript_mode == "auto" and (
+        ocr_mode != "off" or subtitle_file or subtitle_content is not None
+    ):
+        raise ValueError("自动路由不接受 OCR 或导入字幕，请使用手动选源")
     media_config = (
-        resolve_media_config(asr_backend, asr_model, ocr_backend)
+        resolve_media_config(
+            asr_backend,
+            asr_model,
+            ocr_backend,
+            require_credentials=transcript_mode != "auto",
+        )
         if transcript_sources is None or "asr" in transcript_sources
         else {}
     )
@@ -154,6 +163,7 @@ def generate(run: Path, *, database_path=None, execution_id=None) -> dict:
     trace = RunTrace(run)
     try:
         documents = store.documents(run.name)
+        automatic = metadata.get("transcript_mode") == "auto"
         selected = metadata.get("transcript_sources")
         needs_asr = selected is None or "asr" in selected
         asr_failed = False
@@ -181,16 +191,24 @@ def generate(run: Path, *, database_path=None, execution_id=None) -> dict:
             return True
 
         source = validate_bilibili_url(metadata["url"])
-        if selected and (not needs_asr or any(s != "asr" for s in selected)):
+        if automatic or (selected and (not needs_asr or any(s != "asr" for s in selected))):
             update("TRANSCRIBING")
-            with trace.span("subtitles", input={"sources": selected}) as detail:
-                requested = [
+            requested = (
+                ["subtitle_track", "bilibili_ai"]
+                if automatic
+                else [
                     s
                     for s in selected
                     if s != "asr" and not (s == "subtitle_track" and metadata.get("subtitle_file"))
                 ]
+            )
+            with trace.span("subtitles", input={"sources": requested}) as detail:
                 try:
-                    subtitle_snapshot = fetch_subtitles(source, requested)
+                    subtitle_snapshot = (
+                        fetch_subtitles(source, requested, first_available=True)
+                        if automatic
+                        else fetch_subtitles(source, requested)
+                    )
                 except SubtitleError as exc:
                     if not needs_asr:
                         raise
@@ -220,6 +238,25 @@ def generate(run: Path, *, database_path=None, execution_id=None) -> dict:
                     for key, value in subtitle_snapshot["sources"].items()
                 }
                 detail.update(output=status["transcript_source_status"])
+        if automatic:
+            chosen = next(
+                (
+                    kind
+                    for kind in ("subtitle_track", "bilibili_ai")
+                    if subtitle_snapshot["sources"].get(kind, {}).get("status") == "READY"
+                ),
+                "asr",
+            )
+            selected = [chosen]
+            needs_asr = chosen == "asr"
+            metadata["resolved_transcript_sources"] = selected
+            if needs_asr:
+                # Credentials are only required once the subtitle route really reaches ASR.
+                resolve_media_config(
+                    metadata["asr_backend"],
+                    metadata["asr_model"],
+                    metadata["ocr_backend"],
+                )
         snapshot = store.cache("download", cache_key("download", metadata))
         if snapshot and snapshot["state"] == "READY":
             documents.update(json.loads(snapshot["payload_json"]).get("documents", {}))

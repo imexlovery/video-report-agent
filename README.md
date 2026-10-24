@@ -164,7 +164,7 @@ uv run video-report generate 'https://www.bilibili.com/video/BV...' --report-mod
 
 输出目录为 `runs/<run-id>/`，主要阅读产物是 `report.html` 和 `report.png`；`transcript.md` 可用于来源核对。截图失败时 HTML 仍可完成，查看 `status.json` 的 `image_error`，确认 PNG 是否生成。
 
-默认使用 ASR-only，OCR 关闭。需要字幕/OCR 融合时，安装 `uv sync --extra enhancement`，使用 `--transcript-mode fused` 及相应字幕/OCR 参数；本地 MLX 同时加 `--extra mlx`。完整参数可通过 `uv run video-report generate --help` 查看。
+CLI 默认自动按“作者字幕轨 → B站 ai-zh → ASR”取得文字稿，任一字幕正文可用即停止继续采集。主动指定 `--sources asr` 可只用 ASR；列出多路来源可做手动对照／融合。Web 手动选源只在 Local 高级设置开放，OCR 暂时关闭。Core 仍兼容旧的 `--transcript-mode fused` 字幕/OCR 调用，需要安装 `uv sync --extra enhancement`；本地 MLX 同时加 `--extra mlx`。登录配置及仅转写命令见[选源说明](docs/subtitle-sources.md)，完整参数见 `uv run video-report generate --help`。
 
 ## 运行与数据约定
 

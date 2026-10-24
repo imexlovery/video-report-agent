@@ -23,7 +23,7 @@ def main():
         run = sub.add_parser(command)
         run.add_argument("url")
         run.add_argument("--report-mode", choices=["standard", "brief"], default="standard")
-        run.add_argument("--transcript-mode", choices=["asr-only", "fused"], default="asr-only")
+        run.add_argument("--transcript-mode", choices=["auto", "asr-only", "fused"], default="auto")
         run.add_argument("--ocr-mode", choices=["off", "auto", "roi", "on"], default="off")
         run.add_argument("--ocr-roi")
         run.add_argument("--subtitle-file", type=Path)

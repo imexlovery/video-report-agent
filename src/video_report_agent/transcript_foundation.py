@@ -52,7 +52,7 @@ SUPPORTED_SUBTITLE_CODECS = {
 }
 
 SourceKind = Literal["asr", "subtitle_track", "bilibili_ai", "ocr"]
-TranscriptMode = Literal["asr-only", "fused", "selected"]
+TranscriptMode = Literal["auto", "asr-only", "fused", "selected"]
 
 
 class TranscriptFoundationError(RuntimeError):

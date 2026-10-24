@@ -235,12 +235,16 @@ class BilibiliSubtitles:
     def _json(self, path, **kwargs):
         try:
             payload = self._get(API + path, **kwargs).json()
+            if not isinstance(payload, dict):
+                raise ValueError("invalid API response")
             if payload.get("code") != 0:
                 code = payload.get("code")
                 raise SubtitleError(
                     "SUBTITLE_LOGIN_REQUIRED" if code in (-101, -111) else "SUBTITLE_FETCH_FAILED",
                     "B站接口需要登录。" if code in (-101, -111) else f"B站接口返回错误（{code}）。",
                 )
+            if not isinstance(payload.get("data"), dict):
+                raise ValueError("invalid API data")
             return payload["data"]
         except (ValueError, KeyError, TypeError):
             raise SubtitleError("SUBTITLE_FETCH_FAILED", "B站接口返回了无效数据。") from None
@@ -273,7 +277,16 @@ class BilibiliSubtitles:
     def tracks(self, info):
         if self.nav is None:
             # Anonymous nav returns code -101 but still supplies WBI keys.
-            self.nav = self._get(API + "/x/web-interface/nav").json().get("data", {})
+            try:
+                payload = self._get(API + "/x/web-interface/nav").json()
+                if not isinstance(payload, dict) or not isinstance(payload.get("data"), dict):
+                    raise ValueError("invalid nav response")
+                self.nav = payload["data"]
+            except ValueError:
+                raise SubtitleError(
+                    "SUBTITLE_FETCH_FAILED",
+                    "B站字幕登录元数据解析失败。",
+                ) from None
         logged_in = bool(self.nav.get("isLogin"))
         tracks, failures = [], []
         try:
@@ -321,7 +334,7 @@ class BilibiliSubtitles:
                 unique.setdefault((str(track.get("id")), track.get("lan")), track)
         return list(unique.values()), logged_in, failures
 
-    def fetch(self, source, selected=SUBTITLE_SOURCES):
+    def fetch(self, source, selected=SUBTITLE_SOURCES, *, first_available=False):
         info = self.video_info(source)
         if not selected:
             return {**info, "sources": {}, "authenticated": None, "warnings": []}
@@ -351,44 +364,59 @@ class BilibiliSubtitles:
                     "LOGIN_REQUIRED" if not logged_in else "FAILED" if failures else "ABSENT"
                 )
             else:
-                track = candidates[0]
-                result.update(language=track.get("lan"), track_id=str(track.get("id")))
-                try:
-                    url = track["subtitle_url"]
-                    url = "https:" + url if url.startswith("//") else url
-                    parsed = urlsplit(url)
-                    if (
-                        parsed.scheme != "https"
-                        or parsed.hostname
-                        not in {
-                            "aisubtitle.hdslb.com",
-                            "i0.hdslb.com",
-                            "i1.hdslb.com",
-                            "i2.hdslb.com",
-                            "subtitle.bilibili.com",
-                        }
-                        or parsed.username
-                        or parsed.password
-                        or parsed.port
-                    ):
-                        raise ValueError("unexpected subtitle URL")
-                    raw_body = self._get(url).json().get("body")
-                    body = validate_cues(raw_body, info["duration_ms"])
-                    result.update(
-                        status="READY",
-                        count=len(body),
-                        empty_cue_count=len(raw_body) - len(body),
-                        body=body,
-                        coverage=coverage(body, info["duration_ms"]),
-                    )
-                except SubtitleError as exc:
-                    result.update(status="FAILED", error_code=exc.category)
-                except (ValueError, KeyError, TypeError):
-                    result.update(status="FAILED", error_code="SUBTITLE_DATA_INVALID")
+                for track in candidates:
+                    result = {
+                        "status": "FAILED",
+                        "count": 0,
+                        "language": track.get("lan"),
+                        "track_id": str(track.get("id")),
+                    }
+                    try:
+                        url = track["subtitle_url"]
+                        url = "https:" + url if url.startswith("//") else url
+                        parsed = urlsplit(url)
+                        if (
+                            parsed.scheme != "https"
+                            or parsed.hostname
+                            not in {
+                                "aisubtitle.hdslb.com",
+                                "i0.hdslb.com",
+                                "i1.hdslb.com",
+                                "i2.hdslb.com",
+                                "subtitle.bilibili.com",
+                            }
+                            or parsed.username
+                            or parsed.password
+                            or parsed.port
+                        ):
+                            raise ValueError("unexpected subtitle URL")
+                        payload = self._get(url).json()
+                        if not isinstance(payload, dict):
+                            raise ValueError("invalid subtitle response")
+                        raw_body = payload.get("body")
+                        body = validate_cues(raw_body, info["duration_ms"])
+                        result.update(
+                            status="READY",
+                            count=len(body),
+                            empty_cue_count=len(raw_body) - len(body),
+                            body=body,
+                            coverage=coverage(body, info["duration_ms"]),
+                        )
+                    except SubtitleError as exc:
+                        result.update(status="FAILED", error_code=exc.category)
+                    except (ValueError, KeyError, TypeError):
+                        result.update(status="FAILED", error_code="SUBTITLE_DATA_INVALID")
+                    if result["status"] == "READY":
+                        break
             snapshot["sources"][kind] = result
+            if first_available and result["status"] == "READY":
+                for remaining in selected:
+                    if remaining in SUBTITLE_SOURCES and remaining not in snapshot["sources"]:
+                        snapshot["sources"][remaining] = {"status": "SKIPPED", "count": 0}
+                break
         return snapshot
 
 
-def fetch_subtitles(source, selected=SUBTITLE_SOURCES, *, browser=None):
+def fetch_subtitles(source, selected=SUBTITLE_SOURCES, *, browser=None, first_available=False):
     with BilibiliSubtitles(browser=browser, authenticate=bool(selected)) as client:
-        return client.fetch(source, selected)
+        return client.fetch(source, selected, first_available=first_available)

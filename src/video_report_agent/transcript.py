@@ -177,6 +177,12 @@ def _build_selected(args, root, asr_path, duration_ms, metadata):
         source: {"status": "OFF", "count": 0}
         for source in ("asr", "subtitle_track", "bilibili_ai", "ocr")
     }
+    statuses.update(
+        {
+            source: {key: value for key, value in item.items() if key != "body"}
+            for source, item in snapshot["sources"].items()
+        }
+    )
     for source in selected:
         if source == "asr":
             if getattr(args, "asr_failed", False):
@@ -236,4 +242,10 @@ def _build_selected(args, root, asr_path, duration_ms, metadata):
         source_events=groups,
         source_status=statuses,
     )
+    if metadata.get("transcript_mode") == "auto":
+        build = type(build)(
+            source_events=build.source_events,
+            canonical_units=build.canonical_units,
+            manifest=build.manifest.model_copy(update={"transcript_mode": "auto"}),
+        )
     return build, write_transcript_artifacts(build, root), statuses

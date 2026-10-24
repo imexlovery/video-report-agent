@@ -20,13 +20,13 @@
 | [trace.py](../src/video_report_agent/trace.py)、[usage.py](../src/video_report_agent/usage.py) | 阶段事件、调用用量和费用估算缓存 |
 | [inspect_report.py](../src/video_report_agent/inspect_report.py)、[evaluate_report.py](../src/video_report_agent/evaluate_report.py) | 程序检查与受控比较；不提供自动语义验收 |
 
-生成先尝试完整转写复用，否则检查媒体与 ASR 复用；随后构建完整转写供 Agent 阅读。单任务主链路顺序执行，长音频 ASR 的两段并发不改变单 Agent 架构。没有向量检索或多 Agent 调度。
+自动路由先确定可用来源，再按来源尝试完整转写复用；确需 ASR 时才检查媒体与 ASR 复用。随后构建完整转写供 Agent 阅读。单任务主链路顺序执行，长音频 ASR 的两段并发不改变单 Agent 架构。没有向量检索或多 Agent 调度。
 
 下载由 `ingest.py` 监督 `download_worker.py` 中的 yt-dlp，最多两次尝试、合计 120 秒运行预算，随后做有限进程清理。每 30 秒检查进度：最近 10 秒无进展，或未到 90% 且 ETA 不在 30 秒以内时，首轮中断并重新解析，优先选择平台返回的不同备用 URL；无备用则使用新解析的主 URL。第二轮不再增加重试。保持断点续传和外层 Worker 进程组，关闭 yt-dlp 内部额外重试，网络等待上限 10 秒。`download.log` 持续保留进度与切换原因，不打印签名媒体 URL。120 秒是体验预算，不是所有视频都能在此范围内完成的保证。
 
 ## 任务数据与接口
 
-自选文字稿入口接收有序的 `transcript_sources`：ASR、非 AI 字幕轨、B站 `ai-zh`。第一路可用来源提供时间轴，其余已选来源参与局部校对；未选 ASR 时跳过媒体下载、音频提取与 ASR。字幕获取、来源状态、缓存及对照命令见 [可选文字稿来源](subtitle-sources.md)。`transcribe` 在 `TRANSCRIPT_READY` 结束，不启动后续 Agent/报告阶段；默认 `generate` 的既有行为保持兼容。
+默认 Web/CLI 用 `auto` 依次尝试作者字幕轨、`ai-zh`、ASR，任一字幕正文可用即结束采集。Local 可主动使用自选来源。自选文字稿入口接收有序的 `transcript_sources`：ASR、非 AI 字幕轨、B站 `ai-zh`。第一路可用来源提供时间轴，其余已选来源参与局部校对；未选 ASR 时跳过媒体下载、音频提取与 ASR。字幕获取、来源状态、缓存及对照命令见 [可选文字稿来源](subtitle-sources.md)。`transcribe` 在 `TRANSCRIPT_READY` 结束，不启动后续 Agent/报告阶段；旧显式 ASR-only/fused 调用保持兼容。
 
 `create_run` 登记数据库中的输入与初始状态，再导出任务材料；独立运行默认 `runs/state.sqlite3`，嵌入调用显式传 `database_path`。受监督 execution 原子认领 run，并把数据库路径与执行 ID 传给可信 Python Worker。调用方持有业务事务时，Core 方法使用同一个 `db`，不另开连接或提交；提交后才导出与派发。详见 [SQLite 存储](sqlite-storage.md)。
 
