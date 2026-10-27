@@ -14,6 +14,7 @@
 | [asr.py](../src/video_report_agent/asr.py)、[paraformer.py](../src/video_report_agent/paraformer.py) | 本地/云端 ASR、云任务轮询、两段结果与时间戳合并 |
 | [transcript.py](../src/video_report_agent/transcript.py)、[transcript_foundation.py](../src/video_report_agent/transcript_foundation.py) | 来源事件、规范单元、可选字幕/OCR 融合 |
 | [pi.py](../src/video_report_agent/pi.py)、[产品 Skill](../src/video_report_agent/skills/video-report/SKILL.md) | 选择模式资产、Pi RPC 和完成判断；Skill 规定内容与表达 |
+| [report_diagram.ts](../src/video_report_agent/report_diagram.ts)、[diagram.py](../src/video_report_agent/diagram.py) | 主 Agent 按需委派独立绘图会话，程序将 SVG 嵌入指定位置 |
 | [report_content.py](../src/video_report_agent/report_content.py)、[report_image.py](../src/video_report_agent/report_image.py) | 原始简介处理、HTML 后处理与长图导出 |
 | [storage.py](../src/video_report_agent/storage.py) | SQLite 正文、执行身份、缓存认领与结构化事实；支持调用方活动事务 |
 | [reuse.py](../src/video_report_agent/reuse.py)、[retention.py](../src/video_report_agent/retention.py) | 兼容输入复用与媒体清理 |
@@ -49,6 +50,10 @@ Agent 日志默认保留每轮结束消息与 usage、工具参数/结果、生�
 `PI_TRACE_FULL=1` 额外写入 `pi.raw.events.jsonl` 供诊断；终态任务的原始流在清理时按 `PI_TRACE_FULL_MAX_AGE_DAYS`（默认 7，0 禁用）过期。精简日志与历史 `pi.events.jsonl` 不自动删除，Pi 自身会话保留策略不变。
 
 ## 完成与检查
+
+任务输入 `diagrams` 默认 `true`，`false` 时不提供绘图工具；没有前端选择控件。主 Agent 决定图示必要性、位置、解释目标、局部上下文与来源 ID，至多调用一次 `generate_diagram`。扩展从完整转写提取指定原文，启动全新 Pi RPC 进程／会话，只加载独立绘图指引，不继承主会话历史、不提供任何工具。子会话沿用调用时的模型和思考档位，关闭自动重试，180 秒截止，仅一次输出 SVG。产物与会话保存在 `assets/diagram/`，主上下文只收到插入标记。Python 在检查预览和交付时内联嵌入 SVG、图注及来源绑定；已委派却缺图或缺插入位置时交付失败，不把完整绘图过程交还主 Agent。
+
+子会话的请求与完成用量通过 RPC notification 写入同一 `pi.events.jsonl`，标记 `_agent_role: diagram`，参与现有费用汇总；这些事件不参与主会话的完成或模型恢复判断。针对实测出现的主 Agent 回读，扩展拦截常规 Read/Bash 对图示材料和检查 HTML 的直接访问，检查器返回 `diagram_count` 与 PNG 供确认；该路径约束不等于文件系统沙箱。取消和执行时限仍由原 Worker／任务容器负责，工具的取消信号同时停止绘图进程。独立会话仅隔离上下文，其输出的语义和布局仍需核对。
 
 Pi consumer 等待 `agent_settled`，并要求最终 assistant 的 `stopReason == "stop"`；`agent_end` 可能出现在重试或压缩之前。受控续跑只处理调用方明确配置且可识别的模型请求错误，沿用当前 Pi session 和任务工作区；报告仍须通过完整 HTML 检查才返回成功。整个 Worker 仍受调用方传入的总 deadline 限制。截图失败记录 `image_error`，HTML 仍可进入 `RENDERED`。
 

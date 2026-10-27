@@ -29,7 +29,8 @@ def stage_inputs(run: Path) -> Path:
     metadata = json.loads((run / "input.json").read_text()) if (run / "input.json").exists() else {}
     (stage / "input.json").write_text(
         json.dumps(
-            {key: metadata[key] for key in ("url", "video_id", "report_mode") if key in metadata},
+            {key: metadata[key] for key in ("url", "video_id", "report_mode", "diagrams")
+             if key in metadata},
             ensure_ascii=False,
         )
     )

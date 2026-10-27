@@ -12,6 +12,7 @@ import time
 from contextlib import ExitStack
 from pathlib import Path
 
+from .diagram import embed_diagram
 from .pi_trace import compact_event
 from .report_content import fill_video_description
 from .task_container import (
@@ -303,6 +304,7 @@ class PiRunner:
         metadata_path = workspace / "input.json"
         metadata = json.loads(metadata_path.read_text()) if metadata_path.is_file() else {}
         report_mode = metadata.get("report_mode", "standard")
+        diagrams = metadata.get("diagrams", True)
         if report_mode not in ("standard", "brief"):
             raise PiError("INPUT_REJECTED", "report_mode must be standard or brief")
         skill = generation or workspace
@@ -341,7 +343,8 @@ class PiRunner:
             "--model",
             self.model,
             "--tools",
-            "read,write,edit,bash,inspect_report" if self.review else "read,write,edit,bash",
+            "read,write,edit,bash" + (",inspect_report" if self.review else "")
+            + (",generate_diagram" if diagrams else ""),
             "--no-extensions",
             "--no-skills",
             "--skill",
@@ -362,6 +365,10 @@ class PiRunner:
         trace_extension = skill / "request_trace.ts"
         shutil.copy2(Path(__file__).with_name("request_trace.ts"), trace_extension)
         command.extend(["--extension", str(runtime_path / trace_extension.name)])
+        if diagrams:
+            for name in ("report_diagram.ts", "diagram.md"):
+                shutil.copy2(Path(__file__).with_name(name), skill / name)
+            command.extend(["--extension", str(runtime_path / "report_diagram.ts")])
         if self.review:
             extension = skill / "report_inspect.ts"
             shutil.copy2(Path(__file__).with_name("report_inspect.ts"), extension)
@@ -382,6 +389,15 @@ class PiRunner:
             "不根据当前配置或视频内容重新选择模式。"
         )
         mode_path = skill / "modes" / f"{report_mode}.md"
+        if diagrams:
+            prompt += (
+                "本次启用独立图示：完整理解来源后，判断哪一处空间、机制或复杂关系"
+                "确需图示帮助理解；有必要时最多调用一次 generate_diagram，提供解释目标、"
+                "局部上下文、原文来源 ID 和图注。使用返回的原样插入标记安排在对应正文位置。"
+                "图示由独立会话绘制并由程序嵌入，不读取绘图代码或会话记录，不自行改图；"
+                "绘图指引和实现由工具加载，不读取 diagram.md 或 report_diagram.ts。"
+                "普通步骤、列表或表格已经能讲清楚时不画图。检查预览包含最终图示。"
+            )
         if mode_path.is_file():
             prompt += (
                 f"本次只读取 modes/{report_mode}.md 这一份模式文件，不读取另一模式。"
@@ -512,6 +528,10 @@ class PiRunner:
         try:
             if report.is_symlink() or not report.is_file():
                 raise PiError("EXTERNAL_MODEL_FAILURE", "Pi ended without report.html")
+            try:
+                embed_diagram(report, workspace)
+            except (ValueError, OSError) as exc:
+                raise PiError("EXTERNAL_MODEL_FAILURE", "独立图示未正确生成或嵌入。") from exc
             fill_video_description(report, workspace)
             html = report.read_text().lower()
             if "<html" not in html or "</html>" not in html or "<body" not in html:
@@ -587,6 +607,17 @@ class PiRunner:
                 if (
                     event.get("type") == "extension_ui_request"
                     and event.get("method") == "notify"
+                    and event.get("message", "").startswith("video-report-diagram:")
+                ):
+                    drawing = json.loads(event["message"].removeprefix("video-report-diagram:"))
+                    drawing["_trace_received_at"] = event["_trace_received_at"]
+                    drawing["_agent_role"] = "diagram"
+                    if "request_id" in drawing:
+                        drawing["request_id"] = f"diagram-{drawing['request_id']}"
+                    event = drawing
+                if (
+                    event.get("type") == "extension_ui_request"
+                    and event.get("method") == "notify"
                     and event.get("message", "").startswith("video-report-trace:")
                 ):
                     timing = json.loads(event["message"].removeprefix("video-report-trace:"))
@@ -596,6 +627,9 @@ class PiRunner:
                 if compact is not None:
                     log.write((json.dumps(compact, ensure_ascii=False) + "\n").encode())
                     log.flush()
+                if event.get("_agent_role") == "diagram":
+                    # Count and display child usage, but never settle/recover the parent from it.
+                    continue
 
                 if event.get("type") == "response" and event.get("success") is False:
                     if model_recovery:

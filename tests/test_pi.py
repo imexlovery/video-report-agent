@@ -577,7 +577,7 @@ print(json.dumps({"type":"agent_settled"}),flush=True)
         asyncio.run(PiRunner(review=True, isolation="local").run(workspace))
     invocation = json.loads((workspace / "invocation.json").read_text())
     assert Path(invocation["cwd"]) == workspace
-    assert "read,write,edit,bash,inspect_report" in invocation["command"]
+    assert "read,write,edit,bash,inspect_report,generate_diagram" in invocation["command"]
     assert "--extension" in invocation["command"]
     assert "{{VIDEO_DESCRIPTION}}" in invocation["prompt"]
     assert "不要读取、改写或自行生成视频简介" in invocation["prompt"]
