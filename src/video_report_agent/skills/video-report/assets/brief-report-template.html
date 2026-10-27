@@ -55,7 +55,7 @@ code{font-family:ui-monospace,monospace;font-size:.9em}pre{white-space:pre-wrap;
 </header>
 {{VIDEO_DESCRIPTION}}
 {{BODY}}
-<details><summary>来源与处理说明</summary>{{SOURCES}}</details>
+<details><summary>来源说明</summary>{{SOURCES}}</details>
 <footer class="brief-footer"><span>视频报告·速览</span><a href="https://vreport.tri4t.xyz/">vreport.tri4t.xyz</a></footer>
 </main></body>
 </html>
@@ -63,7 +63,7 @@ code{font-family:ui-monospace,monospace;font-size:.9em}pre{white-space:pre-wrap;
 以下均为合成组件样例，不是正文目录或本次来源事实。根据真实信息关系选用，不要求全部出现；删除示例注释，替换真实内容与来源 ID。每种结构承载自己的判断、依据和限定，不在相邻正文重复解释。保持标题编号、正文18px与无时间戳约定。
 
 <section class="brief-section"><h2>先理解作用边界</h2>
-<div class="brief-branch-group" data-source-units="example-001"><div class="brief-branch-origin">增加输入校验</div><div class="brief-branches"><div class="brief-branch"><div class="brief-branch-label">可以识别</div><h3>格式问题</h3><p>必填字段缺失或格式错误时，提示修正。</p></div><div class="brief-branch"><div class="brief-branch-label">不能直接证明</div><h3>内容真实性</h3><p>格式通过不代表内容真实，仍需核对来源。</p></div></div></div>
+<div class="brief-branch-group" data-source-units="example-001"><div class="brief-branch-origin">增加输入校验</div><div class="brief-branches"><div class="brief-branch"><div class="brief-branch-label">可以识别</div><h3>格式问题</h3><p>必填字段缺失或格式错误时，提示修正。</p></div><div class="brief-branch"><div class="brief-branch-label">同时核对</div><h3>内容真实性</h3><p>对照原始来源核对内容，保留对象、时间和条件。</p></div></div></div>
 <article class="brief-open-card" data-source-units="example-002"><h3>本地预览检查版面</h3><p>预览可以检查版面是否正确呈现，内容仍需另行审核。</p></article>
 </section>
 
@@ -73,7 +73,7 @@ code{font-family:ui-monospace,monospace;font-size:.9em}pre{white-space:pre-wrap;
 </section>
 
 <section class="brief-section"><h2>结果与参数一起阅读</h2>
-<article class="brief-case-card" data-source-units="example-004"><h3>文件总大小如何得到</h3><div class="brief-case-params"><div><span>文件数量</span><strong>3 个</strong></div><div><span>每个文件</span><strong>2 MB</strong></div><div><span>统计范围</span><strong>仅文件内容</strong></div></div><div class="brief-case-result"><strong>内容合计 6 MB</strong><p>此合成算例不包含文件系统额外开销。</p></div></article>
+<article class="brief-case-card" data-source-units="example-004"><h3>文件总大小如何得到</h3><div class="brief-case-params"><div><span>文件数量</span><strong>3 个</strong></div><div><span>每个文件</span><strong>2 MB</strong></div><div><span>统计范围</span><strong>文件内容</strong></div></div><div class="brief-case-result"><strong>内容合计 6 MB</strong><p>按文件数量与单个文件的内容大小相乘。</p></div></article>
 <article class="brief-fold-card" data-source-units="example-005"><h3>作者建议先小范围试用</h3><p>探索阶段先用少量样本试用，再决定是否扩大使用范围。</p></article>
 </section>
 
@@ -91,8 +91,8 @@ code{font-family:ui-monospace,monospace;font-size:.9em}pre{white-space:pre-wrap;
 </section>
 <section class="brief-section"><h2>后续观察条件</h2>
 <div class="brief-watch">
-<article class="brief-watch-item" data-source-units="example-011"><h3>输入质量</h3><p>若仍有字段缺失，需要检查输入环节；格式通过也不能证明内容真实。</p></article>
-<article class="brief-watch-item" data-source-units="example-012"><h3>处理速度</h3><p>目前只观测了同一输入条件下的一次处理，更换设备或任务规模后是否仍有提速，还需实测。</p></article>
+<article class="brief-watch-item" data-source-units="example-011"><h3>输入质量</h3><p>缺失字段按原始记录逐项补齐，保留对应的对象、时间和来源。</p></article>
+<article class="brief-watch-item" data-source-units="example-012"><h3>处理速度</h3><p>这次观测固定设备与输入条件，处理速度按对应耗时记录比较。</p></article>
 </div>
 </section>
 
@@ -109,7 +109,7 @@ code{font-family:ui-monospace,monospace;font-size:.9em}pre{white-space:pre-wrap;
 <!-- 仅适用于前两列为短标签、后两列为说明的四列表格。其他结构不要套用该列宽。 -->
 <div class="brief-table-wrap" role="region" aria-label="处理方式对照，可横向滚动" tabindex="0"><table class="brief-table" data-layout="labels">
 <thead><tr><th scope="col">方式</th><th scope="col">对象</th><th scope="col">操作</th><th scope="col">结果</th></tr></thead>
-<tbody><tr data-source-units="example-015"><td><strong>格式校验</strong></td><td>文本</td><td>检查必填字段是否存在，保留原始内容。</td><td>指出缺失字段，不据此判断内容真实性。</td></tr>
+<tbody><tr data-source-units="example-015"><td><strong>格式校验</strong></td><td>文本</td><td>检查必填字段是否存在，保留原始内容。</td><td>指出具体缺失字段，便于按原始记录补齐。</td></tr>
 <tr data-source-units="example-016"><td><strong>人工核对</strong></td><td>图表</td><td>对照来源检查数字、单位与必要条件。</td><td>记录具体疑点，无法确认时保留不确定性。</td></tr></tbody>
 </table></div>
 </section>
