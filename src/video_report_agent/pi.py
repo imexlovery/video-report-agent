@@ -387,6 +387,12 @@ class PiRunner:
                 f"本次只读取 modes/{report_mode}.md 这一份模式文件，不读取另一模式。"
                 "Profile 只指导内容关系表达，不覆盖所选模式的展开程度。"
                 "只使用当前模式的模板、样式与组件，不读取或混入另一模式的视觉资源。"
+                "本次主报告禁止自由绘图或新写 CSS，只复用模板已有 UI 组件。"
+                "首稿后按 Skill 的集中修订约定，先一次完成全部检查，再最多一次集中修订、"
+                "一次局部复核，随后立即结束，不逐项检查或多次修改。"
+                "直接使用现有 inspect_report；仅有 Bash 时调用 "
+                '"$VIDEO_REPORT_PYTHON" -m video_report_agent.inspect_report，'
+                "复核加 --label revision；不探测浏览器或自行编写截图程序。"
             )
         if self.review:
             prompt += (

@@ -56,11 +56,11 @@ Timeline / Turning Points：ol > li 按事件排列，每项写事件或阶段�
 Before → Trigger → After：使用 comparison 对照同一对象前后状态，以邻近短段或过程链说明触发事件；不能用布局暗示来源未支持的因果。
 Issue Matrix：table 的行对应议题，列按实际人物及立场、依据组织，必要时增加共识或未解决问题；th 标明列义，未表态如实标注。
 Evidence Chain：ol 或 ol.steps 连接问题、方法、证据、结果和限制，适用条件靠近对应节点；材料缺失时不强填节点。
-Decision Tree：嵌套 ul/li 在分支开头写明条件，再写动作与结果；复杂关系可用内联 SVG，连接处标明条件。普通线性步骤继续使用 ol。
-State / Relationship Map：使用 HTML/CSS 或内联 SVG 呈现带名称的对象和状态，连接标注作用及方向，必要条件紧邻关系；推测或类比明确标识。关系链用明确的网格或 SVG 定位，横向放不下时采用纵向或明确连接的分行结构，不让箭头与节点随 flex-wrap 自由折行；关系标签长于节点间隙时放到节点上方留白，避免压住节点上沿；回路画出返回目标和方向，不只在图下用文字说明。
-颜色按对象角色或关系性质使用，不按卡片奇偶或节点顺序轮换；同图的已有状态用实线、预计变化用虚线并就地标注其性质。
+Decision Tree：使用嵌套 ul/li，在分支开头写明条件，再写动作与结果；不另绘连线。普通线性步骤继续使用 ol。
+关系表达：只复用下方已有组件，或用步骤、对照、表格和文字写清对象、方向、边界与条件，不自建图形。
+颜色与线条沿用现有组件，不按卡片奇偶或节点顺序轮换；预计变化在文字中就地标注性质。
 这些结构直接承担内容；复用现有样式，不依赖外部脚本或图库，不要求每份报告使用全部语法。 -->
-<!-- 正文从语义组织生成：section/h2（多个大章节时用 span.num 放连续序号，后接 span 标题文本）、h3/p；可选 callout、keyline、cards/card、comparison、categories/category、ol.steps/li、stats、tiles/tile、bars/bar。不存在必填章节或必用组件。表格默认占满所在容器并自动分配列宽；短标签与短数值的小表可用 table-compact 居中收窄，不为凑满宽度制造大块空白。长说明先按语义分成短段或条目，仍影响跨行比较时移到表外；只有实际渲染出现拥挤才按内容设置 colgroup，不默认固定列宽。柱图仅用于正文必须看见的量级差异，不为每节数字各画一组。同一可比序列保持同色，需要突出来源支持的重点才加 bar-highlight，不按顺序轮换颜色。柱图按 div.bars > div.bar 组织，每个 bar 为 div.bar-head（span.bar-name + span.bar-value）加 span.bar-track>span.bar-fill；bar-fill 的 width 即占比，bar-track 占满整行宽度，同组共用刻度（最大项给 width:100%）。短项目用原生列表、表格或紧凑分栏，名称与数值同行；ol.steps 仅供需要展开解释的步骤选用，圆圈编号与布局可自行调整。p、li 或卡片用 data-source-units 绑定实际支持内容的 ID。 -->
+<!-- 正文从语义组织生成：section/h2（多个大章节时用 span.num 放连续序号，后接 span 标题文本）、h3/p；可选 callout、keyline、cards/card、comparison、categories/category、ol.steps/li、stats、tiles/tile、bars/bar。不存在必填章节或必用组件。表格默认占满所在容器并自动分配列宽；短标签与短数值的小表可用 table-compact 居中收窄，不为凑满宽度制造大块空白。长说明先按语义分成短段或条目，仍影响跨行比较时移到表外；只有实际渲染出现拥挤才按内容设置 colgroup，不默认固定列宽。柱图仅用于正文必须看见的量级差异，不为每节数字各画一组。同一可比序列保持同色，需要突出来源支持的重点才加 bar-highlight，不按顺序轮换颜色。柱图按 div.bars > div.bar 组织，每个 bar 为 div.bar-head（span.bar-name + span.bar-value）加 span.bar-track>span.bar-fill；bar-fill 的 width 即占比，bar-track 占满整行宽度，同组共用刻度（最大项给 width:100%）。短项目用原生列表、表格或紧凑分栏，名称与数值同行；ol.steps 仅供需要展开解释的步骤选用，圆圈编号与布局沿用模板。p、li 或卡片用 data-source-units 绑定实际支持内容的 ID。 -->
 <!-- 并列类别内容长短悬殊、主要逐项阅读时，在普通 .categories 上加 .categories-stacked；共同字段需要横向对照时仍用并排卡或表格。 -->
 <!-- 以下示例的内容与编号均为合成展示，生成时逐处替换为实际来源的原生 ID，不沿用样例映射。
 逐项判断与依据示例：少量事项各有长依据与独立判断、主要逐项阅读时使用；需要跨项对齐比较共同字段时保留表格。不为填版式重复写“属实”“正确”等状态词；只有状态差异影响判断时才在正文就地说明。编号只作定位，不表示时间或排名。真实内容按来源替换。
@@ -86,9 +86,9 @@ State / Relationship Map：使用 HTML/CSS 或内联 SVG 呈现带名称的对�
   </article>
 </div>
 -->
-<!-- 循环图几何示例（四节点；按来源替换文字与关系，并按文字调整几何；不是必用组件）。
-线段能直接连接时用直线，仅转向的回程用平滑曲线；开放箭头与连线同色同粗。
-每张图的 marker id 唯一；marker 使用 userSpaceOnUse 避免随线宽被放大。增减节点时重排整个回路，不向此四节点图硬塞。
+<!-- 现有四节点循环组件：仅在来源恰有四个节点及闭合反馈时直接复用。
+结构、坐标、路径、marker 形状和样式保持原样，只替换节点文字、关系文字与来源 ID；同页复用时唯一化组件 ID 及引用，不增减节点或按文字重排几何。
+文字放不下或关系不适配时，用现有步骤、表格或列表表达。
 <figure class="cycle-map">
 <svg viewBox="0 0 720 300" role="img" aria-label="节点 A 到 B 到 C 到 D，再返回 A 的循环">
 <defs><marker id="cycle-arrow-1" viewBox="0 0 8 8" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M1 1 L7 4 L1 7" class="cycle-edge"/></marker></defs>
@@ -121,7 +121,7 @@ State / Relationship Map：使用 HTML/CSS 或内联 SVG 呈现带名称的对�
 <p>章节正文</p>
 </section>
 无可靠时间时省略 section-time；一小时以上全文使用 HH:MM:SS，不连续区间以中文分号分隔并允许自然换行。 -->
-<!-- 图示按 modes/standard.md 的“图示的选择、绘制与检查”执行：精确关系先计算，概念关系有依据，无法核实则简化；生成的 SVG 内联于本页。 -->
+<!-- 主报告只复用现有组件，遵守 Skill 的禁止自由绘图与一次集中修订约定。 -->
 {{BODY}}
 <details><summary>来源说明</summary>{{SOURCES}}</details>
 <footer><span>视频报告·精读</span><a class="footer-link" href="https://vreport.tri4t.xyz/">vreport.tri4t.xyz</a></footer>
