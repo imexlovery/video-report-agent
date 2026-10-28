@@ -29,10 +29,12 @@ def make_run(root, name, state="RENDERED", age=0):
     for name in (
         "download/source.mp4",
         "download/source.m4a",
+        "download/visual.mp4",
         "audio.wav",
         "report.html",
         "transcript.md",
         "download/source.info.json",
+        "download/visual.info.json",
         "download/source.zh.srt",
         "assets/image.png",
         "failure.log",
@@ -88,7 +90,7 @@ def test_media_older_than_seven_days_removed_and_transcript_preserved(tmp_path, 
     run = make_run(tmp_path, "complete", state, age=8)
     complete_transcript(run)
     cleanup_media(tmp_path)
-    for name in ("download/source.mp4", "download/source.m4a", "audio.wav"):
+    for name in ("download/source.mp4", "download/source.m4a", "download/visual.mp4", "audio.wav"):
         assert not (run / name).exists()
     for name in (
         "report.html",
@@ -98,6 +100,7 @@ def test_media_older_than_seven_days_removed_and_transcript_preserved(tmp_path, 
         "transcript-manifest.json",
         "input.json",
         "download/source.info.json",
+        "download/visual.info.json",
         "download/source.zh.srt",
         "assets/image.png",
         "failure.log",
@@ -116,6 +119,7 @@ def test_recent_media_kept_even_with_complete_transcript(tmp_path, monkeypatch, 
         complete_transcript(run)
     cleanup_media(tmp_path)
     assert all((run / "download/source.m4a").exists() for run in runs)
+    assert all((run / "download/visual.mp4").exists() for run in runs)
     assert all((run / "audio.wav").exists() for run in runs)
 
 

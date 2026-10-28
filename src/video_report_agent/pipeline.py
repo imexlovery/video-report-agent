@@ -18,7 +18,7 @@ from .failures import asr_failure
 from .ingest import UrlIngestError, download_bilibili_video, validate_bilibili_url
 from .media_config import resolve_media_config
 from .paraformer import CloudAsrError
-from .pi import PiError, PiRunner
+from .pi import PI_AGENT_DIR, PiError, PiRunner
 from .report_image import render_report_image
 from .retention import cleanup_media
 from .reuse import (
@@ -35,6 +35,7 @@ from .term_correction import TERM_DOCUMENTS
 from .trace import RunTrace
 from .transcript import build_transcript
 from .transcript_foundation import parse_roi
+from .visual import VISUAL_DOCUMENTS, describe_frames, fetch_video, resolve_api_key, sample_frames
 
 
 def write_json(path: Path, data: dict) -> None:
@@ -50,6 +51,7 @@ def create_run(
     report_mode="standard",
     diagrams=True,
     term_correction: bool = False,
+    visual_enhancement: bool = False,
     transcript_mode="asr-only",
     transcript_sources=None,
     transcript_only=False,
@@ -111,6 +113,7 @@ def create_run(
         "report_mode": report_mode,
         "diagrams": diagrams,
         "term_correction": term_correction,
+        "visual_enhancement": visual_enhancement,
         "transcript_mode": transcript_mode,
         **({"transcript_sources": transcript_sources} if transcript_sources is not None else {}),
         **({"transcript_only": True} if transcript_only else {}),
@@ -360,7 +363,10 @@ def generate(run: Path, *, database_path=None, execution_id=None) -> dict:
                     )
                 status["download_reused_from"] = download_source
                 metadata.update(
-                    download_audio_only=audio_only,
+                    download_audio_only=(
+                        store.run(download_source)["input"].get("download_audio_only", False)
+                        if download_source else audio_only
+                    ),
                     title=downloaded.title,
                     uploader=downloaded.uploader,
                     attribution=downloaded.attribution,
@@ -523,6 +529,40 @@ def generate(run: Path, *, database_path=None, execution_id=None) -> dict:
         if metadata.get("transcript_only"):
             update("TRANSCRIPT_READY")
         else:
+            if metadata.get("visual_enhancement", False):
+                update("VISUAL_ANALYSIS")
+                key = resolve_api_key(PI_AGENT_DIR)
+                with trace.span("visual", input={"artifact": "transcript.md"}) as detail:
+                    video = next((p for p in (run / "download").glob("source.*")
+                                  if p.suffix in {".mp4", ".mkv", ".webm"}), None)
+                    if metadata.get("download_audio_only"):
+                        video = None
+                    if video is None:
+                        media, reused = reuse_download(
+                            source, run, request_subtitles=False, audio_only=False,
+                            database_path=store.path,
+                        )
+                        if media is None:
+                            video = fetch_video(source, run)
+                        else:
+                            video = media.media_path
+                            metadata["download_audio_only"] = False
+                            store.metadata(run.name, metadata, execution_id=execution_id)
+                            write_json(run / "input.json", metadata)
+                        store.artifact(run.name, "download/" + video.name, video, "media")
+                        for info in (run / "download").glob("*.info.json"):
+                            store.document(run.name, "download/" + info.name, info.read_text())
+                        detail.update(reused_from=reused)
+                    try:
+                        manifest = sample_frames(video, run, run / "canonical-transcript.jsonl")
+                        invocation = describe_frames(run, api_key=key)
+                        detail.update(output={"frames": manifest["actual_frames"],
+                                              "artifact": "visual/observations.jsonl"},
+                                      request_seconds=invocation["request_seconds"])
+                    finally:
+                        store.capture(run, execution_id, names=VISUAL_DOCUMENTS)
+                        for frame in (run / "visual" / "frames").glob("*.jpg"):
+                            store.artifact(run.name, str(frame.relative_to(run)), frame, "resource")
             update("GENERATING")
             runner_options = dict(metadata.get("model_selection", {}))
             if metadata.get("model_recovery"):

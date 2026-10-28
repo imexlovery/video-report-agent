@@ -728,3 +728,15 @@ def test_cleaner_handles_late_create_without_deleting_other_resources(cleaner, t
             subprocess.run(['docker', 'rm', '-f', name], capture_output=True)
         for name in (foreign, active):
             subprocess.run(['docker', 'network', 'rm', name], capture_output=True)
+
+
+def test_visual_caption_is_staged_without_raw_images(tmp_path):
+    (tmp_path / "transcript.md").write_text("[u1 | 0–1s] text")
+    (tmp_path / "input.json").write_text('{"visual_enhancement":true}')
+    (tmp_path / "visual/frames").mkdir(parents=True)
+    (tmp_path / "visual/frames/frame-000001.jpg").write_bytes(b"private-image")
+    (tmp_path / "visual/observations.jsonl").write_text('{"frame_id":"frame-000001"}\n')
+    stage = task_container.stage_inputs(tmp_path)
+    assert json.loads((stage / "input.json").read_text())["visual_enhancement"] is True
+    assert (stage / "visual/observations.jsonl").read_text() == '{"frame_id":"frame-000001"}\n'
+    assert not (stage / "visual/frames").exists()

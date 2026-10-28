@@ -200,3 +200,18 @@ def test_cny_backfill_keeps_usd_separate_and_invalidates_old_cache(tmp_path):
     assert result["llm_cny_estimate"] == pytest.approx(.00207)
     assert result["llm_usd_estimate"] == .12
     assert result["llm_unpriced_calls"] == 0
+
+
+def test_visual_usage_is_included_and_invalidates_cached_totals(tmp_path):
+    (tmp_path / "visual").mkdir()
+    before = usage.cached_call_costs(tmp_path, {}, None)
+    (tmp_path / "visual/invocation.json").write_text(
+        '{"request_count":1,"status":"completed","model":"deepseek-flash"}')
+    (tmp_path / "visual/usage.json").write_text(
+        '{"prompt_tokens":100,"prompt_cache_hit_tokens":20,"completion_tokens":30,"total_tokens":130}')
+    after = usage.cached_call_costs(tmp_path, {}, None)
+    assert after["llm_calls"] == before["llm_calls"] + 1
+    assert after["tokens"] == before["tokens"] + 130
+    call = usage.execution_statistics(tmp_path, {})["model_calls"][0]
+    assert call["stage"] == "visual"
+    assert call["message"]["usage"]["cacheRead"] == 20

@@ -1,7 +1,8 @@
 # 关键帧 → 带时间戳的画面描述：独立最小实验
 
-验证画面能补充哪些字幕未说出的信息，并在独立目录生成纯字幕与增强报告对照；不接入 Core/Service 流水线。
-脚本只使用 Python 标准库和已有 FFmpeg/ffprobe；不安装新依赖。
+验证画面能补充哪些字幕未说出的信息，并在独立目录生成纯字幕与增强报告对照。
+实验入口和正式流水线共同复用 Core 的 `visual.py` 与已有 FFmpeg/ffprobe，不新增项目依赖。
+正常生成可用 `video-report generate <URL> --visual-enhancement`；网站 Local 在高级设置开启，Public 暂不开放。
 
 ## 运行
 

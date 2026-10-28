@@ -250,10 +250,15 @@ def test_no_history_runs_normal_pipeline(tmp_path, monkeypatch):
     assert calls == ["download"]
 
 
-def test_completed_asr_is_reused_when_transcript_is_incomplete(completed, monkeypatch):
-    previous, _ = completed
+@pytest.mark.parametrize("visual_enabled", [False, True])
+def test_completed_asr_is_reused_when_transcript_is_incomplete(
+    completed, monkeypatch, visual_enabled
+):
+    previous, metadata = completed
+    metadata.update(transcript_mode="fused", download_audio_only=False)
+    pipeline.write_json(previous / "input.json", metadata)
     (previous / "canonical-transcript.jsonl").unlink()
-    run = pipeline.create_run(previous.parent, URL)
+    run = pipeline.create_run(previous.parent, URL, visual_enhancement=visual_enabled)
     calls = []
 
     def extract(media, output):
@@ -271,6 +276,18 @@ def test_completed_asr_is_reused_when_transcript_is_incomplete(completed, monkey
         )
         return built_fixture(run, unit)
 
+    def sample(media, current, units):
+        assert os.path.samefile(media, previous / "download/source.mp4")
+        assert json.loads((current / "input.json").read_text())["download_audio_only"] is False
+        (current / "visual").mkdir()
+        calls.append("frames")
+        return {"actual_frames": 1}
+
+    def describe(current, **options):
+        (current / "visual/observations.jsonl").write_text('{"frame_id":"frame-000001"}\n')
+        calls.append("description")
+        return {"request_seconds": 0.1}
+
     async def report(current):
         calls.append("report")
         assert "fresh text" in (current / "transcript.md").read_text()
@@ -279,6 +296,10 @@ def test_completed_asr_is_reused_when_transcript_is_incomplete(completed, monkey
     monkeypatch.setattr(pipeline, "extract_audio", extract)
     monkeypatch.setattr(pipeline, "transcribe_audio", transcribe)
     monkeypatch.setattr(pipeline, "build_transcript", build)
+    monkeypatch.setattr(pipeline, "resolve_api_key", lambda _: "fixture-key")
+    monkeypatch.setattr(pipeline, "sample_frames", sample)
+    monkeypatch.setattr(pipeline, "describe_frames", describe)
+    monkeypatch.setattr(pipeline, "fetch_video", lambda *_: pytest.fail("video already cached"))
     monkeypatch.setattr(
         pipeline,
         "PiRunner",
@@ -289,7 +310,9 @@ def test_completed_asr_is_reused_when_transcript_is_incomplete(completed, monkey
     assert status["download_reused_from"] == previous.name
     assert status["transcript_reused_from"] is None
     assert status["asr_reused_from"] == previous.name
-    assert calls == ["audio", "canonical", "report"]
+    assert calls == ["audio", "canonical"] + (
+        ["frames", "description"] if visual_enabled else []
+    ) + ["report"]
 
 
 def test_invalid_asr_is_not_reused(completed, monkeypatch):
@@ -386,3 +409,75 @@ def test_duplicate_or_reversed_asr_ordinals_are_not_reused(completed, ordinals):
         },
     )
     assert validated_asr(previous, metadata) is None
+
+
+@pytest.mark.parametrize("enabled,pruned,audio_only", [
+    (False, False, False), (True, False, False), (True, True, False), (True, False, True)
+])
+def test_visual_preparation_runs_after_transcript_reuse(
+    completed, monkeypatch, enabled, pruned, audio_only
+):
+    previous, _ = completed
+    if audio_only:
+        metadata = json.loads((previous / "input.json").read_text())
+        metadata["download_audio_only"] = True
+        pipeline.write_json(previous / "input.json", metadata)
+    if pruned:
+        (previous / "download/source.mp4").unlink()
+    run = pipeline.create_run(previous.parent, URL, visual_enhancement=enabled)
+    calls = []
+
+    def sample(video, current, units):
+        assert current == run
+        assert "hello" in (current / "transcript.md").read_text()
+        assert units.is_file() and video.is_file()
+        (current / "visual/frames").mkdir(parents=True)
+        (current / "visual/frames/frame-000001.jpg").write_bytes(b"frame")
+        pipeline.write_json(current / "visual/manifest.json", {"actual_frames": 1})
+        calls.append("frames")
+        return {"actual_frames": 1}
+
+    def describe(current, **options):
+        (current / "visual/observations.jsonl").write_text('{"frame_id":"frame-000001"}\n')
+        calls.append("description")
+        return {"request_seconds": 0.1}
+
+    def download(source, current):
+        assert pruned or audio_only
+        (current / "download").mkdir(exist_ok=True)
+        video = current / "download/visual.mp4"
+        video.write_bytes(b"downloaded-video")
+        calls.append("download")
+        return video
+
+    async def report(current):
+        if enabled:
+            assert (current / "visual/observations.jsonl").is_file()
+        (current / "report.html").write_text("<html><body>report</body></html>")
+
+    monkeypatch.setattr(pipeline, "resolve_api_key", lambda _: "fixture-key")
+    monkeypatch.setattr(pipeline, "sample_frames", sample)
+    monkeypatch.setattr(pipeline, "describe_frames", describe)
+    monkeypatch.setattr(pipeline, "fetch_video", download)
+    monkeypatch.setattr(pipeline, "PiRunner", lambda: SimpleNamespace(
+        run=report, provider="fixture", model="fixture"))
+    monkeypatch.setattr(pipeline, "render_report_image", lambda _: None)
+    status = pipeline.generate(run)
+    assert status["state"] == "RENDERED", status
+    assert bool(status["transcript_reused_from"])
+    expected = (["download"] if pruned or audio_only else []) + ["frames", "description"]
+    if not enabled:
+        expected = []
+    assert calls == expected
+    if enabled:
+        from video_report_agent.storage import Store
+        documents = Store(run.parent / "state.sqlite3").documents(run.name)
+        assert "visual/observations.jsonl" in documents
+        if audio_only:
+            assert json.loads((run / "input.json").read_text())["download_audio_only"] is True
+        if pruned:
+            following = pipeline.create_run(run.parent, URL)
+            media, _ = sql_reuse_download(
+                validate_bilibili_url(URL), following, request_subtitles=False, audio_only=True
+            )
+            assert media is None, "Video-only visual input must never become an ASR media cache"

@@ -23,6 +23,7 @@ from .task_container import (
     stage_inputs,
 )
 from .term_correction import prepare_term_correction
+from .visual import REPORT_PROMPT
 
 PROJECT_ROOT = Path.cwd()
 PI_AGENT_DIR = Path(os.getenv("PI_CODING_AGENT_DIR", str(PROJECT_ROOT / "config" / "pi"))).resolve()
@@ -304,6 +305,10 @@ class PiRunner:
         env["VIDEO_REPORT_PYTHON"] = sys.executable
         metadata_path = workspace / "input.json"
         metadata = json.loads(metadata_path.read_text()) if metadata_path.is_file() else {}
+        if metadata.get("visual_enhancement") and not (
+            (generation or workspace) / "visual" / "observations.jsonl"
+        ).is_file():
+            raise PiError("IMPLEMENTATION_FAILURE", "画面描述文件缺失")
         term_correction = metadata.get("term_correction", False)
         if term_correction:
             prepare_term_correction(generation or workspace, metadata)
@@ -406,6 +411,8 @@ class PiRunner:
             f"本任务 report_mode={report_mode}，是任务自身保存的不可变输入；"
             "不根据当前配置或视频内容重新选择模式。"
         )
+        if metadata.get("visual_enhancement"):
+            prompt += REPORT_PROMPT
         mode_path = skill / "modes" / f"{report_mode}.md"
         if diagrams:
             prompt += (

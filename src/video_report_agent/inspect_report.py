@@ -14,11 +14,15 @@ from .report_image import render_report_image
 PAGE_CHECK = r"""() => {
   const findings = [];
   const refs = [];
+  const frameRefs = [];
   const label = el => ({tag: el.tagName.toLowerCase(), id: el.id,
     text: (el.textContent || '').trim().slice(0, 160)});
   for (const el of document.querySelectorAll('body *')) {
     if (el.hasAttribute('data-source-units')) {
       refs.push({...label(el), ids: el.getAttribute('data-source-units')});
+    }
+    if (el.hasAttribute('data-source-frames')) {
+      frameRefs.push({...label(el), ids: el.getAttribute('data-source-frames')});
     }
     const box = el.getBoundingClientRect();
     const css = getComputedStyle(el);
@@ -39,7 +43,7 @@ PAGE_CHECK = r"""() => {
       findings.push({kind:'broken_image', ...label(el)});
     }
   }
-  return {findings, refs, title:document.title,
+  return {findings, refs, frameRefs, title:document.title,
     diagram_count:document.querySelectorAll('figure[data-report-diagram]').length,
     width:innerWidth, height:document.documentElement.scrollHeight};
 }"""
@@ -60,6 +64,9 @@ def inspect_report(run: Path, label: str = "final") -> dict:
     embed_diagram(target / "report.html", run)
     fill_video_description(target / "report.html", run)
     source_ids = set(re.findall(r"^\[([^ |]+) \|", (run / "transcript.md").read_text(), re.M))
+    observations = run / "visual" / "observations.jsonl"
+    frame_ids = ({json.loads(line)["frame_id"] for line in observations.read_text().splitlines()
+                  if line.strip()} if observations.is_file() else set())
     result = {"status": "error", "inspector_version": "1.1",
               "scope": "layout_and_reference_integrity_only",
               "preview": "delivery-filled copy; working report.html is unchanged",
@@ -70,16 +77,23 @@ def inspect_report(run: Path, label: str = "final") -> dict:
         data = page.evaluate(PAGE_CHECK)
         findings = data.pop("findings")
         refs = data.pop("refs")
+        frame_refs = data.pop("frameRefs")
         for ref in refs:
             ids = [s for s in re.split(r"[\s,;]+", ref.pop("ids").strip()) if s]
             if source_ids and (not ids or set(ids) - source_ids):
                 findings.append({"kind": "invalid_source_ids", **ref,
                                  "invalid_ids": sorted(set(ids) - source_ids)})
+        for ref in frame_refs:
+            ids = ref.pop("ids").split()
+            if not ids or set(ids) - frame_ids:
+                findings.append({"kind": "invalid_frame_ids", **ref,
+                                 "invalid_ids": sorted(set(ids) - frame_ids)})
         findings.extend({"kind": "resource_or_script_error", "detail": item}
                         for item in loading_errors)
         result.update(data, status="checked", findings=findings,
                       reference_elements=len(refs), reference_check=(
                           "checked" if source_ids else "unavailable_no_source_ids"))
+        result.update(frame_id_count=len(frame_ids), frame_reference_elements=len(frame_refs))
         if not refs:
             findings.append({"kind": "missing_source_bindings"})
         height = data["height"]

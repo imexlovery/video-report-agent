@@ -10,7 +10,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 # Bump for schema OR counting/pricing semantics changes, even if fields stay identical.
-USAGE_CACHE_VERSION = 3
+USAGE_CACHE_VERSION = 4
 
 
 def read_object(path):
@@ -90,6 +90,27 @@ def cny_cost(message, received_at=None):
     }
 
 
+def _visual_call(run):
+    invocation = read_object(run / "visual" / "invocation.json")
+    if not invocation.get("request_count") or invocation.get("status") not in {
+        "completed", "failed"
+    }:
+        return None
+    raw = read_object(run / "visual" / "usage.json")
+    cached = raw.get("prompt_cache_hit_tokens", 0)
+    return {
+        "message": {"role": "assistant", "provider": "deepseek",
+                    **({"timestamp": round(invocation["started_at"] * 1000)}
+                       if invocation.get("started_at") is not None else {}),
+                    "model": invocation.get("model", "deepseek-flash"),
+                    "stopReason": "stop" if invocation.get("status") == "completed" else "error",
+                    "usage": {"input": raw.get("prompt_tokens", 0) - cached,
+                              "output": raw.get("completion_tokens", 0), "cacheRead": cached,
+                              "cacheWrite": 0, "totalTokens": raw.get("total_tokens", 0)}},
+        "received_at": invocation.get("finished_at"), "stage": "visual",
+    }
+
+
 def _llm_costs(run):
     """Count only completed assistant-message events, never streamed usage copies."""
     calls, tokens, estimates, cny_estimates, unknown = 0, 0, [], [], 0
@@ -122,6 +143,11 @@ def _llm_costs(run):
                     estimates.append(cost)
                 else:
                     unknown += 1
+    visual = _visual_call(run)
+    if visual:
+        calls += 1
+        tokens += visual["message"]["usage"]["totalTokens"]
+        unknown += 1  # Provider usage is known; no additional pricing rule is assumed.
     return {
         "llm_calls": calls,
         "tokens": tokens,
@@ -196,6 +222,8 @@ def execution_statistics(run, status):
                                 "received_at": event.get("_trace_received_at"),
                             }
                         )
+    if visual := _visual_call(run):
+        calls.append(visual)
     pipeline_events = []
     trace = run / "run.trace.jsonl"
     if trace.exists():
@@ -288,7 +316,9 @@ def _write_cache(path, data):
 def cached_call_costs(run, status, asr_rate):
     """Reuse LLM estimates and ASR metadata; recalculate ASR cost for each call."""
     path = run / "pi.events.jsonl"
-    signature = _signature(path)
+    signature = {"pi": _signature(path),
+                 "visual_usage": _signature(run / "visual" / "usage.json"),
+                 "visual_invocation": _signature(run / "visual" / "invocation.json")}
     cache_path = run / "usage.json"
     cache = read_object(cache_path)
     llm = cache.get("llm")
@@ -299,7 +329,9 @@ def cached_call_costs(run, status, asr_rate):
         and _valid_llm(llm)
     ):
         llm = _llm_costs(run)
-        if signature == _signature(path):
+        if signature == {"pi": _signature(path),
+                         "visual_usage": _signature(run / "visual" / "usage.json"),
+                         "visual_invocation": _signature(run / "visual" / "invocation.json")}:
             _write_cache(
                 cache_path,
                 {

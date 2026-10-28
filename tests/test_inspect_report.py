@@ -66,3 +66,17 @@ def test_inspection_only_fills_preview_not_agent_file(tmp_path):
     final_preview = (tmp_path / "inspection/after-review/report.html").read_text()
     assert final_preview == preview
     assert final_preview.count("视频简介（展开）") == 1
+
+
+def test_visual_references_use_the_observation_manifest(tmp_path):
+    (tmp_path / "transcript.md").write_text("[u1 | 0–1s] 内容")
+    (tmp_path / "visual").mkdir()
+    (tmp_path / "visual/observations.jsonl").write_text('{"frame_id":"frame-000001"}\n')
+    (tmp_path / "report.html").write_text('<html><body><p data-source-units="u1" '
+        'data-source-frames="frame-000001">图文内容</p>'
+        '<p data-source-frames="missing">错误引用</p></body></html>')
+    result = inspect_report(tmp_path)
+    assert result["frame_id_count"] == 1
+    assert result["frame_reference_elements"] == 2
+    assert [x["invalid_ids"] for x in result["findings"]
+            if x["kind"] == "invalid_frame_ids"] == [["missing"]]

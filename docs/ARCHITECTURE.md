@@ -13,6 +13,7 @@
 | [ingest.py](../src/video_report_agent/ingest.py)、[audio.py](../src/video_report_agent/audio.py) | Bilibili 来源验证、所选分 P 元数据预查询、下载、16 kHz 单声道音频、时长与静音检测 |
 | [asr.py](../src/video_report_agent/asr.py)、[paraformer.py](../src/video_report_agent/paraformer.py) | 本地/云端 ASR、云任务轮询、两段结果与时间戳合并 |
 | [transcript.py](../src/video_report_agent/transcript.py)、[transcript_foundation.py](../src/video_report_agent/transcript_foundation.py) | 来源事件、规范单元、可选字幕/OCR 融合 |
+| [visual.py](../src/video_report_agent/visual.py) | 视觉专用视频轨、抽帧、带时间戳的画面描述及报告读取约定；实验脚本复用此模块 |
 | [pi.py](../src/video_report_agent/pi.py)、[产品 Skill](../src/video_report_agent/skills/video-report/SKILL.md) | 选择模式资产、Pi RPC 和完成判断；Skill 规定内容与表达 |
 | [report_diagram.ts](../src/video_report_agent/report_diagram.ts)、[diagram.py](../src/video_report_agent/diagram.py) | 主 Agent 按需委派独立绘图会话，程序将 SVG 嵌入指定位置 |
 | [report_content.py](../src/video_report_agent/report_content.py)、[report_image.py](../src/video_report_agent/report_image.py) | 原始简介处理、HTML 后处理与长图导出 |
@@ -34,6 +35,16 @@
 视频、任务、ASR/cloud task、来源事件、规范单元、转写正文、报告 HTML、缓存和结构化统计入库。`input.json`、`status.json`、转写和 HTML 是可重建执行导出；媒体、PNG、资源、Pi 会话/配置快照和原始诊断仍存文件。SQL 缓存区分下载、ASR 和完整转写，认领记录生产 run、执行 ID 与 deadline；READY 正文原子保存，活跃生产者不能被接管，退出后释放未完成占用，旧 ID 不得覆盖后续生产者。媒体清理沿用七天/数量策略，同步产物可用状态，不使 READY 转写或 HTML 失效。
 
 ASR 片段编号保留原始来源位置，过滤空白或无效片段后允许间断；复用检查要求编号严格递增，不要求从零连续编号。
+
+### 可选画面辅助理解
+
+任务参数 `visual_enhancement` 默认 `false`，CLI 对应 `--visual-enhancement`。开启后，在完整转写准备好之后执行 `visual` 阶段，再进入原有 Pi 生成。命中转写缓存也会执行此阶段，原字幕与规范单元保持不变。
+
+优先使用已有的主视频媒体；需要另取视频轨时，以所选分 P 的 CID 从 Bilibili API 获取，保存为 `download/visual.mp4`，与 ASR 的 `download/source.*` 分开。当前按 9 个等分时间窗中心取解码帧，以实际 PTS 记录时间。一次官方 `deepseek-flash` 请求读取单帧和附近 ±15 秒字幕，生成独立观察；凭据使用 `DEEPSEEK_API_KEY` 或当前 Pi 配置中已有的 DeepSeek API Key。
+
+`visual/observations.jsonl` 与原转写平行保存，报告模型沿用调用方原选择，只读取描述文本；视觉来源用 `data-source-frames`，口述用 `data-source-units`。Docker 生成目录只接收描述文本和开关，不传帧图片，也不为视觉预处理额外传入凭据。视觉准备失败时任务失败，保留诊断，不自动重试或切换模型。
+
+帧图片沿用资源产物保存，视觉专用视频沿用媒体清理；描述、清单、原始响应和用量保存为运行文档。`usage.py` 将视觉请求与报告请求合并计数，视觉价格缺失时计入未定价调用。策略修改集中在 `visual.py`，独立实验入口仍保留在 `evals/sparse-visual/`。
 
 规范单元具有 ID、时间范围与来源关系，`transcript.md` 为模型可读视图；报告的 `data-source-units` 用来定位来源，不能单凭绑定合法判断内容忠实。
 

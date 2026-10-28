@@ -31,12 +31,16 @@ def stage_inputs(run: Path) -> Path:
     (stage / "input.json").write_text(
         json.dumps(
             {key: metadata[key] for key in (
-                "url", "video_id", "report_mode", "diagrams", "term_correction", "title", "uploader"
+                "url", "video_id", "report_mode", "diagrams", "term_correction",
+                "title", "uploader", "visual_enhancement",
             )
              if key in metadata},
             ensure_ascii=False,
         )
     )
+    if metadata.get("visual_enhancement"):
+        (stage / "visual").mkdir()
+        shutil.copy2(run / "visual" / "observations.jsonl", stage / "visual" / "observations.jsonl")
     info = run / "download" / "source.info.json"
     if info.is_file():
         source = json.loads(info.read_text())

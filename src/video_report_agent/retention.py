@@ -56,6 +56,7 @@ def cleanup_media(root: Path, *, database_path=None) -> None:
             paths = [run / "audio.wav"]
             download = run / "download"
             if not download.is_symlink():
+                paths.append(download / "visual.mp4")
                 paths.extend(
                     path for path in download.glob("source*") if path.suffix in _MEDIA_SUFFIXES
                 )
