@@ -4,7 +4,9 @@
 
 实验入口为 [`evals/sparse-visual/`](../evals/sparse-visual/README.md)。使用 baseline 的 optics，固定原字幕、模型、思考档位、模式、Skill、模板与初始提示，分别生成纯字幕和“字幕＋画面描述”的完整报告。原图和描述独立保留，不修改原字幕、产品 Skill 或正式流水线。下文的更多帧数、直接图文和正式接入均为后续候选。
 
-optics 增强报告已实际引用画面描述，补充页面标记并支持转写校对，但出现一处方向转述错误，部分段落重复已有口述；当前增益有限，继续保留为实验。完整报告、逐项比较、失败恢复记录和分阶段用量在忽略的 `.local/evals/optics-visual-20261028/comparison.md`。此前 CRM 仅描述实验保留在 `.local/evals/sparse-visual-20261028/ruwei-crm/`，本轮判断以 optics 完整对照为准。
+optics 增强报告已实际引用画面描述，补充页面标记并支持转写校对，但出现一处方向转述错误，部分段落重复已有口述；当前增益有限，继续保留为实验。完整报告、逐项比较、失败恢复记录和分阶段用量在忽略的 `.local/evals/optics-visual-20261028/comparison.md`。此前 CRM 仅描述实验保留在 `.local/evals/sparse-visual-20261028/ruwei-crm/`，首轮完整对照以 optics 为准。
+
+随后保持 9 帧与同一描述策略，补测了更依赖操作画面的 cooking baseline。增强报告引用 6 帧，补充外观与操作姿势，但核心刀路和关键状态时点仍覆盖不足；完整处理累计约多 79 秒、tokens 多 3.42%，两组都无失败。该样本的完整报告、逐帧判断与分阶段数据在 `.local/evals/cooking-visual-20261028/comparison.md`，仍未接入正式流水线。
 
 ## 1. 目标与取舍
 
