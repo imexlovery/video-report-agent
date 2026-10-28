@@ -6,9 +6,9 @@
 
 同一 Pi Agent 读取完整转写与 `source-context.json` 中的标题、作者、简介和 URL；在阅读或写作遇到影响理解的名称、专业术语疑点时处理，不增加独立全文审查阶段。自身知识仅提出候选，先用元数据，证据不足才按需联网，不逐词搜索。
 
-付费搜索必须另设 `PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH=1` 才注册 `lookup_term` 与 `fetch_term_source`，HTTP 入口也检查许可。未允许时仅提供 `record_term_review`，仍可依据元数据修正。模型或 ASR 额度不能证明覆盖搜索费用。
+开启 correction 就同时提供 `record_term_review`、`lookup_term` 与 `fetch_term_source`，允许按需使用付费 Search/Fetch；关闭时不加载这组工具。没有独立的搜索许可开关，旧 `PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH` 不再读取。开启不意味着每份报告必定搜索，已有元数据足够时可直接记录修正。
 
-取证直接使用 DeepSeek `/v1/tools/search` 与 `/v1/tools/fetch` JSON API，不经过辅助模型。凭据优先 `DEEPSEEK_SEARCH_API_KEY`，否则 `DEEPSEEK_API_KEY`，不使用报告模型 Key、`PI_API_KEY` 或 `DASHSCOPE_API_KEY`，不回退百炼。
+取证直接使用 DeepSeek `/v1/tools/search` 与 `/v1/tools/fetch` JSON API，不经过辅助模型。凭据优先 `DEEPSEEK_SEARCH_API_KEY`，否则 `DEEPSEEK_API_KEY`，不使用报告模型 Key、`PI_API_KEY` 或 `DASHSCOPE_API_KEY`，不回退百炼。缺少官方凭据时，取证工具记录 `missing_evidence_credentials`，不会声称已搜索成功。
 
 - `lookup_term(query, unit_ids)` 只发送具体 query；返回五条结果并默认 `need_content=true`。元数据与附近原文只交给当前 Agent 核对，不向搜索发送整份转写。
 - `fetch_term_source(source_id)` 仅在已有正文不足时读取本任务搜索已返回的来源，不接受任意 URL。
@@ -31,7 +31,7 @@ supported 要求位置及原词准确，引文来自保存的元数据、来源�
 
 ## Docker 传递
 
-staging 保存任务开关和辨名所需的标题、作者、简介；Pi 在隔离工作目录初始化修正记录。仅当任务开启且服务端允许付费搜索时，可信控制端把独立搜索 Key 写入现有 `.generation-config/term-search-key`（0600），通过现有只读配置挂载供容器启动脚本读取；Key 不放在命令、任务输入或产物中。配置沿用任务结束后的清理。该凭据与模型凭据一样可被任务进程读取，不宣称拥有额外的秘密隔离。
+staging 保存任务开关和辨名所需的标题、作者、简介；Pi 在隔离工作目录初始化修正记录。仅当任务开启时，可信控制端把独立搜索 Key 写入现有 `.generation-config/term-search-key`（0600），通过现有只读配置挂载供容器启动脚本读取；Key 不放在命令、任务输入或产物中。配置沿用任务结束后的清理。该凭据与模型凭据一样可被任务进程读取，不宣称拥有额外的秘密隔离。
 
 三个修正文档列入既有输出白名单，成功退出后回传并保存；仍拒绝符号链接和非普通文件，不回传配置。
 

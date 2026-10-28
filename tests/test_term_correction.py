@@ -241,9 +241,9 @@ def test_flag_defaults_off_and_term_documents_capture_without_cache_identity_cha
 
 
 @pytest.mark.parametrize("enabled", [False, True])
-@pytest.mark.parametrize("paid_search", [False, True])
+@pytest.mark.parametrize("legacy_permission", [None, "0", "1"])
 def test_pi_tools_prompt_and_model_are_run_scoped(
-    workspace, tmp_path, monkeypatch, enabled, paid_search,
+    workspace, tmp_path, monkeypatch, enabled, legacy_permission,
 ):
     executable = tmp_path / "fake-pi"
     executable.write_text(
@@ -255,8 +255,8 @@ def test_pi_tools_prompt_and_model_are_run_scoped(
     executable.chmod(0o755)
     monkeypatch.setattr("video_report_agent.pi.shutil.which", lambda _: str(executable))
     monkeypatch.setattr("video_report_agent.pi.PI_AGENT_DIR", tmp_path / "pi-config")
-    if paid_search:
-        monkeypatch.setenv("PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH", "1")
+    if legacy_permission is not None:
+        monkeypatch.setenv("PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH", legacy_permission)
     else:
         monkeypatch.delenv("PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH", raising=False)
     (workspace / "input.json").write_text(json.dumps({"term_correction": enabled}))
@@ -267,15 +267,16 @@ def test_pi_tools_prompt_and_model_are_run_scoped(
     command, prompt = invocation["command"], invocation["prompt"]
     assert command[command.index("--model") + 1] == "report-model"
     assert command[command.index("--thinking") + 1] == "medium"
-    assert ("lookup_term" in command[command.index("--tools") + 1]) is (enabled and paid_search)
-    assert ("fetch_term_source" in command[command.index("--tools") + 1]) is (
-        enabled and paid_search)
+    assert ("lookup_term" in command[command.index("--tools") + 1]) is enabled
+    assert ("fetch_term_source" in command[command.index("--tools") + 1]) is enabled
     assert ("record_term_review" in command[command.index("--tools") + 1]) is enabled
     assert ("source-context.json" in prompt) is enabled
     if enabled:
         assert (workspace / "term_correction.ts").is_file()
-        assert ("不调用外部搜索" in prompt) is not paid_search
+        assert "可按需调用 lookup_term" in prompt
+        assert "本次未启用付费联网取证" not in prompt
     else:
+        assert not (workspace / "term_correction.ts").exists()
         assert "不要读取、改写或自行生成视频简介" in prompt
 
 
@@ -314,14 +315,15 @@ def test_docker_staging_patch_and_export(workspace, tmp_path, monkeypatch):
     assert not (workspace / ".generation-config").exists()
 
 
-@pytest.mark.parametrize("enabled,paid", [(False, True), (True, False), (True, True)])
+@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize("legacy_permission", ["0", "1"])
 def test_docker_search_credentials_are_scoped_and_not_in_command(
-    workspace, tmp_path, monkeypatch, enabled, paid,
+    workspace, tmp_path, monkeypatch, enabled, legacy_permission,
 ):
     from video_report_agent import task_container
 
     (workspace / "input.json").write_text(json.dumps({"term_correction": enabled}))
-    monkeypatch.setenv("PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH", "1" if paid else "0")
+    monkeypatch.setenv("PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH", legacy_permission)
     monkeypatch.setenv("DEEPSEEK_SEARCH_API_KEY", "private-search-fixture")
     monkeypatch.delenv("PI_TASK_RUNS_VOLUME", raising=False)
     monkeypatch.setattr(task_container, "require_cleaner", lambda _: None)
@@ -331,9 +333,9 @@ def test_docker_search_credentials_are_scoped_and_not_in_command(
     config.mkdir()
     command = task_container.launch_command(stage, config, ["pi"], float("inf"))
     assert "private-search-fixture" not in " ".join(command)
-    assert ("PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH=1" in command) is (enabled and paid)
+    assert "PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH" not in " ".join(command)
     key = config / "term-search-key"
-    assert key.exists() is (enabled and paid)
+    assert key.exists() is enabled
     if key.exists():
         assert key.read_text() == "private-search-fixture"
         assert key.stat().st_mode & 0o777 == 0o600

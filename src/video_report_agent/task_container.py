@@ -116,11 +116,7 @@ def launch_command(stage: Path, config: Path, pi_command: list[str], deadline: f
     expires = time.time() + max(0, deadline - time.monotonic())
     image = os.getenv("PI_TASK_IMAGE", "video-report-agent:linux-amd64")
     metadata = json.loads((stage / "input.json").read_text())
-    term_search = (
-        metadata.get("term_correction", False)
-        and os.getenv("PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH") == "1"
-    )
-    if term_search:
+    if metadata.get("term_correction", False):
         key = os.getenv("DEEPSEEK_SEARCH_API_KEY") or os.getenv("DEEPSEEK_API_KEY")
         if key:
             key_path = config / "term-search-key"
@@ -133,7 +129,6 @@ def launch_command(stage: Path, config: Path, pi_command: list[str], deadline: f
         "PLAYWRIGHT_BROWSERS_PATH=/opt/playwright",
         f"VIDEO_REPORT_PYTHON={IMAGE_PYTHON}",
         "PI_CODING_AGENT_DIR=/tmp/pi-agent",
-        *(["PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH=1"] if term_search else []),
     ]
     create = [
         "docker",

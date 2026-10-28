@@ -13,7 +13,7 @@
 - Pi 负责主 Agent 循环；默认提供按需图示工具，由独立 Pi 会话完成一个局部 SVG，Python 自动嵌入 HTML。主报告不自行绘图。支持 Local 宿主执行和显式 Docker 任务隔离；调用方可配置同会话有限模型恢复及最终模型。HTML 交付后尝试输出 PNG 长图。
 - SQLite 保存来源正文、执行、报告与缓存事实，文件保留执行导出、大产物和原始日志；按参数、版本与字幕内容兼容条件复用下载、ASR 或完整转写。提供可选 `inspect_report` 和合成 smoke/A/B 工具。
 - 用量工具聚合完成的 assistant 消息，分开返回美元与部分模型的人民币估算；ASR 按配置费率估算。
-- 可选任务参数 `term_correction` 支持同一 Pi 按需辨名、来源取证与局部补丁，Local 和 Docker 共用实现；原始转写保留，付费搜索独立许可，见[术语修正](term-correction.md)。
+- 可选任务参数 `term_correction` 支持同一 Pi 按需辨名、来源取证与局部补丁，Local 和 Docker 共用实现；原始转写保留，开启即允许按需搜索，见[术语修正](term-correction.md)。
 
 ## 重要限制
 

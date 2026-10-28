@@ -22,17 +22,14 @@ const api = {
     return { code: result.status, stdout: result.stdout, stderr: result.stderr };
   },
 };
-delete process.env.PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH;
+// The retired environment permission must not suppress tools in an enabled task.
+process.env.PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH = "0";
 process.env.DEEPSEEK_SEARCH_API_KEY = "fixture-secret";
 globalThis.fetch = async () => { throw new Error("unexpected HTTP before fixture"); };
 extension.default(api);
 assert.ok(tools.has("record_term_review"));
-assert.ok(!tools.has("lookup_term"));
-assert.ok(!tools.has("fetch_term_source"));
-await assert.rejects(() => extension.requestTermEvidence({},
-  new AbortController().signal), /paid_term_search_disabled/);
-process.env.PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH = "1";
-extension.default(api);
+assert.ok(tools.has("lookup_term"));
+assert.ok(tools.has("fetch_term_source"));
 let calls = 0;
 globalThis.fetch = async (url, options) => {
   calls++;

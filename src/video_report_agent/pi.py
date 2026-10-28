@@ -305,7 +305,6 @@ class PiRunner:
         metadata_path = workspace / "input.json"
         metadata = json.loads(metadata_path.read_text()) if metadata_path.is_file() else {}
         term_correction = metadata.get("term_correction", False)
-        term_search = term_correction and env.get("PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH") == "1"
         if term_correction:
             prepare_term_correction(generation or workspace, metadata)
         report_mode = metadata.get("report_mode", "standard")
@@ -350,8 +349,7 @@ class PiRunner:
             "--tools",
             "read,write,edit,bash" + (",inspect_report" if self.review else "")
             + (",generate_diagram" if diagrams else "")
-            + (",record_term_review" if term_correction else "")
-            + (",lookup_term,fetch_term_source" if term_search else ""),
+            + (",record_term_review,lookup_term,fetch_term_source" if term_correction else ""),
             "--no-extensions",
             "--no-skills",
             "--skill",
@@ -398,10 +396,9 @@ class PiRunner:
         prompt += (
             "本次开启术语修正：读取 source-context.json 与完整原转写，"
             "按 Skill 在阅读或写作遇到重要疑点时取证并记录，报告归纳读取 transcript.corrected.md。"
-            + ("可按需调用 lookup_term，优先使用 content 正文，缺失或不足再 fetch_term_source；"
-               "Search 与 Fetch 合计最多三次。" if term_search else
-               "本次未启用付费联网取证，仅使用元数据及原转写，不调用外部搜索。")
-            + "视频简介仅用于核对术语，不改写或自行生成简介，运行时按原始元数据填充。"
+            "可按需调用 lookup_term，优先使用 content 正文，缺失或不足再 fetch_term_source；"
+            "Search 与 Fetch 合计最多三次。"
+            "视频简介仅用于核对术语，不改写或自行生成简介，运行时按原始元数据填充。"
             if term_correction else
             "不要读取、改写或自行生成视频简介，运行时会按原始元数据填充。"
         )
