@@ -14,7 +14,7 @@
 | [asr.py](../src/video_report_agent/asr.py)、[paraformer.py](../src/video_report_agent/paraformer.py) | 本地/云端 ASR、云任务轮询、两段结果与时间戳合并 |
 | [transcript.py](../src/video_report_agent/transcript.py)、[transcript_foundation.py](../src/video_report_agent/transcript_foundation.py) | 来源事件、规范单元、可选字幕/OCR 融合 |
 | [pi.py](../src/video_report_agent/pi.py)、[产品 Skill](../src/video_report_agent/skills/video-report/SKILL.md) | 选择模式资产、Pi RPC 和完成判断；Skill 规定内容与表达 |
-| [term_correction.py](../src/video_report_agent/term_correction.py)、[term_correction.ts](../src/video_report_agent/term_correction.ts) | 可选本地术语取证工具、修正记录与独立阅读视图；真实接口和语义效果待验收 |
+| [term_correction.py](../src/video_report_agent/term_correction.py)、[term_correction.ts](../src/video_report_agent/term_correction.ts) | 本地元数据修正、可选 DeepSeek Search/Fetch、修正记录与独立阅读视图；付费请求默认关闭 |
 | [report_content.py](../src/video_report_agent/report_content.py)、[report_image.py](../src/video_report_agent/report_image.py) | 原始简介处理、HTML 后处理与长图导出 |
 | [storage.py](../src/video_report_agent/storage.py) | SQLite 正文、执行身份、缓存认领与结构化事实；支持调用方活动事务 |
 | [reuse.py](../src/video_report_agent/reuse.py)、[retention.py](../src/video_report_agent/retention.py) | 兼容输入复用与媒体清理 |
@@ -53,7 +53,7 @@ Pi consumer 等待 `agent_settled`，并要求最终 assistant 的 `stopReason =
 
 `REPORT_REVIEW` 默认关闭。开启后向同一 Agent 提供检查工具；工具返回 `semantic_review: not_performed`、`visual_quality: not_scored`，不保证模型调用、修复或质量提升。
 
-CLI `--term-correction` / `create_run(term_correction=True)` 为任务显式开启本地名称与术语修正，默认关闭。元数据供同一 Agent 辨识疑点；百炼原生搜索作为按需工具调用，不改变报告模型。修正写入独立阅读视图，原转写、来源 ID 与时间保留；记录进入 `run_documents`，不进入共享转写缓存。Docker 开启此选项会在 staging 前拒绝。接口、预算与待验收边界见 [术语修正](term-correction.md)。
+CLI `--term-correction` / `create_run(term_correction=True)` 为任务显式开启本地名称与术语修正，默认关闭。元数据供同一 Agent 辨识疑点；只有在 `PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH=1` 时才提供 DeepSeek Search/Fetch，二者共享三次请求预算，不调用辅助模型。使用独立 DeepSeek 官方凭据，不改变报告模型或 ASR 渠道。未另外允许时只用元数据判断，HTTP 请求入口也会拒绝搜索。修正写入独立阅读视图，原转写、来源 ID 与时间保留；记录进入 `run_documents`，不进入共享转写缓存。Docker 开启此选项会在 staging 前拒绝。接口、预算与验证边界见 [术语修正](term-correction.md)。
 
 ## Pi 任务容器
 

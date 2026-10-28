@@ -14,6 +14,7 @@ CORRECTED_TRANSCRIPT = "transcript.corrected.md"
 TERM_DOCUMENTS = (SOURCE_CONTEXT, TERM_REVIEW, CORRECTED_TRANSCRIPT)
 MAX_LOOKUPS = 3
 MAX_CONTEXT_CHARS = 6000
+MAX_SOURCE_CONTENT_CHARS = 12000
 TERM_KINDS = {"person", "organization", "product", "term"}
 REVIEW_STATUSES = {"supported", "candidate", "unresolved"}
 UNIT_LINE = re.compile(r"^(\[([^ |\]]+) \| [^\]]+\] )(.*)$")
@@ -105,6 +106,7 @@ def start_lookup(workspace: Path, query: str, unit_ids: list[str]):
     text = json.dumps(context, ensure_ascii=False) + "\n" + excerpts
     lookup = {
         "id": f"lookup-{len(review['lookups']) + 1:03d}",
+        "operation": "search",
         "query": query,
         "unit_ids": unit_ids,
         "context": text[:MAX_CONTEXT_CHARS],
@@ -118,6 +120,22 @@ def start_lookup(workspace: Path, query: str, unit_ids: list[str]):
     return lookup
 
 
+def start_fetch(workspace: Path, source_id: str):
+    review = _read_json(workspace / TERM_REVIEW)
+    for lookup in review["lookups"]:
+        if lookup["status"] not in {"completed", "incomplete"}:
+            continue
+        for source in lookup["sources"]:
+            if source["id"] == source_id:
+                result = start_lookup(workspace, source["url"], lookup["unit_ids"])
+                result.update(operation="fetch", url=source["url"], parent_source_id=source_id)
+                review = _read_json(workspace / TERM_REVIEW)
+                review["lookups"][-1] = result
+                _write_json(workspace / TERM_REVIEW, review)
+                return result
+    raise ValueError("Fetch requires a source ID already returned in this run")
+
+
 def finish_lookup(workspace: Path, lookup_id: str, result: dict):
     review = _read_json(workspace / TERM_REVIEW)
     lookup = next(item for item in review["lookups"] if item["id"] == lookup_id)
@@ -125,14 +143,18 @@ def finish_lookup(workspace: Path, lookup_id: str, result: dict):
     for key in (
         "status", "analysis", "usage", "request_id", "elapsed_ms", "error_code",
         "provider", "model",
+        "response_finish_reason", "analysis_truncated",
     ):
         if key in result:
             lookup[key] = result[key]
     lookup["sources"] = [
         {"id": f"{lookup_id}:source-{index}",
-         **{key: source.get(key) for key in ("index", "title", "url", "site_name")}}
+         **{key: source.get(key) for key in ("index", "title", "url", "site_name",
+                                             "snippet", "summary", "date", "authority")},
+         "content": (source.get("content") or "")[:MAX_SOURCE_CONTENT_CHARS],
+         "content_truncated": len(source.get("content") or "") > MAX_SOURCE_CONTENT_CHARS}
         for index, source in enumerate(result.get("sources", []), 1)
-        if source.get("title") and source.get("url")
+        if (source.get("title") or source.get("content")) and source.get("url")
     ]
     _write_json(workspace / TERM_REVIEW, review)
     return lookup
@@ -142,10 +164,11 @@ def record_term_review(workspace: Path, entries: list[dict]):
     review = _read_json(workspace / TERM_REVIEW)
     _, units = _units(workspace)
     context = _read_json(workspace / SOURCE_CONTEXT)
-    sources = {f"metadata:{key}": value for key, value in context.items() if key != "url"}
+    sources = {f"metadata:{key}": [value] for key, value in context.items() if key != "url"}
     sources.update({
-        source["id"]: source["title"]
-        for lookup in review["lookups"] if lookup["status"] == "completed"
+        source["id"]: [source.get("title") or "", source.get("content") or ""]
+        # Summaries and the legacy auxiliary model's explanation are not source text.
+        for lookup in review["lookups"] if lookup["status"] in {"completed", "incomplete"}
         for source in lookup["sources"]
     })
     checked = []
@@ -174,10 +197,11 @@ def record_term_review(workspace: Path, entries: list[dict]):
                 raise ValueError("Supported corrections require source evidence")
             for item in evidence:
                 quote = item["quote"]
-                source_text = sources.get(item["source_id"], "")
-                if not quote.strip() or quote not in source_text:
+                source_texts = sources.get(item["source_id"], [])
+                if not quote.strip() or not any(quote in text for text in source_texts):
                     raise ValueError(
-                        "Evidence must quote saved metadata or a returned source title"
+                        "Evidence must quote saved metadata, a source title "
+                        "or returned page content"
                     )
             if not any(after.casefold() in e["quote"].casefold() for e in evidence):
                 raise ValueError("The replacement term must appear in the supporting evidence")
@@ -199,7 +223,9 @@ def record_term_review(workspace: Path, entries: list[dict]):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["start-lookup", "finish-lookup", "record"])
+    parser.add_argument(
+        "action", choices=["start-lookup", "start-fetch", "finish-lookup", "record"],
+    )
     parser.add_argument("payload", help="JSON supplied by the Pi term tools")
     args = parser.parse_args()
     payload = json.loads(args.payload)
@@ -207,6 +233,8 @@ def main():
     try:
         if args.action == "start-lookup":
             result = start_lookup(workspace, payload["query"], payload["unit_ids"])
+        elif args.action == "start-fetch":
+            result = start_fetch(workspace, payload["source_id"])
         elif args.action == "finish-lookup":
             result = finish_lookup(workspace, payload["id"], payload["result"])
         else:

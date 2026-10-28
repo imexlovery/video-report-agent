@@ -14,81 +14,97 @@ const jiti = createJiti(import.meta.url, { moduleCache: false, alias: {
 } });
 const extension = await jiti.import(process.env.TERM_TEST_EXTENSION);
 const tools = new Map();
-extension.default({
+const api = {
   registerTool(tool) { tools.set(tool.name, tool); },
   async exec(command, args, options) {
     const result = spawnSync(command, args, { cwd: options.cwd, encoding: "utf8" });
     return { code: result.status, stdout: result.stdout, stderr: result.stderr };
   },
-});
+};
+delete process.env.PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH;
+process.env.DEEPSEEK_SEARCH_API_KEY = "fixture-secret";
+globalThis.fetch = async () => { throw new Error("unexpected HTTP before fixture"); };
+extension.default(api);
+assert.ok(tools.has("record_term_review"));
+assert.ok(!tools.has("lookup_term"));
+assert.ok(!tools.has("fetch_term_source"));
+await assert.rejects(() => extension.requestTermEvidence({},
+  new AbortController().signal), /paid_term_search_disabled/);
+process.env.PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH = "1";
+extension.default(api);
 let calls = 0;
 globalThis.fetch = async (url, options) => {
   calls++;
-  assert.equal(url, "https://fixture.cn-beijing.maas.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation");
-  assert.equal(options.headers.get("X-DashScope-SSE"), "enable");
+  assert.equal(new Headers(options.headers).get("Authorization"), "Bearer fixture-secret");
   const body = JSON.parse(options.body);
-  assert.equal(body.model, "qwen3.8-flash");
-  assert.equal(body.parameters.enable_thinking, false);
-  assert.equal(body.parameters.max_tokens, 1024);
-  assert.deepEqual(body.parameters.search_options,
-    { search_strategy: "turbo", forced_search: true, enable_source: true });
-  assert.ok(body.input.messages[0].content[0].text.includes("薄肌、训练与健康"));
+  assert.ok(!("model" in body));
+  if (calls === 2) {
+    assert.equal(url, "https://api.deepseek.com/v1/tools/fetch");
+    assert.deepEqual(body, { url: "https://example.org/docs" });
+    return Response.json({ title: "", content: "# Claude Code\n合成开发工具指南。" });
+  }
+  assert.equal(url, "https://api.deepseek.com/v1/tools/search");
+  assert.deepEqual(body, { query: "AI产品 cloud 名称", count: 5, need_content: true });
   if (calls === 3) throw new DOMException("fixture timeout", "TimeoutError");
-  const sources = calls === 1 ? [{ index: 1, title: "Claude 官方文档", url: "https://example.org/docs" }] : [];
-  const chunks = [
-    { output: { search_info: { search_results: sources } }, request_id: "fixture-request" },
-    { output: { choices: [{ message: { content: [{ text: "辅助解释" }] }, finish_reason: "null" }] },
-      usage: { input_tokens: 100, output_tokens: 2, plugins: { search: { count: 1 } } } },
-    { output: { choices: [{ message: { content: [{ text: "，请核对语境。" }] }, finish_reason: "stop" }] },
-      usage: { input_tokens: 100, output_tokens: 8 } },
-  ];
-  const stream = chunks.map(c => `event:result\r\ndata:${JSON.stringify(c)}\r\n\r\n`).join("");
-  const bytes = new TextEncoder().encode(stream);
-  return new Response(new ReadableStream({ start(controller) {
-    for (let i = 0; i < bytes.length; i += 13) controller.enqueue(bytes.slice(i, i + 13));
-    controller.close();
-  } }));
+  return Response.json({ results: [{ title: "Claude 官方文档", url: "https://example.org/docs",
+    snippet: "Claude Code", summary: "Claude Code 是开发工具。", content: "" }] },
+    { headers: { "x-request-id": "fixture-request" } });
 };
 const ctx = { cwd: process.env.TERM_TEST_RUN, modelRegistry: {
-  find(provider, model) {
-    assert.equal(provider, "qwenai");
-    assert.equal(model, "qwen3.8-flash");
-    return { id: model, baseUrl: "https://fixture.cn-beijing.maas.aliyuncs.com/compatible-mode/v1" };
-  },
-  async getApiKeyAndHeaders() { return { ok: true, apiKey: "fixture-secret", headers: {} }; },
+  find() { throw new Error("Search must not resolve an auxiliary model"); },
+  getApiKeyAndHeaders() { throw new Error("Search must not reuse report credentials"); },
 } };
 const lookup = tools.get("lookup_term");
 assert.equal(lookup.executionMode, "sequential");
+assert.equal(tools.get("fetch_term_source").executionMode, "sequential");
 assert.equal(tools.get("record_term_review").executionMode, "sequential");
 const invoke = () => lookup.execute("fixture", { query: "AI产品 cloud 名称", unit_ids: ["unit-000003"] },
   new AbortController().signal, undefined, ctx);
 const first = (await invoke()).details;
 assert.equal(first.status, "completed");
-assert.equal(first.provider, "qwenai");
-assert.equal(first.model, "qwen3.8-flash");
-assert.equal(first.usage.input_tokens, 100);
-assert.equal(first.usage.output_tokens, 8); // cumulative counters are not summed
-assert.equal(first.usage.plugins.search.count, 1);
+assert.equal(first.provider, "deepseek");
+assert.equal(first.operation, "search");
+assert.equal(first.usage.requests, 1);
+assert.equal(first.usage.billable_response, true);
+assert.equal(first.request_id, "fixture-request");
 assert.equal(first.sources[0].id, "lookup-001:source-1");
-assert.equal(first.analysis, "辅助解释，请核对语境。");
-const patch = { unit_id: "unit-000003", start: 0, end: 5, before: "cloud", after: "Claude",
+assert.equal(first.sources[0].summary, "Claude Code 是开发工具。");
+assert.ok(first.context.includes("薄肌、训练与健康"));
+const patch = { unit_id: "unit-000003", start: 0, end: 5, before: "cloud", after: "Claude Code",
   kind: "product", status: "supported", reason: "合成夹具明确指定这一处修正。",
-  evidence: [{ source_id: first.sources[0].id, quote: "Claude 官方文档" }] };
+  evidence: [{ source_id: first.sources[0].id, quote: "Claude Code 是开发工具。" }] };
+await assert.rejects(() => tools.get("record_term_review").execute("fixture", { entries: [patch] },
+  new AbortController().signal, undefined, ctx), /Evidence must quote/);
+const fetched = (await tools.get("fetch_term_source").execute("fixture",
+  { source_id: first.sources[0].id }, new AbortController().signal, undefined, ctx)).details;
+assert.equal(fetched.operation, "fetch");
+assert.equal(fetched.parent_source_id, first.sources[0].id);
+assert.equal(fetched.sources[0].title, "");
+assert.ok(fetched.sources[0].content.includes("Claude Code"));
+patch.evidence = [{ source_id: fetched.sources[0].id, quote: "# Claude Code" }];
 const recorded = await tools.get("record_term_review").execute("fixture", { entries: [patch] },
   new AbortController().signal, undefined, ctx);
 assert.equal(recorded.details.supported, 1);
-assert.ok(readFileSync(join(ctx.cwd, "transcript.corrected.md"), "utf8").includes("Claude帮我"));
-assert.equal((await invoke()).details.status, "no_sources");
+assert.ok(readFileSync(join(ctx.cwd, "transcript.corrected.md"), "utf8").includes("Claude Code帮我"));
 const failure = (await invoke()).details;
 assert.equal(failure.status, "failed");
 assert.equal(failure.error_code, "timeout");
 await assert.rejects(invoke, /budget exhausted/);
 assert.equal(calls, 3);
 assert.ok(!readFileSync(join(ctx.cwd, "term-review.json"), "utf8").includes("fixture-secret"));
-assert.throws(() => extension.dashscopeEndpoint("https://example.org/compatible-mode/v1"),
-  /unsupported_bailian_endpoint/);
 globalThis.fetch = async () => new Response(null, { status: 402 });
-await assert.rejects(() => extension.requestTermEvidence(
-  ctx.modelRegistry.find("qwenai", "qwen3.8-flash"), { apiKey: "fixture-secret" }, first,
+await assert.rejects(() => extension.requestTermEvidence(first,
   new AbortController().signal), /http_402/);
+delete process.env.DEEPSEEK_SEARCH_API_KEY;
+delete process.env.DEEPSEEK_API_KEY;
+await assert.rejects(() => extension.requestTermEvidence(first,
+  new AbortController().signal), /missing_evidence_credentials/);
+process.env.DEEPSEEK_API_KEY = "fixture-fallback-key";
+globalThis.fetch = async (_url, options) => {
+  assert.equal(new Headers(options.headers).get("Authorization"), "Bearer fixture-fallback-key");
+  return Response.json({ results: [] });
+};
+const empty = await extension.requestTermEvidence(first, new AbortController().signal);
+assert.equal(empty.status, "no_sources");
+assert.equal(empty.usage.billable_response, false);
 console.log("offline term tools passed");

@@ -309,6 +309,7 @@ class PiRunner:
         metadata_path = workspace / "input.json"
         metadata = json.loads(metadata_path.read_text()) if metadata_path.is_file() else {}
         term_correction = metadata.get("term_correction", False)
+        term_search = term_correction and env.get("PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH") == "1"
         if term_correction:
             prepare_term_correction(workspace, metadata)
         report_mode = metadata.get("report_mode", "standard")
@@ -345,7 +346,9 @@ class PiRunner:
         if self.review:
             tools.append("inspect_report")
         if term_correction:
-            tools.extend(["lookup_term", "record_term_review"])
+            tools.append("record_term_review")
+        if term_search:
+            tools.extend(["lookup_term", "fetch_term_source"])
         command = [
             executable,
             "--mode",
@@ -395,11 +398,18 @@ class PiRunner:
             "原样保留其中的 {{VIDEO_DESCRIPTION}} 占位符一次，"
             "放在题头之后、正文之前；"
         )
+        term_search_instruction = (
+            "元数据证据不足时按需调用 lookup_term；先使用其content正文，"
+            "仅在正文缺失或不足时用 fetch_term_source。"
+            "Search与Fetch合计最多三次，不逐个重复词搜索。搜索摘要仅作线索，直接证据取来源标题或content正文。"
+            if term_search else
+            "本次未启用付费联网取证，仅根据提供的元数据及原转写判断，不调用外部搜索。"
+        )
         prompt += (
             "不要改写或自行生成视频简介，运行时会按原始元数据填充。"
             "本次开启术语修正：先读取 source-context.json 与完整原转写，"
             "写提纲前检查名称、术语及元数据与语境冲突，写作过程中也可处理新疑点。"
-            "自身知识仅提出候选；元数据证据不足时按需调用 lookup_term，最多三次。"
+            f"自身知识仅提出候选；{term_search_instruction}"
             "通过 record_term_review 记录 supported/candidate/unresolved 及原文定位、证据和理由，"
             "只使用有依据的局部修正；报告阅读 transcript.corrected.md，保留原来源ID和时间。"
             "无法确认时保留原词，不为存疑核心概念自行补定义，不修改原始转写。"

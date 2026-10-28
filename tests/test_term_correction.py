@@ -22,6 +22,7 @@ from video_report_agent.term_correction import (
     finish_lookup,
     prepare_term_correction,
     record_term_review,
+    start_fetch,
     start_lookup,
 )
 
@@ -131,9 +132,75 @@ def test_lookup_budget_persists_and_context_is_local(workspace):
     assert len(review(workspace)["lookups"]) == 3
 
 
+def test_fetch_uses_saved_source_and_shares_lookup_budget(workspace):
+    lookup = start_lookup(workspace, "cloud 编程工具", ["unit-000003"])
+    saved = finish_lookup(workspace, lookup["id"], {
+        "status": "completed", "sources": [{"title": "产品介绍", "url": "https://example.org/docs"}],
+    })
+    fetched = start_fetch(workspace, saved["sources"][0]["id"])
+    assert fetched["operation"] == "fetch"
+    assert fetched["url"] == "https://example.org/docs"
+    assert fetched["unit_ids"] == ["unit-000003"]
+    assert fetched["parent_source_id"] == saved["sources"][0]["id"]
+    body = finish_lookup(workspace, fetched["id"], {
+        "status": "completed", "sources": [{
+            "title": "", "url": fetched["url"], "content": "# Claude Code\n开发工具文档。",
+        }],
+    })
+    record_term_review(workspace, [entry("unit-000003", "cloud", "Claude Code", evidence=[{
+        "source_id": body["sources"][0]["id"], "quote": "# Claude Code",
+    }])])
+    assert "Claude Code帮我" in (workspace / CORRECTED_TRANSCRIPT).read_text()
+    with pytest.raises(ValueError, match="source ID already returned"):
+        start_fetch(workspace, "https://unseen.example.org/")
+    start_lookup(workspace, "第三次请求", ["unit-000003"])
+    with pytest.raises(ValueError, match="budget exhausted"):
+        start_fetch(workspace, saved["sources"][0]["id"])
+
+
+def test_search_summary_is_not_direct_evidence(workspace):
+    lookup = start_lookup(workspace, "cloud 编程工具", ["unit-000003"])
+    saved = finish_lookup(workspace, lookup["id"], {
+        "status": "completed", "sources": [{
+            "title": "产品介绍", "url": "https://example.org/docs",
+            "summary": "Claude Code", "snippet": "Claude Code",
+        }],
+    })
+    assert saved["sources"][0]["summary"] == "Claude Code"
+    with pytest.raises(ValueError, match="Evidence must quote"):
+        record_term_review(workspace, [entry("unit-000003", "cloud", "Claude Code", evidence=[{
+            "source_id": saved["sources"][0]["id"], "quote": "Claude Code",
+        }])])
+
+
+def test_search_page_content_can_support_patch(workspace):
+    lookup = start_lookup(workspace, "cloud 编程工具", ["unit-000003"])
+    saved = finish_lookup(workspace, lookup["id"], {
+        "status": "completed", "sources": [{
+            "title": "产品介绍", "url": "https://example.org/docs",
+            "content": "Claude Code 是开发工具。",
+        }],
+    })
+    record_term_review(workspace, [entry("unit-000003", "cloud", "Claude Code", evidence=[{
+        "source_id": saved["sources"][0]["id"], "quote": "Claude Code 是开发工具。",
+    }])])
+    assert "Claude Code帮我" in (workspace / CORRECTED_TRANSCRIPT).read_text()
+
+
+def test_fetched_content_is_bounded_and_marked(workspace):
+    lookup = start_lookup(workspace, "cloud", ["unit-000003"])
+    saved = finish_lookup(workspace, lookup["id"], {
+        "status": "completed", "sources": [{
+            "title": "文档", "url": "https://example.org/docs", "content": "a" * 12001,
+        }],
+    })
+    assert len(saved["sources"][0]["content"]) == 12000
+    assert saved["sources"][0]["content_truncated"] is True
+
+
 @pytest.mark.parametrize("status,accepted", [("completed", True), ("no_sources", False),
-                                            ("failed", False), ("incomplete", False)])
-def test_only_completed_search_sources_support_patches(workspace, status, accepted):
+                                            ("failed", False), ("incomplete", True)])
+def test_returned_sources_support_patches_independently_of_analysis(workspace, status, accepted):
     lookup = start_lookup(workspace, "AI产品 cloud 名称", ["unit-000003"])
     saved = finish_lookup(workspace, lookup["id"], {
         "status": status, "analysis": "辅助模型的解释不是直接证据", "elapsed_ms": 10,
@@ -174,7 +241,10 @@ def test_flag_defaults_off_and_term_documents_capture_without_cache_identity_cha
 
 
 @pytest.mark.parametrize("enabled", [False, True])
-def test_pi_tools_prompt_and_model_are_run_scoped(workspace, tmp_path, monkeypatch, enabled):
+@pytest.mark.parametrize("paid_search", [False, True])
+def test_pi_tools_prompt_and_model_are_run_scoped(
+    workspace, tmp_path, monkeypatch, enabled, paid_search,
+):
     executable = tmp_path / "fake-pi"
     executable.write_text(
         "#!/usr/bin/env python3\nimport json,sys\njson.loads(sys.stdin.readline())\n"
@@ -185,6 +255,10 @@ def test_pi_tools_prompt_and_model_are_run_scoped(workspace, tmp_path, monkeypat
     executable.chmod(0o755)
     monkeypatch.setattr("video_report_agent.pi.shutil.which", lambda _: str(executable))
     monkeypatch.setattr("video_report_agent.pi.PI_AGENT_DIR", tmp_path / "pi-config")
+    if paid_search:
+        monkeypatch.setenv("PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH", "1")
+    else:
+        monkeypatch.delenv("PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH", raising=False)
     (workspace / "input.json").write_text(json.dumps({"term_correction": enabled}))
     with pytest.raises(PiError, match="without report.html"):
         asyncio.run(PiRunner(provider="fixture", model="report-model", thinking="medium",
@@ -193,11 +267,14 @@ def test_pi_tools_prompt_and_model_are_run_scoped(workspace, tmp_path, monkeypat
     command, prompt = invocation["command"], invocation["prompt"]
     assert command[command.index("--model") + 1] == "report-model"
     assert command[command.index("--thinking") + 1] == "medium"
-    assert ("lookup_term" in command[command.index("--tools") + 1]) is enabled
+    assert ("lookup_term" in command[command.index("--tools") + 1]) is (enabled and paid_search)
+    assert ("fetch_term_source" in command[command.index("--tools") + 1]) is (
+        enabled and paid_search)
+    assert ("record_term_review" in command[command.index("--tools") + 1]) is enabled
     assert ("source-context.json" in prompt) is enabled
     if enabled:
         assert (workspace / "term_correction.ts").is_file()
-        assert "不调用外部搜索" not in prompt
+        assert ("不调用外部搜索" in prompt) is not paid_search
     else:
         assert "不要读取、改写或自行生成视频简介" in prompt
 
@@ -225,7 +302,7 @@ def test_cli_passes_explicit_flag(tmp_path, monkeypatch):
     assert captured["term_correction"] is True
 
 
-def test_extension_native_request_and_tools_with_fake_fetch(workspace):
+def test_extension_deepseek_search_fetch_and_tools_with_fake_http(workspace):
     node, pi = shutil.which("node"), shutil.which("pi")
     if not node or not pi:
         pytest.skip("Installed Pi and Node needed for offline extension loading")
@@ -237,8 +314,7 @@ def test_extension_native_request_and_tools_with_fake_fetch(workspace):
     env = {**os.environ, "VIDEO_REPORT_PYTHON": sys.executable,
            "TERM_TEST_PI_ROOT": str(pi_root), "TERM_TEST_RUN": str(workspace),
            "TERM_TEST_EXTENSION": str(Path(__file__).parents[1] /
-               "src/video_report_agent/term_correction.ts"),
-           "PI_TERM_EVIDENCE_PROVIDER": "qwenai", "PI_TERM_EVIDENCE_MODEL": "qwen3.8-flash"}
+               "src/video_report_agent/term_correction.ts")}
     result = subprocess.run([node, str(harness)], env=env, capture_output=True, text=True,
                             timeout=30)
     assert result.returncode == 0, result.stdout + result.stderr
