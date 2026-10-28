@@ -1,6 +1,6 @@
 # 关键帧 → 带时间戳的画面描述：独立最小实验
 
-只验证画面能补充哪些字幕未说出的信息，不生成报告，不接入 Core/Service 流水线。
+验证画面能补充哪些字幕未说出的信息，并在独立目录生成纯字幕与增强报告对照；不接入 Core/Service 流水线。
 脚本只使用 Python 标准库和已有 FFmpeg/ffprobe；不安装新依赖。
 
 ## 运行
@@ -41,3 +41,27 @@ uv run python evals/sparse-visual/experiment.py describe \
 只保留可直接看清的事实；单帧不能证明操作过程、先后变化或软件真实能力。
 
 真实视频、转写、图片和结果全部留在忽略的 `.local/evals/`；不提交到公开样例。
+
+## 完整报告对照
+
+`compare_reports.py` 复用已有 baseline 目录中的原字幕、`input.json`、Skill、模板、
+模式文件与 `invocation.json` 的模型命令。`--config` 指向已有模型目录与凭据的隔离 Pi 配置。
+
+```sh
+uv run python evals/sparse-visual/compare_reports.py \
+  --baseline /absolute/path/frozen-baseline \
+  --config /absolute/path/isolated-pi-config \
+  --output .local/evals/sparse-visual/control
+
+uv run python evals/sparse-visual/compare_reports.py \
+  --baseline /absolute/path/frozen-baseline \
+  --config /absolute/path/isolated-pi-config \
+  --output .local/evals/sparse-visual/enhanced \
+  --observations .local/evals/sparse-visual/example/visual/observations.jsonl
+```
+
+两组使用相同的补充来源读取指令，对照组的 `visual-observations.jsonl` 为空，
+增强组保留描述文本；报告模型只读取文本。原字幕、模型、思考档位、模式、Skill 与模板一致。
+复用现有 RPC 消费端，等待 `agent_settled` 和最终正常结束后填入原始简介、渲染 PNG，
+在 `run-status.json` 保存完整报告生成与渲染耗时、所有已返回请求的 token 和请求数。
+增强任务总量还须累加媒体获取、抽帧和描述阶段的耗时与用量。
