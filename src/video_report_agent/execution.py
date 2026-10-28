@@ -93,7 +93,7 @@ def generate(
         worker_error
         or timed_out
         or process.returncode
-        or status.get("state") not in {"RENDERED", "FAILED"}
+        or status.get("state") not in {"RENDERED", "TRANSCRIPT_READY", "FAILED"}
     ):
         status.update(
             state="FAILED",

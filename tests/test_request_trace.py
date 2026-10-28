@@ -75,6 +75,7 @@ def test_pi_request_hook_measures_first_nonempty_stream_content(tmp_path, monkey
         starts = [e for e in events if e['type'] == 'request_start']
         first = [e for e in events if e['type'] == 'request_first_response']
         assert len(starts) == len(first) == 2
+        assert all(e['input_bytes'] > 0 for e in starts)
         assert [e['request_id'] for e in first] == [e['request_id'] for e in starts]
         assert all(50 <= e['latency_ms'] < 10000 for e in first)
         assert [e['response_kind'] for e in first] == ['toolcall_delta', 'text_delta']

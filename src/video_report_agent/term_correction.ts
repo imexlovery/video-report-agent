@@ -1,4 +1,6 @@
 import { Type } from "typebox";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
 const TIMEOUT_MS = 30_000;
 
@@ -35,15 +37,23 @@ export async function requestTermEvidence(lookup, signal) {
 
 export default function (pi) {
   async function helper(action, payload, ctx, signal?) {
-    const result = await pi.exec(process.env.VIDEO_REPORT_PYTHON,
-      ["-m", "video_report_agent.term_correction", action, JSON.stringify(payload)],
-      { cwd: ctx.cwd, signal, timeout: 10_000 });
-    if (result.code !== 0) {
-      let message = "term_record_failed";
-      try { message = JSON.parse(result.stdout).error || message; } catch {}
-      throw new Error(message);
+    // Search bodies can exceed Linux's per-argument limit before Python truncates them.
+    const temporary = await mkdtemp(join(ctx.cwd, ".term-tool-"));
+    try {
+      const file = join(temporary, "payload.json");
+      await writeFile(file, JSON.stringify(payload));
+      const result = await pi.exec(process.env.VIDEO_REPORT_PYTHON,
+        ["-m", "video_report_agent.term_correction", action, "--payload-file", file],
+        { cwd: ctx.cwd, signal, timeout: 10_000 });
+      if (result.code !== 0) {
+        let message = "term_record_failed";
+        try { message = JSON.parse(result.stdout).error || message; } catch {}
+        throw new Error(message);
+      }
+      return JSON.parse(result.stdout);
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
     }
-    return JSON.parse(result.stdout);
   }
   function toolResult(value) {
     return { content: [{ type: "text", text: JSON.stringify(value) }], details: value };

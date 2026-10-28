@@ -1,6 +1,6 @@
 // Synthetic Pi tool harness. All HTTP requests are intercepted; no provider is contacted.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -17,6 +17,7 @@ const tools = new Map();
 const api = {
   registerTool(tool) { tools.set(tool.name, tool); },
   async exec(command, args, options) {
+    assert.ok(args.every(arg => Buffer.byteLength(arg, "utf8") < 128 * 1024));
     const result = spawnSync(command, args, { cwd: options.cwd, encoding: "utf8" });
     return { code: result.status, stdout: result.stdout, stderr: result.stderr };
   },
@@ -41,13 +42,15 @@ globalThis.fetch = async (url, options) => {
   if (calls === 2) {
     assert.equal(url, "https://api.deepseek.com/v1/tools/fetch");
     assert.deepEqual(body, { url: "https://example.org/docs" });
-    return Response.json({ title: "", content: "# Claude Code\n合成开发工具指南。" });
+    return Response.json({ title: "", content: "# Claude Code\n" + "合成开发工具指南。".repeat(30000) });
   }
   assert.equal(url, "https://api.deepseek.com/v1/tools/search");
   assert.deepEqual(body, { query: "AI产品 cloud 名称", count: 5, need_content: true });
   if (calls === 3) throw new DOMException("fixture timeout", "TimeoutError");
   return Response.json({ results: [{ title: "Claude 官方文档", url: "https://example.org/docs",
-    snippet: "Claude Code", summary: "Claude Code 是开发工具。", content: "" }] },
+    snippet: "Claude Code", summary: "Claude Code 是开发工具。", content: "" },
+    ...Array.from({ length: 4 }, (_, i) => ({ title: "合成来源", url: `https://example.org/${i}`,
+      content: "合成检索正文".repeat(10000) }))] },
     { headers: { "x-request-id": "fixture-request" } });
 };
 const ctx = { cwd: process.env.TERM_TEST_RUN, modelRegistry: {
@@ -69,6 +72,8 @@ assert.equal(first.usage.billable_response, true);
 assert.equal(first.request_id, "fixture-request");
 assert.equal(first.sources[0].id, "lookup-001:source-1");
 assert.equal(first.sources[0].summary, "Claude Code 是开发工具。");
+assert.equal(first.sources[1].content.length, 12000);
+assert.equal(first.sources[1].content_truncated, true);
 assert.ok(first.context.includes("薄肌、训练与健康"));
 const patch = { unit_id: "unit-000003", start: 0, end: 5, before: "cloud", after: "Claude Code",
   kind: "product", status: "supported", reason: "合成夹具明确指定这一处修正。",
@@ -81,6 +86,8 @@ assert.equal(fetched.operation, "fetch");
 assert.equal(fetched.parent_source_id, first.sources[0].id);
 assert.equal(fetched.sources[0].title, "");
 assert.ok(fetched.sources[0].content.includes("Claude Code"));
+assert.equal(fetched.sources[0].content.length, 12000);
+assert.equal(fetched.sources[0].content_truncated, true);
 patch.evidence = [{ source_id: fetched.sources[0].id, quote: "# Claude Code" }];
 const recorded = await tools.get("record_term_review").execute("fixture", { entries: [patch] },
   new AbortController().signal, undefined, ctx);
@@ -107,4 +114,5 @@ globalThis.fetch = async (_url, options) => {
 const empty = await extension.requestTermEvidence(first, new AbortController().signal);
 assert.equal(empty.status, "no_sources");
 assert.equal(empty.usage.billable_response, false);
+assert.ok(!readdirSync(ctx.cwd).some(name => name.startsWith(".term-tool-")));
 console.log("offline term tools passed");

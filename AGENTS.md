@@ -1,39 +1,48 @@
-# Video Report Agent — Public Core
+# 视频报告智能体——公开核心库
 
-This is the public ASR / transcript / Pi / shared Skill / renderer / CLI package.
-Hosted accounts, credits, web routes, administration and deployment belong to the private service repository. Do not copy private source or merge private history here.
+本仓库是公开的核心软件包，负责语音识别（ASR）、转写、Pi、共享生成技能（Skill）、渲染器和命令行工具。
+托管服务的账户、额度、网站路由、管理后台和部署属于私有服务库。不得将私有源码复制到本仓库，也不得合并私有仓库的 Git 历史。
 
-Keep a single sequential Python → Pi RPC → Skill generation path. Pi owns the agent loop. Each generation writes only to its run workspace. Use the smallest sufficient change; no speculative orchestration or unrelated refactors.
+保持串行的 Python → Pi RPC → 生成技能主链，智能体循环由 Pi 负责。用户已授权主 Agent 按需通过图示工具启动至多一个独立 Pi 绘图会话，再由程序嵌入报告；该会话只接收局部材料，不增加规划、评判或其他编排角色。每次生成只向本次运行的工作目录写入内容。采用满足需求的最小改动，不增加未经需求支持的编排机制，不进行无关重构。
 
-Use project-local .venv and uv. Run relevant tests. Do not claim fixture checks prove live model quality. Do not commit or push without user authorization.
+使用仓库内的 `.venv` 和 uv，运行相关测试。不得以固定测试样例的检查结果证明真实模型的生成质量。未经用户授权不得提交或推送。
 
-Keep maintained docs and examples in docs/. Local implementation notes belong in .local/docs/ (ignored).
+维护文档和示例放在 `docs/`，本地实现笔记放在已忽略的 `.local/docs/`。
 
-Evaluation tooling and approved public smoke/benchmarks belong in Core. Raw real-source inputs and experimental results belong in Core `.local/evals/` (ignored), not Service. Maintained docs stay with their owning repository and are excluded from deployment.
+评测工具和经批准公开的冒烟测试、基准测试归核心库维护。真实来源的原始输入和实验结果放在核心库已忽略的 `.local/evals/`，不放在服务库。维护文档保存在所属仓库中，不纳入部署。
 
-## Generation and verification
+## 轻量评审
 
-- Preserve Pi completion semantics: `agent_end` alone is not completion; the consumer waits for `agent_settled` and checks the final assistant `stopReason == "stop"`.
-- Keep pipeline stage events in `run.trace.jsonl` and Agent details in `pi.events.jsonl`. Extend the relevant layer without unifying logs or introducing a tracing framework as incidental cleanup.
-- For report quality comparisons, hold transcript and generation settings constant except for the variable under test. Assess source meaning (numbers, conditions, attribution and causality) separately from HTML validity and visual layout; valid source IDs alone do not establish fidelity.
-- For report template/layout changes, inspect a representative rendered example at the affected viewport when feasible. State when only static/tests were checked, and whether the change affects future generation or an existing report. Do not regenerate old reports implicitly.
+- 普通功能开发、接口或数据读写变更、缺陷修复完成实现和必要验证后，交付前由主智能体自动启动一个干净上下文的子智能体评审一次，无需另行确认。子智能体不继承实现对话；提供原始需求、验收要求、项目规则、变更基线和实际差异。评审者只读检查，不修改代码、不再委派评审；此流程仅用于开发阶段。
+- 小的纯文案、说明文字或样式调整，确认不涉及行为变化时跳过独立评审，保留相应的内容或视觉验收。
+- 权限、额度或支付、数据删除或迁移、并发、自动对外操作、关键部署配置属于高风险改动，即使改动很小也要评审；重点检查相关的权限边界、重复请求、数据一致性和失败处理，并做与风险相称的验证。
+- 以一个完整改动为单位，可包含多个提交，不要求每个中间提交单独评审。只审本次差异及其影响范围，按需追踪相关调用链和测试；包含本次未提交改动，不混入已有无关修改，不扩大为全仓审计。
+- 重点找实际缺陷、需求遗漏、旧功能回归和不必要的复杂化，并检查测试是否验证了预期行为。发现需给出代码位置、触发条件、实际后果和依据，区分确定问题与待验证疑点；不把开发者总结当作正确性证据，不为凑问题提出无关重构或个人风格建议。
+- 主智能体核实发现后修复真实问题，运行必要检查；修复后只复查受影响部分，除非新证据表明影响更广。问题解决且相关验证通过即结束，不反复开启多轮全量评审。交付时简述评审结论或跳过原因，以及必要的未验证事项。
 
-## Report design iteration
+## 生成与验证
 
-- For local component redesigns, read the selected mode's current template and `docs/report-design-preferences.md` first. Prototype inside that template with representative existing components; preserve the paper, canvas, typography and surrounding visual language unless the user requests a page redesign.
-- When the user reviews alternatives and unambiguously selects one (for example, “D”), treat the selection as authorization to adopt it in the relevant generation Skill/template and record the preference. Do not merely switch the preview, ask for confirmation again, or wait for the word “adopt”. If the user explicitly asks only to preview or retain a sample, honor that scope. Ask only when the selected alternative or target mode is genuinely unresolved.
-- Adoption applies to future generation in the selected mode. Commits, pushes, deployments and regeneration of historical reports still require their own user authorization.
+- 保持 Pi 的完成语义：仅收到 `agent_end` 不代表完成；消费端必须等待 `agent_settled`，并检查最终助手消息的 `stopReason == "stop"`。
+- 流水线阶段事件保存在 `run.trace.jsonl`，智能体执行细节保存在 `pi.events.jsonl`。只扩展相关层，不借机统一日志或引入追踪框架。
+- 对比报告质量时，除待测变量外，保持转写内容和生成设置不变。原文含义的保真度，包括数字、条件、归属和因果关系，应与 HTML 有效性、视觉布局分别评估；来源标识有效不代表内容忠实于原文。
+- 修改报告模板或布局时，在可行的情况下，用具有代表性的渲染样例检查受影响的视口。若只做了静态检查或测试，需明确说明，并说明改动影响未来生成还是已有报告。不得默认重新生成历史报告。
 
-## Report Skill maintenance
+## 报告设计迭代
 
-- When changing the report Skill, review the entrypoint, selected mode and affected references together. Keep shared rules in the entrypoint, mode differences in modes, and only distinct editorial guidance in references; preserve progressive disclosure.
-- Before adding a rule, check whether an existing rule or template already covers it. Merge or replace that text first; remove superseded or duplicate rules in the same change. New behavior may justify growth, but a one-report workaround must not silently become a universal restriction.
-- Report what was added, merged or removed, and the before/after Markdown character totals. Preserve factual boundaries, mode contracts and adopted design choices; compare representative frozen-input reports when behavior changes, using the existing evaluation tools and proportional validation.
-- Weekly reviews propose specific deletions or replacements with reasons. They do not rewrite the Skill unattended, run paid generations, or adopt pending design suggestions; actionable findings require user selection. Keep review records under `.local/evals/`.
+- 重新设计局部组件前，先阅读所选模式的当前模板和 `docs/report-design-preferences.md`。使用有代表性的现有组件，在该模板内制作原型；除非用户要求重新设计页面，否则保留纸张、画布、字体排版和周围的视觉风格。
+- 用户评审备选方案并明确选定其中一个时，例如选择“D”，视为授权将该方案应用到对应的生成技能或模板，并记录偏好。不要只切换预览、再次索要确认，或等待用户说出“采用”。如果用户明确只要求预览或保留样例，则遵守该范围。仅在所选方案或目标模式确实不明确时询问。
+- 方案采用后，应用于所选模式的后续生成。提交、推送、部署和历史报告重新生成仍需分别获得用户授权。
 
-## Documentation Maintenance
+## 报告生成技能维护
 
-本项目通过以下文档保存现状、后续方向和重要决策。执行项目任务或形成值得保留的项目讨论结论时，按实际影响维护相关内容，无需重新调用文档 Skill。
+- 修改报告生成技能时，一并检查入口、所选模式和受影响的参考文件。共用规则放在入口，模式差异放在模式文件，参考文件只保留独立的编辑指导，并保持按需逐层加载。
+- 新增规则前，检查现有规则或模板是否已经覆盖。优先合并或替换原文，在同一次改动中移除已被替代或重复的规则。新行为可以带来必要的内容增长，但不得将针对单份报告的临时处理默认为通用限制。
+- 说明新增、合并或删除的内容，以及修改前后的 Markdown 总字符数。保留事实边界、模式约定和已采用的设计选择；行为变化时，使用现有评测工具，对比有代表性的固定输入报告，进行与改动相称的验证。
+- 每周评审提出具体的删除或替换建议，并说明理由。不自动重写技能，不运行付费生成，也不采用待审核的设计建议；可执行的建议须由用户选择。评审记录放在 `.local/evals/`。
+
+## 文档维护
+
+本项目通过以下文档保存现状、后续方向和重要决策。执行项目任务或形成值得保留的项目讨论结论时，按实际影响维护相关内容，无需重新调用文档维护技能。
 
 ### 文档职责
 
@@ -42,7 +51,7 @@ Evaluation tooling and approved public smoke/benchmarks belong in Core. Raw real
 - `docs/PLAN.md`：讨论过的候选方向、已确认的下一步和实际阻塞。
 - `docs/DECISIONS.md`：影响后续开发的重要选择、决定性原因、约束、代价及替代关系。
 
-PROJECT 和 ARCHITECTURE 描述当前状态；已确认但尚未实现的设计标注待实现。具体配置与流程在 ARCHITECTURE 或对应专题文档中完整维护，其他文档只保留必要摘要与链接。DECISIONS 保存选择理由，PLAN 保存未来事项，不重复抄写整套方案。
+项目概况和架构文档描述当前状态；已确认但尚未实现的设计标注待实现。具体配置与流程在架构或对应专题文档中完整维护，其他文档只保留必要摘要与链接。决策记录保存选择理由，项目计划保存未来事项，不重复抄写整套方案。
 
 已有源码课程、面试材料或历史记录可以保留原用途；承担当前说明职责的部分应与现状一致，不能靠一条“以源码为准”保留错误。跨仓文档各自维护职责与接口，公共能力在所属仓库完整说明，产品集成在负责整体产品的仓库说明并引用，不向公开仓库复制私有内容。
 
@@ -60,15 +69,15 @@ PROJECT 和 ARCHITECTURE 描述当前状态；已确认但尚未实现的设计�
 
 影响本次判断的价格、额度、地区可用性等外部信息，更新时核实官方来源并注明必要的适用条件；无需为无关的日常改动重查所有外部资料。
 
-### PLAN 的维护
+### 项目计划的维护
 
 保存用户提出、讨论形成或用户要求保留的有价值方向。用简短文字说明想解决什么问题及关键背景，并区分候选、已确认、进行中或阻塞；仅在有依据时写优先级、时间和下一步。需要用户选择的关键问题放在相应事项下，不自行批准候选，也不为每个想法强制补齐实施方案。
 
-相关讨论或任务使方向、状态或阻塞变化时，更新原事项。从 PLAN 移除已完成且没有后续工作的事项；失效或放弃的方向移除或简短说明原因。尚待部署或验证时，只保留真实剩余工作和相关说明链接。
+相关讨论或任务使方向、状态或阻塞变化时，更新原事项。从项目计划中移除已完成且没有后续工作的事项；失效或放弃的方向移除或简短说明原因。尚待部署或验证时，只保留真实剩余工作和相关说明链接。
 
-不收录实现流水账、测试数量、提交记录或“本轮未检查”清单。长期有用的实现与验收说明留在已有对应文档或记录中，PLAN 按需引用。
+不收录实现流水账、测试数量、提交记录或“本轮未检查”清单。长期有用的实现与验收说明留在已有对应文档或记录中，项目计划按需引用。
 
-### DECISIONS 的维护
+### 决策记录的维护
 
 只记录未来需要理解“为什么这样选择”的重要决定。简短写清日期、问题、选择、决定性原因及重要约束或代价。地区、预算、维护能力等确实影响决定时，保留相应背景；只有实际比较过且有长期解释价值时，才简述未选方案，不为补文档编造备选或理由。
 
@@ -78,4 +87,4 @@ PROJECT 和 ARCHITECTURE 描述当前状态；已确认但尚未实现的设计�
 
 只更新此次变化涉及的文档，并清理相关旧说明，不要求每次修改全部文件。不记录开发流水账，不为完整而增加低价值内容；没有影响时无需改文档。
 
-文档入口为 `docs/README.md`。本仓库完整维护公共能力及其接口；产品集成与运营方向由 Service 维护，不向本仓库复制私有资料。
+文档入口为 `docs/README.md`。本仓库完整维护公共能力及其接口；产品集成与运营方向由服务库维护，不向本仓库复制私有资料。

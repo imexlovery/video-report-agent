@@ -226,9 +226,13 @@ def main():
     parser.add_argument(
         "action", choices=["start-lookup", "start-fetch", "finish-lookup", "record"],
     )
-    parser.add_argument("payload", help="JSON supplied by the Pi term tools")
+    payload_input = parser.add_mutually_exclusive_group(required=True)
+    payload_input.add_argument("payload", nargs="?", help="JSON supplied by the Pi term tools")
+    payload_input.add_argument("--payload-file", type=Path, help="Task-local JSON payload file")
     args = parser.parse_args()
-    payload = json.loads(args.payload)
+    payload = json.loads(
+        args.payload_file.read_text(encoding="utf-8") if args.payload_file else args.payload
+    )
     workspace = Path.cwd()
     try:
         if args.action == "start-lookup":

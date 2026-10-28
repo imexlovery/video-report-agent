@@ -35,7 +35,13 @@ def cloud_asr_parameters(model):
     )
 
 
-def resolve_media_config(asr_backend=None, asr_model=None, ocr_backend=None):
+def resolve_media_config(
+    asr_backend=None,
+    asr_model=None,
+    ocr_backend=None,
+    *,
+    require_credentials=True,
+):
     backend = asr_backend or os.getenv("ASR_BACKEND") or "mlx"
     if backend not in {"mlx", "paraformer"}:
         raise ValueError(f"Unknown ASR_BACKEND: {backend}")
@@ -64,7 +70,7 @@ def resolve_media_config(asr_backend=None, asr_model=None, ocr_backend=None):
             or url.fragment
         ):
             raise ValueError("DASHSCOPE_BASE_URL must be an HTTPS base URL without credentials")
-        if not os.getenv("DASHSCOPE_API_KEY", "").strip():
+        if require_credentials and not os.getenv("DASHSCOPE_API_KEY", "").strip():
             raise ValueError("DASHSCOPE_API_KEY is required for paraformer")
     return {
         "asr_backend": backend,

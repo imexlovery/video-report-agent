@@ -1,56 +1,42 @@
-# 本地音频转写术语修正
+# 按需术语修正
 
-本地 Pi 可显式开启名称与术语修正，默认仅使用标题、作者、简介和原转写。付费联网取证单独关闭，开启术语修正不会自动调用搜索服务。当前取证后端为 DeepSeek Search / Fetch，已通过离线工具、真实接口、单视频完整转写术语审查及冻结修正结果到报告的对照；同一会话连续取证与报告的净增耗时、更多语义样例尚待验证。网站入口与 Docker 任务暂不支持此开关。
+任务通过 `create_run(..., term_correction=True)` 或 CLI `--term-correction` 开启，Core 默认关闭。Local 与 Docker 使用同一实现，参数保存为任务输入，不改变报告模式、模型或原始转写缓存身份。调用方决定是否让用户选择开关。
 
-## 开启与取证
+## 判断与取证
 
-CLI 使用 `video-report generate '<Bilibili URL>' --term-correction`；嵌入者使用 `create_run(..., term_correction=True)`。默认关闭，开关保存为任务输入，不改变报告模式、报告模型或原始转写缓存身份。
+同一 Pi Agent 读取完整转写与 `source-context.json` 中的标题、作者、简介和 URL；在阅读或写作遇到影响理解的名称、专业术语疑点时处理，不增加独立全文审查阶段。自身知识仅提出候选，先用元数据，证据不足才按需联网，不逐词搜索。
 
-同一个 Pi Agent 完整阅读原转写及元数据，在写提纲前检查名称冲突、语境异常和同名异写。元数据有明确支持时直接通过 `record_term_review` 记录；不足时保留候选。写作中也可处理新疑点，无独立全文修复调用。
+付费搜索必须另设 `PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH=1` 才注册 `lookup_term` 与 `fetch_term_source`，HTTP 入口也检查许可。未允许时仅提供 `record_term_review`，仍可依据元数据修正。模型或 ASR 额度不能证明覆盖搜索费用。
 
-只有另外设置 `PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH=1` 才注册 `lookup_term`、`fetch_term_source` 并允许外部请求；未设置或为0时不提供这两个工具，直接调用请求函数也会在 HTTP 前拒绝。模型、ASR 的优惠额度不代表覆盖搜索费用，不能只更换 provider 就认为无需现金结算。
+取证直接使用 DeepSeek `/v1/tools/search` 与 `/v1/tools/fetch` JSON API，不经过辅助模型。凭据优先 `DEEPSEEK_SEARCH_API_KEY`，否则 `DEEPSEEK_API_KEY`，不使用报告模型 Key、`PI_API_KEY` 或 `DASHSCOPE_API_KEY`，不回退百炼。
 
-请求固定发送至 `https://api.deepseek.com/v1/tools/search` 或 `/v1/tools/fetch`，使用 `DEEPSEEK_SEARCH_API_KEY`，未设置时读取 `DEEPSEEK_API_KEY`。凭据必须属于 DeepSeek 官方账号，不使用报告模型的 Key、`PI_API_KEY` 或 `DASHSCOPE_API_KEY` 替代，不保存 Key 或请求头。不经过 MCP、模型注册表或辅助 LLM，报告模型、ASR 与单 Pi Agent 流程不变。旧 `PI_TERM_EVIDENCE_PROVIDER` / `PI_TERM_EVIDENCE_MODEL` 不再使用，不会退回百炼搜索。
+- `lookup_term(query, unit_ids)` 只发送具体 query；返回五条结果并默认 `need_content=true`。元数据与附近原文只交给当前 Agent 核对，不向搜索发送整份转写。
+- `fetch_term_source(source_id)` 仅在已有正文不足时读取本任务搜索已返回的来源，不接受任意 URL。
+- Search 与 Fetch 每任务合计最多三次，开始请求即计数，错误也占次数；单次含读取响应最多 30 秒，不重试或换供应商。三个工具沿用 Pi 串行执行。
+- 每个来源正文最多保留 12000 字符并标记截断；摘要只作线索。保存来源、请求状态、耗时和响应计费标记，不保存 Key 或请求头；响应计费标记不是账单对账，搜索费不并入主模型 `usage.json`。
 
-Search 只发送具体 query，默认返回5条结果且 `need_content=true`，优先利用搜索已返回的网页正文；元数据与指定单元附近两条原文保存为最多6000字符的上下文，随工具结果交给当前 Agent 对照，不发送完整转写。相关名称可合并查询，同词重复出现不要求重复搜索。仅当标题与已有正文缺失或不足时才 Fetch 指定来源，不自动抓取全部结果。每个来源正文最多保存12000字符，并标记截断；`snippet` / `summary` 只作线索，不当作原文。
+## 局部补丁与产物
 
-Search 与 Fetch 每任务合计最多三次，单次 HTTP 请求含读取响应最多30秒。三个工具均为 sequential，沿用 Pi 的串行执行。请求开始即占用本地预算，错误也计数，不重试或换供应商。保存操作类型、来源、耗时、请求 ID（若返回）及 `usage.requests` / `billable_response`；后者按响应是否产生结果记录，不是账单对账结论。此费用不并入主报告模型的 `usage.json`。
+`record_term_review(entries)` 按 `unit_id/start/end/before/after` 定位原单元正文，偏移为 Python 字符、左闭右开；保存类别、`supported/candidate/unresolved`、语境理由和 `source_id/quote`。
 
-按2026-10-22的[DeepSeek官方说明](https://api-docs.deepseek.com/zh-cn/guides/search/)，Search 与 Fetch 均为5元/千次成功且有结果的请求；搜索返回条数不改变单次价格，失败、空结果与超时不收费。[扣费规则](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)说明优先使用赠送余额。部分客户端服务端工具至11月1日前的临时免计费，不能直接套用于此处独立 HTTP 请求；不将该接口当作免费替代。
+supported 要求位置及原词准确，引文来自保存的元数据、来源标题或返回正文，且包含候选名称；拒绝重叠位置、无来源及明显的纯数字或否定词替换。完整的数字、单位、公式、作者观点与否定关系边界同时由 Skill 约束，机械检查不是完整语义证明。候选或未解决项保留原文，不为存疑概念补定义；同一位置的后续 unresolved 判断可撤回修正，历史记录保留。
 
-## 工具与修正记录
-
-`lookup_term(query, unit_ids)` 接受1～128字符的查询及一至三个原始单元 ID，返回调用 ID、来源标题/URL、摘要、可用正文、请求用量和状态。`fetch_term_source(source_id)` 只读取本任务已返回的来源，保存父来源 ID 与 Markdown 正文，不接受任意 URL。只有 URL 或摘要不足以支持修正。
-
-`record_term_review(entries)` 每项包含：
-
-- `unit_id/start/end/before` 与可选 `after`：在原单元正文中定位，Python 字符偏移、左闭右开，不包含 ID 与时间。
-- `kind`：`person/organization/product/term`；`status`：`supported/candidate/unresolved`；以及语境 `reason`。
-- `evidence`：`source_id` 与原文 `quote`；引用 `metadata:title/uploader/description` 或 lookup 返回的 source ID。
-- 可选 `confidence`：`high/medium/low`，仅供参考，不代表校准概率或准确率。
-
-supported 项要求定位准确、引文确实来自保存的元数据、来源标题或 Search/Fetch 返回的 `content` 正文，且包含候选名称；搜索摘要和历史辅助解释不作为直接证据。请求失败或没有来源时不可引用。工具拒绝位置冲突、明显的数字/否定修正与无依据的替换。机械检查不验证对象身份和语义正确性；同一人物、话题与局部语境仍由 Agent 判断，效果需人工验收。
-
-未确认项保留原文，不为存疑核心概念补定义。不做全文盲替换，不用联网改写数字、单位、公式、否定或作者观点。同一原始位置的最新判断决定修正版，历史记录保留，改为 unresolved 可撤回该位置的修正。报告归纳可使用修正版，逐字引用取原文或改为转述。
-
-## 产物与存储
-
-| 文件 | 内容 |
+| 文档 | 用途 |
 |---|---|
-| `source-context.json` | 标题、作者、原始简介和视频 URL |
-| `term-review.json` | 检索请求、来源、用量、失败及逐次修正判断 |
-| `transcript.corrected.md` | 仅应用 supported 补丁的阅读视图，保留单元 ID 和时间 |
+| `source-context.json` | 视频元数据 |
+| `term-review.json` | 检索、来源、用量与逐次判断 |
+| `transcript.corrected.md` | 仅应用 supported 补丁的阅读视图 |
 
-原始 ASR、canonical transcript 和 `transcript.md` 不修改。新文件由现有 `run_documents` 保存与导出，不新增数据库表，不进入 READY 转写缓存或传播到另一任务。不承诺 Agent 一定发现疑词或使用工具；来源绑定与完成渲染不证明修正正确。
+原始 ASR、canonical transcript 和 `transcript.md` 不变，ID 与时间不变。报告归纳读取修正版，逐字引语取原文或改为转述。文档由既有 `run_documents` 保存与导出，不进入 READY 转写缓存、不传播到其他任务。
 
-## 验证范围与后续
+## Docker 传递
 
-- 2026-10-22 将后端替换为 DeepSeek Search / Fetch。离线夹具检查默认停用、独立鉴权、Search→Fetch→批量修正、摘要不可作为原文、空结果与错误、共享预算及正文截断。
-- 用户明确允许最多0.01元后，真实调用一次Search与一次Fetch，返回5条结果和4490字符正文；在原视频两个已有单元中批量记录两处术语修正，原文本、ID和时间保留。没有调用报告模型或ASR，也没有生成完整报告；这仅验证接口、取证工具与局部修正样例，材料在忽略的 `.local/evals/term-correction-deepseek-20261022/`。
-- 同日以相同完整冻结转写、`gpt-6.1-sol / medium` 对比“两次网络请求”与“仅合计0.1元费用预算”的术语审查阶段，分别正常结束。两组包含首次全文读取，不能当作完整报告的净增耗时；代表性位置的记录数也不是准确率。后续同query参数验证发现 Search 可直接返回所需正文，因此默认改为 `need_content=true`；该默认尚未重跑完整两组。材料在 `.local/evals/term-correction-full-transcript-20261022/`。
-- 将上述 A/B 的修正版与已接受判断冻结，沿用历史基线 Skill/模板分别新建 `gpt-6.1-sol / medium / standard` 报告会话，两份均生成并渲染，报告阶段没有新增取证。A 恢复薄肌与 TRON，B 恢复 Lean 与 TRON、却省略薄肌三支点；其他多项已确认名称没有进入正文。修正数量不能作为成文准确率，已确认核心概念的保留仍需评估。该分阶段对照不替代同一会话完整流程的净增耗时测试；详细记录在上述目录的 `report-generation/comparison.md`。
-- 2026-10-15 的历史百炼样例使用相同冻结转写及 `gpt-6.1-sol / medium / standard` 比较开关关闭/开启的报告；最终独立运行没有中途提示或续跑，使用两次搜索完成报告。该结果不代替当前 DeepSeek 后端的真实验证。
-- 对已接受的名称补丁逐条对照原文、元数据和来源标题；存疑项保留，单元 ID、时间和原始文本未改变。检查 HTML/PNG 与实际文件的 SQLite 保存回读。真实材料和记录保留在忽略的 `.local/evals/`。
-- 这些检查覆盖本地冻结转写到报告的路径，不包含新视频下载、ASR、网站准入、Docker 或部署；不把程序检查、AI审阅或模型信心当作真人标注准确率。
-- 真实调用需配置 DeepSeek 官方凭据并确认可用额度与费用；此次试用仅在子进程开启，产品默认仍关闭付费入口。
-- 检索预算限制辅助请求数，主 Agent 的判断与记录仍会增加生成轮次；单样例耗时不作为稳定性能基准。扩展到更多样例时仍需独立标注正确修正、误改与未解决项，再决定网站入口与 Docker 集成。
+staging 保存任务开关和辨名所需的标题、作者、简介；Pi 在隔离工作目录初始化修正记录。仅当任务开启且服务端允许付费搜索时，可信控制端把独立搜索 Key 写入现有 `.generation-config/term-search-key`（0600），通过现有只读配置挂载供容器启动脚本读取；Key 不放在命令、任务输入或产物中。配置沿用任务结束后的清理。该凭据与模型凭据一样可被任务进程读取，不宣称拥有额外的秘密隔离。
+
+三个修正文档列入既有输出白名单，成功退出后回传并保存；仍拒绝符号链接和非普通文件，不回传配置。
+
+## 验证与限制
+
+已有离线检查覆盖开关、来源和位置校验、工具协议、预算、存储，以及 Docker staging、凭据范围和产物导出。2026-10-28 接入验收未调用真实付费供应商；本机 Docker daemon 未运行，真实容器启动仍待目标环境复核。
+
+历史真实接口、小样、冻结转写报告与按需对照保留在忽略的 `.local/evals/term-correction-deepseek-20261022/`、`.local/evals/term-correction-full-transcript-20261022/`、`.local/evals/term-trigger-strategy-20261023/` 和 `.local/evals/term-trigger-qwen-pair-20261023/`。单会话按需比两段流程耗时更低，但两个追加样本没有稳定正文质量赢家；首次搜索实际仍在正文写入前。不能用修正数量、渲染成功或模型信心代替准确率，也不能把历史模型与旧 Skill 的结果作为当前设置的质量证明。

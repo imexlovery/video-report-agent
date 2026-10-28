@@ -12,6 +12,7 @@ import time
 from contextlib import ExitStack
 from pathlib import Path
 
+from .diagram import embed_diagram
 from .pi_trace import compact_event
 from .report_content import fill_video_description
 from .task_container import (
@@ -253,11 +254,6 @@ class PiRunner:
 
     async def run(self, workspace: Path) -> Path:
         workspace = workspace.resolve()
-        input_path = workspace / "input.json"
-        if self.isolation == "docker" and input_path.is_file() and (
-            json.loads(input_path.read_text()).get("term_correction", False)
-        ):
-            raise PiError("INPUT_REJECTED", "Term correction currently requires local Pi")
         generation = None
         config = workspace / ".generation-config"
         try:
@@ -311,8 +307,9 @@ class PiRunner:
         term_correction = metadata.get("term_correction", False)
         term_search = term_correction and env.get("PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH") == "1"
         if term_correction:
-            prepare_term_correction(workspace, metadata)
+            prepare_term_correction(generation or workspace, metadata)
         report_mode = metadata.get("report_mode", "standard")
+        diagrams = metadata.get("diagrams", True)
         if report_mode not in ("standard", "brief"):
             raise PiError("INPUT_REJECTED", "report_mode must be standard or brief")
         skill = generation or workspace
@@ -342,13 +339,6 @@ class PiRunner:
             if Path(directory).parent == self.skill_dir else [],
         )
         (skill / "assets").mkdir(exist_ok=True)
-        tools = ["read", "write", "edit", "bash"]
-        if self.review:
-            tools.append("inspect_report")
-        if term_correction:
-            tools.append("record_term_review")
-        if term_search:
-            tools.extend(["lookup_term", "fetch_term_source"])
         command = [
             executable,
             "--mode",
@@ -358,7 +348,10 @@ class PiRunner:
             "--model",
             self.model,
             "--tools",
-            ",".join(tools),
+            "read,write,edit,bash" + (",inspect_report" if self.review else "")
+            + (",generate_diagram" if diagrams else "")
+            + (",record_term_review" if term_correction else "")
+            + (",lookup_term,fetch_term_source" if term_search else ""),
             "--no-extensions",
             "--no-skills",
             "--skill",
@@ -379,13 +372,17 @@ class PiRunner:
         trace_extension = skill / "request_trace.ts"
         shutil.copy2(Path(__file__).with_name("request_trace.ts"), trace_extension)
         command.extend(["--extension", str(runtime_path / trace_extension.name)])
-        if self.review:
-            extension = skill / "report_inspect.ts"
-            shutil.copy2(Path(__file__).with_name("report_inspect.ts"), extension)
-            command.extend(["--extension", str(runtime_path / extension.name)])
         if term_correction:
             extension = skill / "term_correction.ts"
             shutil.copy2(Path(__file__).with_name(extension.name), extension)
+            command.extend(["--extension", str(runtime_path / extension.name)])
+        if diagrams:
+            for name in ("report_diagram.ts", "diagram.md"):
+                shutil.copy2(Path(__file__).with_name(name), skill / name)
+            command.extend(["--extension", str(runtime_path / "report_diagram.ts")])
+        if self.review:
+            extension = skill / "report_inspect.ts"
+            shutil.copy2(Path(__file__).with_name("report_inspect.ts"), extension)
             command.extend(["--extension", str(runtime_path / extension.name)])
         if self.thinking is not None:
             command.extend(["--thinking", self.thinking])
@@ -398,21 +395,13 @@ class PiRunner:
             "原样保留其中的 {{VIDEO_DESCRIPTION}} 占位符一次，"
             "放在题头之后、正文之前；"
         )
-        term_search_instruction = (
-            "元数据证据不足时按需调用 lookup_term；先使用其content正文，"
-            "仅在正文缺失或不足时用 fetch_term_source。"
-            "Search与Fetch合计最多三次，不逐个重复词搜索。搜索摘要仅作线索，直接证据取来源标题或content正文。"
-            if term_search else
-            "本次未启用付费联网取证，仅根据提供的元数据及原转写判断，不调用外部搜索。"
-        )
         prompt += (
-            "不要改写或自行生成视频简介，运行时会按原始元数据填充。"
-            "本次开启术语修正：先读取 source-context.json 与完整原转写，"
-            "写提纲前检查名称、术语及元数据与语境冲突，写作过程中也可处理新疑点。"
-            f"自身知识仅提出候选；{term_search_instruction}"
-            "通过 record_term_review 记录 supported/candidate/unresolved 及原文定位、证据和理由，"
-            "只使用有依据的局部修正；报告阅读 transcript.corrected.md，保留原来源ID和时间。"
-            "无法确认时保留原词，不为存疑核心概念自行补定义，不修改原始转写。"
+            "本次开启术语修正：读取 source-context.json 与完整原转写，"
+            "按 Skill 在阅读或写作遇到重要疑点时取证并记录，报告归纳读取 transcript.corrected.md。"
+            + ("可按需调用 lookup_term，优先使用 content 正文，缺失或不足再 fetch_term_source；"
+               "Search 与 Fetch 合计最多三次。" if term_search else
+               "本次未启用付费联网取证，仅使用元数据及原转写，不调用外部搜索。")
+            + "视频简介仅用于核对术语，不改写或自行生成简介，运行时按原始元数据填充。"
             if term_correction else
             "不要读取、改写或自行生成视频简介，运行时会按原始元数据填充。"
         )
@@ -421,11 +410,26 @@ class PiRunner:
             "不根据当前配置或视频内容重新选择模式。"
         )
         mode_path = skill / "modes" / f"{report_mode}.md"
+        if diagrams:
+            prompt += (
+                "本次启用独立图示：完整理解来源后，判断哪一处空间、机制或复杂关系"
+                "确需图示帮助理解；有必要时最多调用一次 generate_diagram，提供解释目标、"
+                "局部上下文、原文来源 ID 和图注。使用返回的原样插入标记安排在对应正文位置。"
+                "图示由独立会话绘制并由程序嵌入，不读取绘图代码或会话记录，不自行改图；"
+                "绘图指引和实现由工具加载，不读取 diagram.md 或 report_diagram.ts。"
+                "普通步骤、列表或表格已经能讲清楚时不画图。检查预览包含最终图示。"
+            )
         if mode_path.is_file():
             prompt += (
                 f"本次只读取 modes/{report_mode}.md 这一份模式文件，不读取另一模式。"
                 "Profile 只指导内容关系表达，不覆盖所选模式的展开程度。"
                 "只使用当前模式的模板、样式与组件，不读取或混入另一模式的视觉资源。"
+                "本次主报告禁止自由绘图或新写 CSS，只复用模板已有 UI 组件。"
+                "首稿后按 Skill 的集中修订约定，先一次完成全部检查，再最多一次集中修订、"
+                "一次局部复核，随后立即结束，不逐项检查或多次修改。"
+                "直接使用现有 inspect_report；仅有 Bash 时调用 "
+                '"$VIDEO_REPORT_PYTHON" -m video_report_agent.inspect_report，'
+                "复核加 --label revision；不探测浏览器或自行编写截图程序。"
             )
         if self.review:
             prompt += (
@@ -435,11 +439,9 @@ class PiRunner:
                 "确认确实遮挡正文才修复，不为消除告警删除内容或来源绑定。"
                 "允许一次集中局部修订，然后再次调用 inspect_report，之后停止修改并交付。"
                 "首次检查无实际问题则直接交付。最多两次检查，不增加独立评审角色，"
-                "不改原始转写，不调用ASR。检查失败时诚实说明，不能声称检查通过。"
+                "不改原始转写，不为报告检查调用外部搜索或ASR。检查失败时诚实说明，不能声称检查通过。"
                 "若工具没有返回图片，只能声称完成程序检查。"
             )
-            if not term_correction:
-                prompt += "不调用外部搜索。"
         logged_command = list(command)
         if self.api_key and generation is None:
             api_key_index = logged_command.index("--api-key")
@@ -547,6 +549,10 @@ class PiRunner:
         try:
             if report.is_symlink() or not report.is_file():
                 raise PiError("EXTERNAL_MODEL_FAILURE", "Pi ended without report.html")
+            try:
+                embed_diagram(report, workspace)
+            except (ValueError, OSError) as exc:
+                raise PiError("EXTERNAL_MODEL_FAILURE", "独立图示未正确生成或嵌入。") from exc
             fill_video_description(report, workspace)
             html = report.read_text().lower()
             if "<html" not in html or "</html>" not in html or "<body" not in html:
@@ -622,6 +628,17 @@ class PiRunner:
                 if (
                     event.get("type") == "extension_ui_request"
                     and event.get("method") == "notify"
+                    and event.get("message", "").startswith("video-report-diagram:")
+                ):
+                    drawing = json.loads(event["message"].removeprefix("video-report-diagram:"))
+                    drawing["_trace_received_at"] = event["_trace_received_at"]
+                    drawing["_agent_role"] = "diagram"
+                    if "request_id" in drawing:
+                        drawing["request_id"] = f"diagram-{drawing['request_id']}"
+                    event = drawing
+                if (
+                    event.get("type") == "extension_ui_request"
+                    and event.get("method") == "notify"
                     and event.get("message", "").startswith("video-report-trace:")
                 ):
                     timing = json.loads(event["message"].removeprefix("video-report-trace:"))
@@ -631,6 +648,9 @@ class PiRunner:
                 if compact is not None:
                     log.write((json.dumps(compact, ensure_ascii=False) + "\n").encode())
                     log.flush()
+                if event.get("_agent_role") == "diagram":
+                    # Count and display child usage, but never settle/recover the parent from it.
+                    continue
 
                 if event.get("type") == "response" and event.get("success") is False:
                     if model_recovery:
@@ -669,6 +689,7 @@ class PiRunner:
                         "provider": event.get("provider"),
                         "model": event.get("model"),
                         "requested_at": event.get("timestamp"),
+                        "input_bytes": event.get("input_bytes"),
                     }
                     if pending_recovery:
                         model_state["recovery_count"] += 1
@@ -737,6 +758,14 @@ class PiRunner:
                                     "provider_error_code": provider_code,
                                     "http_status": http_status,
                                     "usage": _usage_summary(message),
+                                    # Only sizes are retained for rough interrupted-call estimates.
+                                    "output_bytes": sum(
+                                        len((part.get("text") or part.get("thinking") or (
+                                            json.dumps(part.get("arguments"), ensure_ascii=False)
+                                            if part.get("type") == "toolCall" else ""
+                                        )).encode("utf-8"))
+                                        for part in message.get("content", [])
+                                    ),
                                 })
                                 active_request = None
                             if message.get("stopReason") == "error":

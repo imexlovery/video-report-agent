@@ -15,11 +15,12 @@ import uuid
 from pathlib import Path
 
 from .task_cleaner import require_cleaner
+from .term_correction import TERM_DOCUMENTS
 
 TASK_PATH = Path("/workspace")
 IMAGE_PYTHON = "/app/web-service/.venv/bin/python"
 IMAGE_PATH = "/app/web-service/.venv/bin:/usr/local/bin:/usr/bin:/bin"
-OUTPUTS = ("report.html", "assets", "sessions", "inspection")
+OUTPUTS = ("report.html", "assets", "sessions", "inspection", *TERM_DOCUMENTS)
 
 
 def stage_inputs(run: Path) -> Path:
@@ -29,7 +30,10 @@ def stage_inputs(run: Path) -> Path:
     metadata = json.loads((run / "input.json").read_text()) if (run / "input.json").exists() else {}
     (stage / "input.json").write_text(
         json.dumps(
-            {key: metadata[key] for key in ("url", "video_id", "report_mode") if key in metadata},
+            {key: metadata[key] for key in (
+                "url", "video_id", "report_mode", "diagrams", "term_correction", "title", "uploader"
+            )
+             if key in metadata},
             ensure_ascii=False,
         )
     )
@@ -41,6 +45,8 @@ def stage_inputs(run: Path) -> Path:
             json.dumps(
                 {
                     "description": source.get("description"),
+                    **({key: source.get(key) for key in ("title", "uploader")}
+                       if metadata.get("term_correction") else {}),
                 },
                 ensure_ascii=False,
             )
@@ -109,6 +115,17 @@ def launch_command(stage: Path, config: Path, pi_command: list[str], deadline: f
     name = "video-report-task-" + uuid.uuid4().hex
     expires = time.time() + max(0, deadline - time.monotonic())
     image = os.getenv("PI_TASK_IMAGE", "video-report-agent:linux-amd64")
+    metadata = json.loads((stage / "input.json").read_text())
+    term_search = (
+        metadata.get("term_correction", False)
+        and os.getenv("PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH") == "1"
+    )
+    if term_search:
+        key = os.getenv("DEEPSEEK_SEARCH_API_KEY") or os.getenv("DEEPSEEK_API_KEY")
+        if key:
+            key_path = config / "term-search-key"
+            key_path.write_text(key)
+            key_path.chmod(0o600)
     task_env = [
         "HOME=/tmp/home",
         f"PATH={IMAGE_PATH}",
@@ -116,6 +133,7 @@ def launch_command(stage: Path, config: Path, pi_command: list[str], deadline: f
         "PLAYWRIGHT_BROWSERS_PATH=/opt/playwright",
         f"VIDEO_REPORT_PYTHON={IMAGE_PYTHON}",
         "PI_CODING_AGENT_DIR=/tmp/pi-agent",
+        *(["PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH=1"] if term_search else []),
     ]
     create = [
         "docker",
@@ -165,7 +183,9 @@ def launch_command(stage: Path, config: Path, pi_command: list[str], deadline: f
         *task_env,
         "sh",
         "-c",
-        'mkdir -p "$HOME" /tmp/pi-agent; cp /pi-config/* /tmp/pi-agent/; exec "$@"',
+        'mkdir -p "$HOME" /tmp/pi-agent; cp /pi-config/*.json /tmp/pi-agent/; '
+        'if [ -f /pi-config/term-search-key ]; then '
+        'export DEEPSEEK_SEARCH_API_KEY="$(cat /pi-config/term-search-key)"; fi; exec "$@"',
         "task-pi",
         *pi_command,
     ]

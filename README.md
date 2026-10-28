@@ -6,6 +6,12 @@
 
 **本仓库的核心资产是 [`video-report` 模板 Skill](src/video_report_agent/skills/video-report/)**：它把内容编辑规则、阅读模式、视觉模板和来源约束放在一起，指导 Agent 从完整转写中组织一份可读的报告。Python 流水线负责下载、转写、运行 Agent 和导出长图；网站、账户和额度由独立的 Web Service 维护。
 
+| 你想做什么 | 从这里开始 |
+|---|---|
+| 在线生成报告 | [打开 VReport](https://vreport.tri4t.xyz) |
+| 把已有转写交给自己的 Coding Agent | [下载 Skill ZIP v0.5.0](https://github.com/imexlovery/video-report-agent/releases/download/skill-zip-v0.5.0/video-report-skill-v0.5.0.zip) · [简短使用说明与示例](docs/skill-bundle/README.md) |
+| 从视频链接运行完整流程 | [完整 CLI 安装说明](#方式二运行完整-cli-流水线) |
+
 ## 先看成品
 
 下面是示例报告的顶部，点击图片查看完整长图。
@@ -52,13 +58,15 @@ ASR 负责把语音变成文字，Coding Agent 的模型负责阅读和生成报
 
 ### 2. 获取完整 Skill 目录
 
-下载仓库 ZIP，或克隆：
+下载 [Skill ZIP v0.5.0](https://github.com/imexlovery/video-report-agent/releases/download/skill-zip-v0.5.0/video-report-skill-v0.5.0.zip) 并解压。包内有完整 Skill、简短说明，以及配套的转写和 HTML 示例；可以先按包内 `README.md` 试用。
+
+需要源码时，也可以克隆仓库：
 
 ```sh
 git clone https://github.com/imexlovery/video-report-agent.git
 ```
 
-复制完整的 `src/video_report_agent/skills/video-report/`，保持相对路径：
+使用下载包中的 `video-report/`，或从源码复制完整的 `src/video_report_agent/skills/video-report/`，保持相对路径：
 
 ```text
 my-report/
@@ -106,9 +114,10 @@ Python 负责确定性的处理步骤与任务监督；Pi 提供模型调用、�
 
 ### 安装
 
-需要 Python 3.12、uv、PATH 中的 `ffmpeg` / `ffprobe`，以及 Node.js 22 和 npm。进入克隆后的仓库根目录执行：
+需要 Python 3.12、uv、PATH 中的 `ffmpeg` / `ffprobe`，以及 Node.js 22 和 npm。从源码仓库安装：
 
 ```sh
+git clone https://github.com/imexlovery/video-report-agent.git
 cd video-report-agent
 npm install -g @earendil-works/pi-coding-agent@0.85.0
 pi --version
@@ -155,7 +164,7 @@ uv run video-report generate 'https://www.bilibili.com/video/BV...' --report-mod
 
 输出目录为 `runs/<run-id>/`，主要阅读产物是 `report.html` 和 `report.png`；`transcript.md` 可用于来源核对。截图失败时 HTML 仍可完成，查看 `status.json` 的 `image_error`，确认 PNG 是否生成。
 
-默认使用 ASR-only，OCR 关闭。需要字幕/OCR 融合时，安装 `uv sync --extra enhancement`，使用 `--transcript-mode fused` 及相应字幕/OCR 参数；本地 MLX 同时加 `--extra mlx`。完整参数可通过 `uv run video-report generate --help` 查看。
+CLI 默认自动按“作者字幕轨 → B站 ai-zh → ASR”取得文字稿，任一字幕正文可用即停止继续采集。主动指定 `--sources asr` 可只用 ASR；列出多路来源可做手动对照／融合。Web 手动选源只在 Local 高级设置开放，OCR 暂时关闭。Core 仍兼容旧的 `--transcript-mode fused` 字幕/OCR 调用，需要安装 `uv sync --extra enhancement`；本地 MLX 同时加 `--extra mlx`。登录配置及仅转写命令见[选源说明](docs/subtitle-sources.md)，完整参数见 `uv run video-report generate --help`。
 
 ## 运行与数据约定
 

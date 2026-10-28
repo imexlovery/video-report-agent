@@ -29,7 +29,9 @@ def cache_key(kind, metadata, documents=None):
     identity = {"video_id": metadata["video_id"], "processing_version": 1}
     if kind == "download":
         identity.update(
-            audio_only=metadata.get("transcript_mode", "asr-only") == "asr-only",
+            audio_only=bool(metadata.get("transcript_sources"))
+            or metadata.get("transcript_mode") == "auto"
+            or metadata.get("transcript_mode", "asr-only") == "asr-only",
             request_subtitles=metadata.get("transcript_mode") == "fused",
         )
     else:
@@ -47,6 +49,10 @@ def cache_key(kind, metadata, documents=None):
             }
         )
     if kind == "transcript":
+        selected = metadata.get("resolved_transcript_sources") or metadata.get("transcript_sources")
+        if selected:
+            identity["selected_sources"] = selected
+            identity["subtitle_snapshot"] = (documents or {}).get("bilibili-subtitles.json")
         identity.update(
             {
                 key: metadata.get(key, default)
@@ -165,16 +171,29 @@ def validated_transcript(candidate: Path, metadata: dict):
     try:
         manifest = json.loads((candidate / "transcript-manifest.json").read_text())
         if (
-            manifest.get("status") != "READY"
+            manifest.get("status")
+            not in (
+                {"READY", "DEGRADED"}
+                if (metadata.get("transcript_sources") or metadata.get("transcript_mode") == "auto")
+                else {"READY"}
+            )
             or manifest.get("video_id") != metadata["video_id"]
             or manifest.get("transcript_mode") != metadata.get("transcript_mode", "asr-only")
             or manifest.get("normalizer_version") != NORMALIZER_VERSION
             or manifest.get("fusion_version") != FUSION_VERSION
         ):
             return None
-        if validated_asr(candidate, metadata) is None:
+        selected = metadata.get("resolved_transcript_sources") or metadata.get("transcript_sources")
+        if selected and manifest.get("selected_sources") != selected:
             return None
-        names = list(manifest["artifacts"].values()) + ["asr.json"]
+        needs_asr = selected is None or manifest["source_status"]["asr"]["status"] == "READY"
+        if needs_asr and validated_asr(candidate, metadata) is None:
+            return None
+        names = list(manifest["artifacts"].values()) + (["asr.json"] if needs_asr else [])
+        if metadata.get("transcript_mode") == "auto" or (
+            selected and any(s != "asr" for s in selected)
+        ):
+            names.append("bilibili-subtitles.json")
         if any(Path(name).name != name or not (candidate / name).is_file() for name in names):
             return None
         units = [

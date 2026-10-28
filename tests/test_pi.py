@@ -110,6 +110,12 @@ def test_public_resume_keeps_one_pi_session_and_prior_work(tmp_path):
     first.extend(provider_attempt(
         *primary, 21, stop_reason="error", error="HTTP 503 connection terminated", age=150,
     ))
+    first[-3]["input_bytes"] = 4000
+    first[-2]["message"]["usage"] = {"input": 0, "output": 0, "totalTokens": 0}
+    first[-2]["message"]["content"] = [
+        {"type": "thinking", "thinking": "分析"}, {"type": "text", "text": "partial"},
+        {"type": "toolCall", "arguments": {"path": "report.html"}},
+    ]
     second = provider_attempt(*alternate, 22, stop_reason="stop")
     process = RecoveryProcess([first, second], tmp_path)
     (tmp_path / "prior-work.txt").write_text("saved work")
@@ -151,6 +157,11 @@ def test_public_resume_keeps_one_pi_session_and_prior_work(tmp_path):
     assert starts[-1]["provider"] == alternate[0]
     assert starts[-1]["recovery_number"] == 1
     assert state["recovery_count"] == 1
+    assert starts[-2]["input_bytes"] == 4000
+    interrupted = next(event for event in attempts
+                       if event["kind"] == "request_finished" and event["attempt"] == 21)
+    assert interrupted["usage"]["totalTokens"] == 0
+    assert interrupted["output_bytes"] == len('分析partial{"path": "report.html"}'.encode())
 
 
 def test_public_recovery_allows_two_extra_attempts_and_does_not_return_to_primary(tmp_path):
@@ -566,7 +577,7 @@ print(json.dumps({"type":"agent_settled"}),flush=True)
         asyncio.run(PiRunner(review=True, isolation="local").run(workspace))
     invocation = json.loads((workspace / "invocation.json").read_text())
     assert Path(invocation["cwd"]) == workspace
-    assert "read,write,edit,bash,inspect_report" in invocation["command"]
+    assert "read,write,edit,bash,inspect_report,generate_diagram" in invocation["command"]
     assert "--extension" in invocation["command"]
     assert "{{VIDEO_DESCRIPTION}}" in invocation["prompt"]
     assert "不要读取、改写或自行生成视频简介" in invocation["prompt"]

@@ -7,6 +7,7 @@ import shutil
 import time
 from pathlib import Path
 
+from .diagram import embed_diagram
 from .report_content import fill_video_description
 from .report_image import render_report_image
 
@@ -39,6 +40,7 @@ PAGE_CHECK = r"""() => {
     }
   }
   return {findings, refs, title:document.title,
+    diagram_count:document.querySelectorAll('figure[data-report-diagram]').length,
     width:innerWidth, height:document.documentElement.scrollHeight};
 }"""
 
@@ -55,6 +57,7 @@ def inspect_report(run: Path, label: str = "final") -> dict:
     shutil.copy2(report, target / "report.html")
     # Preview the same postprocessing as delivery without changing the agent's working file.
     # Metadata is deliberately read from the original run, while source.html stays raw.
+    embed_diagram(target / "report.html", run)
     fill_video_description(target / "report.html", run)
     source_ids = set(re.findall(r"^\[([^ |]+) \|", (run / "transcript.md").read_text(), re.M))
     result = {"status": "error", "inspector_version": "1.1",

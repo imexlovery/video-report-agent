@@ -279,12 +279,64 @@ def test_pi_tools_prompt_and_model_are_run_scoped(
         assert "不要读取、改写或自行生成视频简介" in prompt
 
 
-def test_docker_rejects_feature_before_staging(workspace, monkeypatch):
-    def unexpected(*args):
-        raise AssertionError("Docker staging must not happen")
-    monkeypatch.setattr("video_report_agent.pi.stage_inputs", unexpected)
-    with pytest.raises(PiError, match="requires local Pi"):
-        asyncio.run(PiRunner(isolation="docker").run(workspace))
+def test_docker_staging_patch_and_export(workspace, tmp_path, monkeypatch):
+    from video_report_agent import pi
+
+    monkeypatch.delenv("PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH", raising=False)
+    monkeypatch.setattr(pi, "PI_AGENT_DIR", tmp_path / "pi-config")
+    monkeypatch.setattr(pi, "snapshot_models", lambda config, *_: config.mkdir())
+    fake = tmp_path / "fake_pi.py"
+    fake.write_text(
+        "import json,os,sys,signal\nfrom pathlib import Path\n"
+        "signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))\n"
+        "from video_report_agent.term_correction import record_term_review\n"
+        "os.chdir(sys.argv[1]); json.loads(sys.stdin.readline())\n"
+        f"record_term_review(Path.cwd(), {repr([entry()])})\n"
+        "Path('report.html').write_text('<html><body>{{VIDEO_DESCRIPTION}}薄肌</body></html>')\n"
+        "print(json.dumps({'type':'message_end','message':{'role':'assistant','stopReason':'stop'}}))\n"
+        "print(json.dumps({'type':'agent_settled'}),flush=True)\n"
+        "sys.stdin.read()\n"
+    )
+
+    def launch(stage, config, command, deadline):
+        assert "/workspace/term_correction.ts" in command
+        assert "record_term_review" in command[command.index("--tools") + 1]
+        assert json.loads((stage / SOURCE_CONTEXT).read_text())["description"] == "薄肌、训练与健康"
+        assert not (stage / "asr.json").exists()
+        return [sys.executable, str(fake), str(stage)]
+
+    monkeypatch.setattr(pi, "launch_command", launch)
+    original = (workspace / "transcript.md").read_text()
+    assert asyncio.run(PiRunner(isolation="docker", review=False).run(workspace)).is_file()
+    assert "练薄肌" in (workspace / CORRECTED_TRANSCRIPT).read_text()
+    assert review(workspace)["entries"][0]["status"] == "supported"
+    assert (workspace / "transcript.md").read_text() == original
+    assert not (workspace / ".generation-config").exists()
+
+
+@pytest.mark.parametrize("enabled,paid", [(False, True), (True, False), (True, True)])
+def test_docker_search_credentials_are_scoped_and_not_in_command(
+    workspace, tmp_path, monkeypatch, enabled, paid,
+):
+    from video_report_agent import task_container
+
+    (workspace / "input.json").write_text(json.dumps({"term_correction": enabled}))
+    monkeypatch.setenv("PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH", "1" if paid else "0")
+    monkeypatch.setenv("DEEPSEEK_SEARCH_API_KEY", "private-search-fixture")
+    monkeypatch.delenv("PI_TASK_RUNS_VOLUME", raising=False)
+    monkeypatch.setattr(task_container, "require_cleaner", lambda _: None)
+    monkeypatch.setattr(task_container.os, "getuid", lambda: 1000)
+    stage = task_container.stage_inputs(workspace)
+    config = tmp_path / "config"
+    config.mkdir()
+    command = task_container.launch_command(stage, config, ["pi"], float("inf"))
+    assert "private-search-fixture" not in " ".join(command)
+    assert ("PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH=1" in command) is (enabled and paid)
+    key = config / "term-search-key"
+    assert key.exists() is (enabled and paid)
+    if key.exists():
+        assert key.read_text() == "private-search-fixture"
+        assert key.stat().st_mode & 0o777 == 0o600
 
 
 def test_cli_passes_explicit_flag(tmp_path, monkeypatch):

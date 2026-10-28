@@ -6,6 +6,12 @@ Turn video transcripts into HTML reports you can skim, study and save. Use the [
 
 **The central asset is the [`video-report` template Skill](src/video_report_agent/skills/video-report/)**. It combines editing guidance, reading modes, visual templates and source constraints to help an Agent organize a readable report from a complete transcript. The Python pipeline handles downloading, transcription, Agent execution and image export. A separate Web Service owns the website, accounts and credits.
 
+| What you want to do | Start here |
+|---|---|
+| Generate a report online | [Open VReport](https://vreport.tri4t.xyz) |
+| Give an existing transcript to your own Coding Agent | [Download Skill ZIP v0.5.0](https://github.com/imexlovery/video-report-agent/releases/download/skill-zip-v0.5.0/video-report-skill-v0.5.0.zip) · [Quick start and examples (Chinese)](docs/skill-bundle/README.md) |
+| Run the complete workflow from a video URL | [CLI installation](#option-2-run-the-complete-cli-pipeline) |
+
 ## See the result
 
 This preview shows the top of a sample report. Click it for the complete image.
@@ -52,13 +58,15 @@ ASR converts speech into text; your Coding Agent's model reads it and generates 
 
 ### 2. Get the complete Skill directory
 
-Download the repository ZIP or clone it:
+Download and extract [Skill ZIP v0.5.0](https://github.com/imexlovery/video-report-agent/releases/download/skill-zip-v0.5.0/video-report-skill-v0.5.0.zip). It includes the complete Skill, a short Chinese guide, and a paired transcript and HTML example. Start with the bundled `README.md`.
+
+To get the source code, clone the repository:
 
 ```sh
 git clone https://github.com/imexlovery/video-report-agent.git
 ```
 
-Copy the complete `src/video_report_agent/skills/video-report/` directory, preserving relative paths:
+Use `video-report/` from the download, or copy the complete `src/video_report_agent/skills/video-report/` directory from the source repository, preserving relative paths:
 
 ```text
 my-report/
@@ -107,9 +115,10 @@ Python handles deterministic processing and task supervision. Pi supplies model 
 
 ### Install
 
-Use Python 3.12, uv, `ffmpeg` / `ffprobe` on PATH, and Node.js 22 with npm. From the cloned repository root:
+Use Python 3.12, uv, `ffmpeg` / `ffprobe` on PATH, and Node.js 22 with npm. Install from the source repository:
 
 ```sh
+git clone https://github.com/imexlovery/video-report-agent.git
 cd video-report-agent
 npm install -g @earendil-works/pi-coding-agent@0.85.0
 pi --version
@@ -156,7 +165,7 @@ uv run video-report generate 'https://www.bilibili.com/video/BV...' --report-mod
 
 Outputs live in `runs/<run-id>/`. Read `report.html` or `report.png`; use `transcript.md` for source review. HTML can complete even if image export fails, so check `image_error` in `status.json` before assuming the PNG exists.
 
-ASR-only with OCR off is the default. For subtitle/OCR fusion, install `uv sync --extra enhancement` and use `--transcript-mode fused` with the relevant subtitle/OCR options. Include `--extra mlx` for local MLX. Run `uv run video-report generate --help` for all options.
+The CLI defaults to creator-provided subtitles → Bilibili ai-zh → ASR and stops collecting once usable subtitles are available. Choose `--sources asr` for ASR alone, or list multiple sources for manual comparison/fusion. Web source controls are available only in Local advanced settings; Web OCR is disabled. The Core CLI retains legacy `--transcript-mode fused` subtitle/OCR support with `uv sync --extra enhancement`; include `--extra mlx` for local MLX. See the [source selection guide](docs/subtitle-sources.md) for subtitle login and transcript-only commands, or run `uv run video-report generate --help` for all options.
 
 ## Runtime and data
 
