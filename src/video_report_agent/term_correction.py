@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import time
 from pathlib import Path
@@ -18,6 +19,16 @@ MAX_SOURCE_CONTENT_CHARS = 12000
 TERM_KINDS = {"person", "organization", "product", "term"}
 REVIEW_STATUSES = {"supported", "candidate", "unresolved"}
 UNIT_LINE = re.compile(r"^(\[([^ |\]]+) \| [^\]]+\] )(.*)$")
+
+
+def search_config(provider=None, model=None):
+    provider = provider or os.getenv("TERM_SEARCH_PROVIDER") or "deepseek"
+    if provider not in {"deepseek", "openai"}:
+        raise ValueError("TERM_SEARCH_PROVIDER must be deepseek or openai")
+    return {"search_provider": provider, **(
+        {"search_model": model or os.getenv("OPENAI_SEARCH_MODEL") or "gpt-6.1-sol"}
+        if provider == "openai" else {}
+    )}
 
 
 def _read_json(path):
@@ -154,7 +165,7 @@ def finish_lookup(workspace: Path, lookup_id: str, result: dict):
          "content": (source.get("content") or "")[:MAX_SOURCE_CONTENT_CHARS],
          "content_truncated": len(source.get("content") or "") > MAX_SOURCE_CONTENT_CHARS}
         for index, source in enumerate(result.get("sources", []), 1)
-        if (source.get("title") or source.get("content")) and source.get("url")
+        if source.get("url")
     ]
     _write_json(workspace / TERM_REVIEW, review)
     return lookup

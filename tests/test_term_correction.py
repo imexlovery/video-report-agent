@@ -173,6 +173,20 @@ def test_search_summary_is_not_direct_evidence(workspace):
         }])])
 
 
+def test_url_only_search_source_is_fetchable_but_not_quote_evidence(workspace):
+    lookup = start_lookup(workspace, "cloud 编程工具", ["unit-000003"])
+    saved = finish_lookup(workspace, lookup["id"], {
+        "status": "completed", "provider": "openai",
+        "sources": [{"url": "https://example.org/Claude-Code"}],
+    })
+    source = saved["sources"][0]
+    assert start_fetch(workspace, source["id"])["url"] == source["url"]
+    with pytest.raises(ValueError, match="Evidence must quote"):
+        record_term_review(workspace, [entry("unit-000003", "cloud", "Claude Code", evidence=[{
+            "source_id": source["id"], "quote": source["url"],
+        }])])
+
+
 def test_search_page_content_can_support_patch(workspace):
     lookup = start_lookup(workspace, "cloud 编程工具", ["unit-000003"])
     saved = finish_lookup(workspace, lookup["id"], {
@@ -317,14 +331,18 @@ def test_docker_staging_patch_and_export(workspace, tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("enabled", [False, True])
 @pytest.mark.parametrize("legacy_permission", ["0", "1"])
+@pytest.mark.parametrize("provider", ["deepseek", "openai"])
 def test_docker_search_credentials_are_scoped_and_not_in_command(
-    workspace, tmp_path, monkeypatch, enabled, legacy_permission,
+    workspace, tmp_path, monkeypatch, enabled, legacy_permission, provider,
 ):
     from video_report_agent import task_container
 
-    (workspace / "input.json").write_text(json.dumps({"term_correction": enabled}))
+    (workspace / "input.json").write_text(json.dumps({
+        "term_correction": enabled, "search_provider": provider, "search_model": "gpt-6.1-sol",
+    }))
     monkeypatch.setenv("PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH", legacy_permission)
     monkeypatch.setenv("DEEPSEEK_SEARCH_API_KEY", "private-search-fixture")
+    monkeypatch.setenv("OPENAI_SEARCH_API_KEY", "private-openai-fixture")
     monkeypatch.delenv("PI_TASK_RUNS_VOLUME", raising=False)
     monkeypatch.setattr(task_container, "require_cleaner", lambda _: None)
     monkeypatch.setattr(task_container.os, "getuid", lambda: 1000)
@@ -333,12 +351,19 @@ def test_docker_search_credentials_are_scoped_and_not_in_command(
     config.mkdir()
     command = task_container.launch_command(stage, config, ["pi"], float("inf"))
     assert "private-search-fixture" not in " ".join(command)
+    assert "private-openai-fixture" not in " ".join(command)
     assert "PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH" not in " ".join(command)
     key = config / "term-search-key"
     assert key.exists() is enabled
     if key.exists():
-        assert key.read_text() == "private-search-fixture"
+        assert key.read_text() == (
+            "private-search-fixture" if provider == "deepseek" else "private-openai-fixture"
+        )
         assert key.stat().st_mode & 0o777 == 0o600
+        assert f"TERM_SEARCH_PROVIDER={provider}" in command
+        assert f"export {provider.upper()}_SEARCH_API_KEY=" in " ".join(command)
+        if provider == "openai":
+            assert "OPENAI_SEARCH_MODEL=gpt-6.1-sol" in command
 
 
 def test_cli_passes_explicit_flag(tmp_path, monkeypatch):
@@ -356,7 +381,24 @@ def test_cli_passes_explicit_flag(tmp_path, monkeypatch):
     assert captured["term_correction"] is True
 
 
-def test_extension_deepseek_search_fetch_and_tools_with_fake_http(workspace):
+def test_search_choice_is_saved_on_new_runs(tmp_path, monkeypatch):
+    monkeypatch.setenv("TERM_SEARCH_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_SEARCH_MODEL", "gpt-6.1-sol")
+    run = create_run(tmp_path, "BV1qxn16yEvP", term_correction=True)
+    metadata = json.loads((run / "input.json").read_text())
+    assert metadata["search_provider"] == "openai"
+    assert metadata["search_model"] == "gpt-6.1-sol"
+    monkeypatch.setenv("TERM_SEARCH_PROVIDER", "deepseek")
+    assert json.loads((run / "input.json").read_text()) == metadata
+    other = create_run(tmp_path, "BV1qxn16yEvP", term_correction=True)
+    assert json.loads((other / "input.json").read_text())["search_provider"] == "deepseek"
+    monkeypatch.setenv("TERM_SEARCH_PROVIDER", "invalid")
+    with pytest.raises(ValueError, match="TERM_SEARCH_PROVIDER"):
+        create_run(tmp_path, "BV1qxn16yEvP", term_correction=True)
+
+
+@pytest.mark.parametrize("fixture", ["term_tools_fixture.mjs", "openai_term_tools_fixture.mjs"])
+def test_extension_search_fetch_and_tools_with_fake_http(workspace, fixture):
     node, pi = shutil.which("node"), shutil.which("pi")
     if not node or not pi:
         pytest.skip("Installed Pi and Node needed for offline extension loading")
@@ -364,7 +406,7 @@ def test_extension_deepseek_search_fetch_and_tools_with_fake_http(workspace):
                     if (p / "dist/core/extensions/jiti-loader.js").is_file()), None)
     if not pi_root:
         pytest.skip("Pi extension loader not available")
-    harness = Path(__file__).with_name("term_tools_fixture.mjs")
+    harness = Path(__file__).with_name(fixture)
     env = {**os.environ, "VIDEO_REPORT_PYTHON": sys.executable,
            "TERM_TEST_PI_ROOT": str(pi_root), "TERM_TEST_RUN": str(workspace),
            "TERM_TEST_EXTENSION": str(Path(__file__).parents[1] /

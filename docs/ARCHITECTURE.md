@@ -74,7 +74,7 @@ Pi consumer 等待 `agent_settled`，并要求最终 assistant 的 `stopReason =
 
 ## Pi 任务容器
 
-任务 `term_correction` 默认关闭，CLI 可用 `--term-correction` 开启。启用时在同一 Pi 阅读或写作遇到重要疑点后按需核对，不增加全文校订阶段。`record_term_review` 校验来源与原文位置，修正版保留单元 ID 和时间；元数据、修正记录和修正版进入 `run_documents`，不进入共享转写缓存。开启 correction 即提供 DeepSeek Search/Fetch，不再设置独立搜索许可；独立凭据和请求预算见[术语修正](term-correction.md)。
+任务 `term_correction` 默认关闭，CLI 可用 `--term-correction` 开启。启用时在同一 Pi 阅读或写作遇到重要疑点后按需核对，不增加全文校订阶段。`record_term_review` 校验来源与原文位置，修正版保留单元 ID 和时间；元数据、修正记录和修正版进入 `run_documents`，不进入共享转写缓存。开启 correction 即提供取证工具，不再设置独立搜索许可；`TERM_SEARCH_PROVIDER` 在 DeepSeek 与 OpenAI 间二选一并保存到新任务。DeepSeek 使用直接 Search/Fetch API，OpenAI 使用独立 Responses Web Search 请求，模型摘要与原文证据分开；独立凭据和请求预算见[术语修正](term-correction.md)。
 
 `PiRunner` 默认直接使用宿主机的 Pi；只有显式设置 `PI_TASK_ISOLATION=docker` 或 `isolation="docker"` 才为每个任务启动 Docker 容器。选择隔离模式后若启动失败，任务直接失败，不回退到宿主机。下载、ASR 和交付后的简介填充/PNG 仍在可信 Worker 中运行。
 

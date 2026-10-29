@@ -22,7 +22,7 @@ from .task_container import (
     snapshot_models,
     stage_inputs,
 )
-from .term_correction import prepare_term_correction
+from .term_correction import prepare_term_correction, search_config
 from .visual import REPORT_PROMPT
 
 PROJECT_ROOT = Path.cwd()
@@ -311,6 +311,10 @@ class PiRunner:
             raise PiError("IMPLEMENTATION_FAILURE", "画面描述文件缺失")
         term_correction = metadata.get("term_correction", False)
         if term_correction:
+            search = search_config(metadata.get("search_provider", "deepseek"),
+                                   metadata.get("search_model", "gpt-6.1-sol"))
+            env["TERM_SEARCH_PROVIDER"] = search["search_provider"]
+            env["OPENAI_SEARCH_MODEL"] = search.get("search_model", "")
             prepare_term_correction(generation or workspace, metadata)
         report_mode = metadata.get("report_mode", "standard")
         diagrams = metadata.get("diagrams", True)

@@ -31,7 +31,7 @@ from .reuse import (
     validated_transcript,
 )
 from .storage import CacheProductionFailed, Store
-from .term_correction import TERM_DOCUMENTS
+from .term_correction import TERM_DOCUMENTS, search_config
 from .trace import RunTrace
 from .transcript import build_transcript
 from .transcript_foundation import parse_roi
@@ -51,6 +51,8 @@ def create_run(
     report_mode="standard",
     diagrams=True,
     term_correction: bool = False,
+    search_provider=None,
+    search_model=None,
     visual_enhancement: bool = False,
     transcript_mode="asr-only",
     transcript_sources=None,
@@ -105,6 +107,7 @@ def create_run(
     source = validate_bilibili_url(url)
     run = root.resolve() / uuid.uuid4().hex
     metadata = {
+        **(search_config(search_provider, search_model) if term_correction else {}),
         **({"model_selection": model_selection} if model_selection else {}),
         **({"model_recovery": model_recovery} if model_recovery else {}),
         **media_config,

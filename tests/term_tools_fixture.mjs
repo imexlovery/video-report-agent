@@ -24,6 +24,7 @@ const api = {
 };
 // The retired environment permission must not suppress tools in an enabled task.
 process.env.PI_TERM_EVIDENCE_ALLOW_PAID_SEARCH = "0";
+process.env.TERM_SEARCH_PROVIDER = "deepseek";
 process.env.DEEPSEEK_SEARCH_API_KEY = "fixture-secret";
 globalThis.fetch = async () => { throw new Error("unexpected HTTP before fixture"); };
 extension.default(api);

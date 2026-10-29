@@ -15,7 +15,7 @@ import uuid
 from pathlib import Path
 
 from .task_cleaner import require_cleaner
-from .term_correction import TERM_DOCUMENTS
+from .term_correction import TERM_DOCUMENTS, search_config
 
 TASK_PATH = Path("/workspace")
 IMAGE_PYTHON = "/app/web-service/.venv/bin/python"
@@ -32,6 +32,7 @@ def stage_inputs(run: Path) -> Path:
         json.dumps(
             {key: metadata[key] for key in (
                 "url", "video_id", "report_mode", "diagrams", "term_correction",
+                "search_provider", "search_model",
                 "title", "uploader", "visual_enhancement",
             )
              if key in metadata},
@@ -120,8 +121,17 @@ def launch_command(stage: Path, config: Path, pi_command: list[str], deadline: f
     expires = time.time() + max(0, deadline - time.monotonic())
     image = os.getenv("PI_TASK_IMAGE", "video-report-agent:linux-amd64")
     metadata = json.loads((stage / "input.json").read_text())
+    search_env = []
+    key_name = "DEEPSEEK_SEARCH_API_KEY"
     if metadata.get("term_correction", False):
-        key = os.getenv("DEEPSEEK_SEARCH_API_KEY") or os.getenv("DEEPSEEK_API_KEY")
+        search = search_config(metadata.get("search_provider", "deepseek"),
+                               metadata.get("search_model", "gpt-6.1-sol"))
+        provider = search["search_provider"]
+        key_name = f"{provider.upper()}_SEARCH_API_KEY"
+        key = os.getenv(key_name) or os.getenv(f"{provider.upper()}_API_KEY")
+        search_env = [f"TERM_SEARCH_PROVIDER={provider}"]
+        if provider == "openai":
+            search_env.append(f"OPENAI_SEARCH_MODEL={search['search_model']}")
         if key:
             key_path = config / "term-search-key"
             key_path.write_text(key)
@@ -133,6 +143,7 @@ def launch_command(stage: Path, config: Path, pi_command: list[str], deadline: f
         "PLAYWRIGHT_BROWSERS_PATH=/opt/playwright",
         f"VIDEO_REPORT_PYTHON={IMAGE_PYTHON}",
         "PI_CODING_AGENT_DIR=/tmp/pi-agent",
+        *search_env,
     ]
     create = [
         "docker",
@@ -184,7 +195,7 @@ def launch_command(stage: Path, config: Path, pi_command: list[str], deadline: f
         "-c",
         'mkdir -p "$HOME" /tmp/pi-agent; cp /pi-config/*.json /tmp/pi-agent/; '
         'if [ -f /pi-config/term-search-key ]; then '
-        'export DEEPSEEK_SEARCH_API_KEY="$(cat /pi-config/term-search-key)"; fi; exec "$@"',
+        f'export {key_name}="$(cat /pi-config/term-search-key)"; fi; exec "$@"',
         "task-pi",
         *pi_command,
     ]
