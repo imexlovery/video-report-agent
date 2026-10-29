@@ -1,5 +1,8 @@
 from pathlib import Path
 
+import pytest
+from playwright.sync_api import sync_playwright
+
 TEMPLATE = (
     Path(__file__).parents[1]
     / "src/video_report_agent/skills/video-report/assets/report-template.html"
@@ -58,18 +61,47 @@ def test_standard_navigation_lives_outside_paper_and_hides_for_long_image():
     assert '<span class="report-nav-title">目录</span>' in template
 
 
-def test_bar_component_pins_block_display_on_fill():
-    """柱图组件必须自带 display:block。
-
-    历史故障：模型自写 `.bar-fill{height:100%}` 挂在 <span> 上，行内元素的
-    width/height 不生效，getBoundingClientRect() 返回 0×0，整条柱子渲染成空白。
-    """
+@pytest.mark.parametrize("width", [390, 1440])
+def test_bar_component_renders_visible_fills_at_declared_ratios(width):
+    """Check the actual span geometry, including CSS cascade and mobile layout."""
     template = TEMPLATE.read_text()
-
-    assert ".bars{" in template
-    assert ".bar-track{" in template
-    assert ".bar-fill{display:block;height:100%;" in template
-    assert ".bar-value{" in template
+    body = '<div class="bars">' + ''.join(
+        f'<div class="bar"><div class="bar-head"><span class="bar-name">Item</span>'
+        f'<span class="bar-value">{percent}</span></div>'
+        f'<span class="bar-track"><span class="bar-fill" style="width:{percent}%">'
+        '</span></span></div>'
+        for percent in (25, 100)
+    ) + '</div>'
+    for name, value in {
+        "TITLE": "Bar fixture", "SUBTITLE": "", "LEAD": "Comparable values",
+        "ATTRIBUTION": "Synthetic source", "BODY": body,
+        "SOURCES": "", "VIDEO_DESCRIPTION": "",
+    }.items():
+        template = template.replace("{{" + name + "}}", value)
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": width, "height": 900})
+            page.route("**/*", lambda route: route.abort())
+            page.set_content(template)
+            bars = page.locator(".bar-track").evaluate_all('''tracks => tracks.map(track => {
+                const fill = track.querySelector('.bar-fill');
+                const style = getComputedStyle(fill);
+                return {track: track.getBoundingClientRect().toJSON(),
+                    fill: fill.getBoundingClientRect().toJSON(),
+                    display: style.display, visibility: style.visibility,
+                    opacity: style.opacity, background: style.backgroundColor};
+            })''')
+            assert len(bars) == 2
+            for bar, ratio in zip(bars, (0.25, 1)):
+                assert bar["display"] == "block"
+                assert bar["visibility"] == "visible" and bar["opacity"] == "1"
+                assert bar["background"] != "rgba(0, 0, 0, 0)"
+                assert bar["track"]["width"] > 0 and bar["track"]["height"] > 0
+                assert bar["fill"]["width"] == pytest.approx(bar["track"]["width"] * ratio, abs=1)
+                assert bar["fill"]["height"] == pytest.approx(bar["track"]["height"], abs=0.1)
+        finally:
+            browser.close()
 
 
 def test_brief_template_fills_shared_delivery_contract(tmp_path):

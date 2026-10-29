@@ -30,9 +30,6 @@ from video_report_agent.transcript_foundation import (
     roi_pixel_bounds,
 )
 
-cv2 = pytest.importorskip("cv2", reason="install enhancement extra for OCR checks")
-np = pytest.importorskip("numpy")
-
 
 def _event(
     source: str,
@@ -71,6 +68,7 @@ def test_roi_validation_and_containing_pixel_crop() -> None:
 
 
 def test_visual_change_filter_keeps_only_perceptually_changed_frames(tmp_path: Path) -> None:
+    cv2 = pytest.importorskip("cv2")
     frames: list[SampledFrame] = []
     for index, value in enumerate((0, 0, 255, 255)):
         path = tmp_path / f"frame-{index:06d}.jpg"
@@ -86,6 +84,7 @@ def test_visual_change_filter_keeps_only_perceptually_changed_frames(tmp_path: P
 def test_explicit_ocr_merges_repeated_samples_and_retains_provenance(
     tmp_path: Path, monkeypatch
 ) -> None:
+    cv2 = pytest.importorskip("cv2")
     video_path = tmp_path / "sample.mp4"
     video_path.write_bytes(b"local placeholder")
 
@@ -190,6 +189,7 @@ def test_rapidocr_row_shape_is_coerced_without_combining_scores() -> None:
 def test_unified_rapidocr_output_maps_to_existing_detection_boundary() -> None:
     from video_report_agent.transcript_foundation import normalize_ocr_result
 
+    np = pytest.importorskip("numpy")
     class FakeRapidOcr:
         def recognize(self, image_path: Path):
             return SimpleNamespace(
@@ -222,7 +222,8 @@ def test_unified_rapidocr_empty_output_maps_to_no_detections() -> None:
 def test_rapidocr_adapter_requests_ppocrv6_small_onnxruntime(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import rapidocr
+    rapidocr = pytest.importorskip("rapidocr")
+    pytest.importorskip("cv2")  # RapidOCR lazily imports its image-processing engine.
 
     captured: dict[str, object] = {}
 
@@ -250,6 +251,7 @@ def test_rapidocr_adapter_requests_ppocrv6_small_onnxruntime(
 
 
 def test_auto_roi_selects_a_recurring_lower_sentence_band(tmp_path: Path, monkeypatch) -> None:
+    cv2 = pytest.importorskip("cv2")
     video_path = tmp_path / "sample.mp4"
     video_path.write_bytes(b"local placeholder")
 
@@ -318,6 +320,7 @@ def test_subtitle_discovery_prefers_chinese_sidecar_and_marks_image_track_unsupp
 
 
 def test_subtitle_parsing_supports_srt_vtt_and_ass(tmp_path: Path) -> None:
+    pytest.importorskip("pysubs2")
     samples = {
         ".srt": "1\n00:00:01,000 --> 00:00:03,000\n中文 RLinf\n",
         ".vtt": "WEBVTT\n\n00:00:01.000 --> 00:00:03.000\n中文 VTT\n",

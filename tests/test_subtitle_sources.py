@@ -220,6 +220,7 @@ def test_protobuf_tracks_retain_language_and_reject_truncation():
 
 def test_signed_metadata_part_binding_and_credential_scope(monkeypatch):
     monkeypatch.setenv("BILIBILI_SESSDATA", "test-secret")
+    monkeypatch.setattr("video_report_agent.bilibili_subtitles.time.time", lambda: 1700000000)
     requests = []
 
     def handler(request):
@@ -247,15 +248,19 @@ def test_signed_metadata_part_binding_and_credential_scope(monkeypatch):
                     "data": {
                         "isLogin": True,
                         "wbi_img": {
-                            "img_url": "https://i0.hdslb.com/" + "a" * 32 + ".png",
-                            "sub_url": "https://i0.hdslb.com/" + "b" * 32 + ".png",
+                            "img_url": "https://i0.hdslb.com/7cd084941338484aae1ad9425b84077c.png",
+                            "sub_url": "https://i0.hdslb.com/4932caff0ff746eab6f01bf08b70ac45.png",
                         },
                     }
                 },
             )
         if path.endswith("/wbi/v2"):
-            assert request.url.params["cid"] == "12"
-            assert "w_rid" in request.url.params
+            # Fixed vector: the mixed key is ea1db124af3c7062474693fa704f4ff8.
+            # Keep the expected digest literal, independent of the production signer.
+            assert dict(request.url.params) == {
+                "aid": "1", "bvid": "BV1qxn16yEvP", "cid": "12", "wts": "1700000000",
+                "w_rid": "e7f982ede807146fe64157a42704f644",
+            }
             return httpx.Response(
                 200,
                 json={
