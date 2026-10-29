@@ -64,6 +64,7 @@ class RecoveryInput:
         command = json.loads(data)
         if command["type"] == "prompt":
             self.process.prompts.append(command["message"])
+            self.process.prompt_thinking.append(self.process.thinking)
             index = len(self.process.prompts) - 1
             self.process.lines.extend(self.process.steps[index])
             return
@@ -73,6 +74,13 @@ class RecoveryInput:
             self.process.lines.append({
                 "type": "response", "id": command["id"], "command": "set_model",
                 "success": True,
+            })
+            return
+        if command["type"] == "set_thinking_level":
+            self.process.thinking = command["level"]
+            self.process.lines.append({
+                "type": "response", "id": command["id"], "command": "set_thinking_level",
+                "success": self.process.thinking_success,
             })
             return
         raise AssertionError(f"unexpected RPC command: {command['type']}")
@@ -90,6 +98,9 @@ class RecoveryProcess:
         self.prompts = []
         self.model_commands = []
         self.current_model = None
+        self.thinking = "low"
+        self.thinking_success = True
+        self.prompt_thinking = []
         self.workspace = workspace
 
     async def readline(self):
@@ -99,6 +110,37 @@ class RecoveryProcess:
 def test_default_thinking_is_low():
     assert PiRunner().thinking == "low"
     assert PiRunner(thinking="high").thinking == "high"
+
+
+@pytest.mark.parametrize("thinking_success", [True, False])
+def test_recovery_applies_each_models_thinking_before_continuing(tmp_path, thinking_success):
+    primary = {"provider": "primary", "model": "first", "thinking": "low"}
+    alternate = {"provider": "backup", "model": "second", "thinking": "high"}
+    final = {"provider": "fallback", "model": "third", "thinking": "medium"}
+    steps = [
+        provider_attempt(model["provider"], model["model"], index, stop_reason="error",
+                         error="HTTP 400 data_inspection_failed: input data")
+        for index, model in enumerate((primary, alternate), 1)
+    ]
+    steps.append(provider_attempt(final["provider"], final["model"], 3, stop_reason="stop"))
+    process = RecoveryProcess(steps)
+    process.thinking_success = thinking_success
+    recovery = {"selected": primary, "alternate": alternate, "final_fallback": final}
+    state = {"initial": primary, "current": primary.copy(), "alternate": alternate,
+             "final_fallback": final, "recovery_scheduled": 0, "recovery_count": 0,
+             "request_count": 0}
+    consume = PiRunner(model_recovery=recovery)._consume(
+        process, tmp_path, "generate report", model_recovery=recovery,
+        model_state=state, deadline=time.monotonic() + 900,
+    )
+    if thinking_success:
+        assert asyncio.run(consume) == final
+        assert process.prompt_thinking == ["low", "high", "medium"]
+    else:
+        with pytest.raises(PiError) as error:
+            asyncio.run(consume)
+        assert error.value.failure_category == "model_configuration_failure"
+        assert process.prompt_thinking == ["low"]
 
 
 def test_public_resume_keeps_one_pi_session_and_prior_work(tmp_path):

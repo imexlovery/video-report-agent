@@ -681,6 +681,15 @@ class PiRunner:
                             "ENVIRONMENT_FAILURE", "备用模型配置失败，请联系维护者检查模型目录。",
                             failure_category="model_configuration_failure",
                         )
+                    if pending["type"] == "set_model" and pending["model"].get("thinking"):
+                        pending["id"] = f"set-thinking-{pending['recovery']['number']}"
+                        pending["type"] = "set_thinking_level"
+                        pending_model_command = pending
+                        await send({
+                            "id": pending["id"], "type": pending["type"],
+                            "level": pending["model"]["thinking"],
+                        })
+                        continue
                     model_state["current"] = pending["model"]
                     pending_recovery = pending["recovery"]
                     last_assistant = None
@@ -886,6 +895,7 @@ class PiRunner:
                         command_id = f"set-model-{recovery_number}"
                         pending_model_command = {
                             "id": command_id,
+                            "type": "set_model",
                             "model": next_model,
                             "recovery": pending_recovery,
                             "prompt_id": f"recover-{recovery_number}",
