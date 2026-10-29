@@ -48,6 +48,8 @@ staging 保存任务开关、搜索供应商/模型和辨名所需的标题、�
 
 2026-10-29 使用 `gpt-6.1-sol` 完成真实 Web Search → 来源保存 → 标题引用校验 → 纠正版转写小样。第二次真实请求打开已返回来源时，OpenAI 报告重定向目的页不可抓取，工具返回 `no_sources`，未伪造正文。测试输入为合成短句，未重新生成真实视频报告；真实 Docker 启动仍待目标环境复核。本地记录在 `.local/evals/openai-search-20261029/`。
 
+同日以相同短句和查询将搜索模型切换为 `gpt-6-luna`，真实搜索与纠正工具链通过，原始转写保持不变；纠正条目由测试脚本给定，未测试主 Agent 的自主纠正判断。环境变量示例使用 Luna 覆盖代码默认搜索模型；未设置 `OPENAI_SEARCH_MODEL` 时仍按上述默认值运行。记录在 `.local/evals/openai-search-luna-20261029/`。
+
 接口依据：[OpenAI Web Search](https://developers.openai.com/api/docs/guides/tools-web-search)、[GPT-6.1 Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol)（2026-10-29 核对）。
 
 历史真实接口、小样、冻结转写报告与按需对照保留在忽略的 `.local/evals/term-correction-deepseek-20261022/`、`.local/evals/term-correction-full-transcript-20261022/`、`.local/evals/term-trigger-strategy-20261023/` 和 `.local/evals/term-trigger-qwen-pair-20261023/`。单会话按需比两段流程耗时更低，但两个追加样本没有稳定正文质量赢家；首次搜索实际仍在正文写入前。不能用修正数量、渲染成功或模型信心代替准确率，也不能把历史模型与旧 Skill 的结果作为当前设置的质量证明。
