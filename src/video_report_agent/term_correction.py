@@ -74,7 +74,7 @@ def prepare_term_correction(workspace: Path, metadata: dict):
     context = {
         "title": metadata.get("title") or info.get("title") or "",
         "uploader": metadata.get("uploader") or info.get("uploader") or "",
-        "description": info.get("description") or "",
+        "description": info.get("description") or metadata.get("description") or "",
         "url": metadata.get("url") or info.get("webpage_url") or "",
     }
     _write_json(workspace / SOURCE_CONTEXT, context)

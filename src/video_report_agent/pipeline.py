@@ -237,7 +237,9 @@ def generate(run: Path, *, database_path=None, execution_id=None) -> dict:
                 metadata.update(
                     {
                         key: subtitle_snapshot[key]
-                        for key in ("title", "uploader", "attribution", "duration_ms")
+                        for key in (
+                            "title", "description", "uploader", "attribution", "duration_ms"
+                        )
                         if key in subtitle_snapshot
                     }
                 )

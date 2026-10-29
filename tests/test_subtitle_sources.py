@@ -105,6 +105,35 @@ def test_no_caption_does_not_secretly_fallback_to_asr(tmp_path, monkeypatch):
     assert status["transcript_source_status"]["bilibili_ai"]["status"] == "LOGIN_REQUIRED"
 
 
+@pytest.mark.parametrize("isolated", [False, True])
+def test_auto_subtitles_preserve_description_for_term_evidence(tmp_path, monkeypatch, isolated):
+    from video_report_agent.task_container import stage_inputs
+    from video_report_agent.term_correction import SOURCE_CONTEXT, prepare_term_correction
+
+    data = snapshot()
+    data["description"] = "简介中的训练术语与来源"
+    monkeypatch.setattr(pipeline, "fetch_subtitles", lambda *_, **kwargs: data)
+    monkeypatch.setattr(pipeline, "download_bilibili_video", forbidden)
+    monkeypatch.setattr(pipeline, "transcribe_audio", forbidden)
+    runs = []
+    for _ in range(2):
+        run = pipeline.create_run(
+            tmp_path, URL, transcript_mode="auto", term_correction=True, transcript_only=True
+        )
+        runs.append(run)
+        status = pipeline.generate(run)
+        assert status["state"] == "TRANSCRIPT_READY"
+        assert not (run / "download").exists()
+        metadata = Store(tmp_path / "state.sqlite3", initialize=False).run(run.name)["input"]
+        assert metadata["description"] == data["description"]
+        workspace = stage_inputs(run) if isolated else run
+        # Pi initializes both local and isolated context with the saved host metadata.
+        prepare_term_correction(workspace, metadata)
+        context = json.loads((workspace / SOURCE_CONTEXT).read_text())
+        assert context["description"] == data["description"]
+    assert status["transcript_reused_from"] == runs[0].name
+
+
 @pytest.mark.parametrize("sources", [[], ["ocr"], ["bilibili_ai"] * 2, ["bad"], "asr", [{}]])
 def test_selection_rejected_before_run_created(tmp_path, sources):
     with pytest.raises(ValueError):
@@ -205,6 +234,7 @@ def test_signed_metadata_part_binding_and_credential_scope(monkeypatch):
                         "bvid": "BV1qxn16yEvP",
                         "aid": 1,
                         "title": "示例",
+                        "desc": "示例简介原文",
                         "owner": {"name": "示例"},
                         "pages": [{"cid": 11, "duration": 10}, {"cid": 12, "duration": 10}],
                     },
@@ -254,6 +284,7 @@ def test_signed_metadata_part_binding_and_credential_scope(monkeypatch):
     with httpx.Client(transport=httpx.MockTransport(handler)) as http:
         result = BilibiliSubtitles(client=http).fetch(validate_bilibili_url(URL + "?p=2"))
     assert result["cid"] == 12
+    assert result["description"] == "示例简介原文"
     assert result["sources"]["bilibili_ai"]["status"] == "READY"
     assert "auth_key" not in json.dumps(result)
     assert "test-secret" not in json.dumps(result)

@@ -270,6 +270,7 @@ class BilibiliSubtitles:
             "page": source.page_number,
             "duration_ms": round(duration * 1000),
             "title": title,
+            "description": data.get("desc") or "",
             "uploader": uploader,
             "attribution": f"Bilibili；{uploader}；《{title}》；{source.canonical_url}",
         }
