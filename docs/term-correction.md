@@ -46,9 +46,11 @@ staging 保存任务开关、搜索供应商/模型和辨名所需的标题、�
 
 已有离线检查覆盖两供应商的开关、任务配置快照、来源和位置校验、工具协议、预算、存储，以及 Docker staging、凭据范围和产物导出；Service 合成测试覆盖 HTTP 提交与 Core worker 渲染、保存流程。
 
-2026-10-29 使用 `gpt-6.1-sol` 完成真实 Web Search → 来源保存 → 标题引用校验 → 纠正版转写小样。第二次真实请求打开已返回来源时，OpenAI 报告重定向目的页不可抓取，工具返回 `no_sources`，未伪造正文。测试输入为合成短句，未重新生成真实视频报告；真实 Docker 启动仍待目标环境复核。本地记录在 `.local/evals/openai-search-20261029/`。
+2026-10-29 使用 `gpt-6.1-sol` 完成真实 Web Search → 来源保存 → 标题引用校验 → 纠正版转写小样。第二次真实请求打开已返回来源时，OpenAI 报告重定向目的页不可抓取，工具返回 `no_sources`，未伪造正文。本地记录在 `.local/evals/openai-search-20261029/`。
 
 同日以相同短句和查询将搜索模型切换为 `gpt-6-luna`，真实搜索与纠正工具链通过，原始转写保持不变；纠正条目由测试脚本给定，未测试主 Agent 的自主纠正判断。环境变量示例使用 Luna 覆盖代码默认搜索模型；未设置 `OPENAI_SEARCH_MODEL` 时仍按上述默认值运行。记录在 `.local/evals/openai-search-luna-20261029/`。
+
+随后完成本机 Local Web → Linux amd64 Docker → Sol 主 Agent / Luna 搜索 → HTML 与 PNG 交付验证。Sol 自主调用搜索、引用官方来源并纠正合成字幕中的名称；任务达到 `RENDERED`，最终 `stopReason=stop` 和 `agent_settled` 均已确认，临时容器与网络正常清理。当前 Docker Desktop 配置代理，结果仅证明该网络配置可用。输入为 75 秒合成字幕，未验证真实视频 ASR、普遍纠正质量或 Windows/公网部署；记录见 `.local/evals/openai-docker-e2e-20261029/validation.md`。
 
 接口依据：[OpenAI Web Search](https://developers.openai.com/api/docs/guides/tools-web-search)、[GPT-6.1 Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol)（2026-10-29 核对）。
 
