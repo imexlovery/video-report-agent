@@ -132,7 +132,7 @@ def test_invalid_drawing_configuration_is_rejected(selection):
     (True, False, "legacy_no_input"),
 ])
 def test_real_pi_isolated_diagram_and_default_interface(
-    tmp_path, monkeypatch, enabled, cancel, auth,
+    tmp_path, monkeypatch, enabled, cancel, auth, *, isolation="local", evidence=None,
 ):
     requests = []
     authorizations = []
@@ -199,7 +199,7 @@ def test_real_pi_isolated_diagram_and_default_interface(
             self.wfile.write(b"data: [DONE]\n\n")
             self.wfile.flush()
 
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server = ThreadingHTTPServer(("0.0.0.0" if isolation == "docker" else "127.0.0.1", 0), Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     config = tmp_path / "config"
@@ -217,12 +217,13 @@ def test_real_pi_isolated_diagram_and_default_interface(
     if drawing_provider == provider:
         drawing_key = key
     models, credentials = {}, {}
+    host = "host.docker.internal" if isolation == "docker" else "127.0.0.1"
     roles = [(provider, "diagram-stub", key)]
     if independent:
         roles.append((drawing_provider, drawing_model, drawing_key))
     for role_provider, role_model, role_key in roles:
         model_config = models.setdefault(role_provider, {
-            "baseUrl": f"http://127.0.0.1:{server.server_port}/v1", "api": "openai-completions",
+            "baseUrl": f"http://{host}:{server.server_port}/v1", "api": "openai-completions",
             "models": [],
         })
         model_config["models"].append({
@@ -258,7 +259,8 @@ def test_real_pi_isolated_diagram_and_default_interface(
     try:
         runner = PiRunner(provider=provider, model="diagram-stub",
                           api_key=key if provider not in credentials else None,
-                          thinking="off", timeout=40, isolation="local")
+                          thinking="off", timeout=90 if isolation == "docker" else 40,
+                          isolation=isolation)
         if cancel:
             async def interrupt():
                 task = asyncio.create_task(runner.run(run))
@@ -284,7 +286,7 @@ def test_real_pi_isolated_diagram_and_default_interface(
         assert authorizations == [f"Bearer {drawing_key if not body.get('tools') else key}"
                                   for body in requests]
         assert json.loads((config / "auth.json").read_text()) == credentials
-        if auth == "key_to_key":
+        if auth == "key_to_key" and isolation == "local":
             stage = stage_inputs(run)
             snapshot = run / ".generation-config"
             snapshot_models(snapshot, config, [
@@ -320,6 +322,17 @@ def test_real_pi_isolated_diagram_and_default_interface(
             assert all(t["function"]["name"] != "generate_diagram"
                        for body in requests for t in body.get("tools", []))
         assert not (run / ".diagram-config").exists()
+        if evidence is not None:
+            evidence.update(
+                isolation=json.loads((run / "invocation.json").read_text())["isolation"],
+                independent=independent,
+                requests=[{"role": "main" if body.get("tools") else "drawing",
+                           "model": body["model"],
+                           "credential": "main" if header == f"Bearer {key}" else "drawing"}
+                          for body, header in zip(requests, authorizations, strict=True)],
+                diagram_embedded='data-report-diagram="true"' in report.read_text(),
+                run=str(run),
+            )
     finally:
         server.shutdown()
         server.server_close()

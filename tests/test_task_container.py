@@ -421,6 +421,29 @@ def test_real_pi_rpc_loads_only_task_credentials(inputs, final):
 
 
 @docker_test
+@pytest.mark.parametrize("auth", ["key_to_key", "runtime_key"])
+def test_real_docker_diagram_model_credentials(inputs, tmp_path, monkeypatch, auth):
+    import test_diagram as diagram_tests
+
+    evidence = {}
+    diagram_tests.test_real_pi_isolated_diagram_and_default_interface(
+        tmp_path, monkeypatch, True, False, auth, isolation="docker", evidence=evidence,
+    )
+    assert evidence["isolation"] == "docker"
+    run = Path(evidence["run"])
+    assert not (run / ".generation-config").exists()
+    scope_filter = f"label=video-report.scope={os.environ['PI_TASK_SCOPE']}"
+    for command in (["docker", "ps", "-aq"], ["docker", "network", "ls", "-q"]):
+        assert not subprocess.check_output(
+            [*command, "--filter", scope_filter], text=True,
+        ).strip()
+    evidence.update(container_cleanup=True, network_cleanup=True, image=IMAGE)
+    (tmp_path / "docker-diagram-evidence.json").write_text(
+        json.dumps(evidence, ensure_ascii=False, indent=2) + "\n"
+    )
+
+
+@docker_test
 @pytest.mark.parametrize("outcome", ["timeout", "cancel"])
 def test_execution_waits_for_real_container_cleanup(inputs, monkeypatch, outcome):
     run, config = inputs
