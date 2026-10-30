@@ -5,6 +5,7 @@ import json
 import shutil
 import subprocess
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
@@ -92,9 +93,16 @@ def test_diagram_flag_is_saved_and_staged(tmp_path, enabled):
 
 
 @pytest.mark.skipif(shutil.which("pi") is None, reason="Pi is not installed")
-@pytest.mark.parametrize("enabled,cancel", [(True, False), (False, False), (True, True)])
-def test_real_pi_isolated_diagram_and_default_interface(tmp_path, monkeypatch, enabled, cancel):
+@pytest.mark.parametrize("enabled,cancel,auth", [
+    (True, False, "runtime_key"), (False, False, "runtime_key"),
+    (True, True, "runtime_key"), (True, False, "stored_key"),
+    (True, False, "oauth"),
+])
+def test_real_pi_isolated_diagram_and_default_interface(
+    tmp_path, monkeypatch, enabled, cancel, auth,
+):
     requests = []
+    authorizations = []
     child_started, release = threading.Event(), threading.Event()
 
     class Handler(BaseHTTPRequestHandler):
@@ -104,6 +112,7 @@ def test_real_pi_isolated_diagram_and_default_interface(tmp_path, monkeypatch, e
         def do_POST(self):
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             requests.append(body)
+            authorizations.append(self.headers.get("Authorization"))
             child = not body.get("tools")
             if child:
                 child_started.set()
@@ -162,7 +171,16 @@ def test_real_pi_isolated_diagram_and_default_interface(tmp_path, monkeypatch, e
     thread.start()
     config = tmp_path / "config"
     config.mkdir()
-    (config / "models.json").write_text(json.dumps({"providers": {"diagram-local": {
+    # Keep native Codex OAuth validation, with completions served only by the local fixture.
+    provider = "openai-codex" if auth == "oauth" else "diagram-local"
+    key = "synthetic-oauth-access" if auth == "oauth" else "ephemeral-key"
+    if auth != "runtime_key":
+        credential = ({"type": "oauth", "access": key, "refresh": "synthetic-refresh",
+                       "expires": int(time.time() * 1000) + 3_600_000,
+                       "accountId": "synthetic-account"}
+                      if auth == "oauth" else {"type": "api_key", "key": key})
+        (config / "auth.json").write_text(json.dumps({provider: credential}))
+    (config / "models.json").write_text(json.dumps({"providers": {provider: {
         "baseUrl": f"http://127.0.0.1:{server.server_port}/v1", "api": "openai-completions",
         "models": [{"id": "diagram-stub", "name": "Fixture", "reasoning": False,
                     "input": ["text"], "contextWindow": 128000, "maxTokens": 4096,
@@ -179,7 +197,8 @@ def test_real_pi_isolated_diagram_and_default_interface(tmp_path, monkeypatch, e
         "[unit-000001 | 0–1s] 必要原文\n[unit-000002 | 1–2s] FULL_TRANSCRIPT_ONLY\n"
     )
     try:
-        runner = PiRunner(provider="diagram-local", model="diagram-stub", api_key="ephemeral-key",
+        runner = PiRunner(provider=provider, model="diagram-stub",
+                          api_key=key if auth == "runtime_key" else None,
                           thinking="off", timeout=40, isolation="local")
         if cancel:
             async def interrupt():
@@ -203,6 +222,9 @@ def test_real_pi_isolated_diagram_and_default_interface(tmp_path, monkeypatch, e
         events = [json.loads(line) for line in (run / "pi.events.jsonl").read_text().splitlines()]
         drawing = [e for e in events if e.get("_agent_role") == "diagram"]
         assert call_costs(run, {}, None)["llm_calls"] == (5 if enabled else 2)
+        assert authorizations == [f"Bearer {key}"] * len(requests)
+        if auth != "runtime_key":
+            assert json.loads((config / "auth.json").read_text())[provider] == credential
         if enabled:
             assert 'data-report-diagram="true"' in report.read_text()
             assert len([e for e in drawing if e["type"] == "message_end"]) == 1

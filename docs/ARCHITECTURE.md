@@ -66,6 +66,8 @@ Agent 日志默认保留每轮结束消息与 usage、工具参数/结果、生�
 
 任务输入 `diagrams` 默认 `true`，`false` 时不提供绘图工具；没有前端选择控件。主 Agent 决定图示必要性、位置、解释目标、局部上下文与来源 ID，至多调用一次 `generate_diagram`。扩展从完整转写提取指定原文，启动全新 Pi RPC 进程／会话，只加载独立绘图指引，不继承主会话历史、不提供任何工具。子会话沿用调用时的模型和思考档位，关闭自动重试，180 秒截止，仅一次输出 SVG。产物与会话保存在 `assets/diagram/`，主上下文只收到插入标记。Python 在检查预览和交付时内联嵌入 SVG、图注及来源绑定；已委派却缺图或缺插入位置时交付失败，不把完整绘图过程交还主 Agent。
 
+子会话复用任务模型配置与认证：OAuth 从链接的 `auth.json` 读取，不转成 `--api-key`；非 OAuth 模型保留 API Key 传递，包括只在父进程生效的临时 Key。术语 Web Search 的 provider、模型与凭据独立配置，不跟随绘图或主报告的认证方式。
+
 子会话的请求与完成用量通过 RPC notification 写入同一 `pi.events.jsonl`，标记 `_agent_role: diagram`，参与现有费用汇总；这些事件不参与主会话的完成或模型恢复判断。针对实测出现的主 Agent 回读，扩展拦截常规 Read/Bash 对图示材料和检查 HTML 的直接访问，检查器返回 `diagram_count` 与 PNG 供确认；该路径约束不等于文件系统沙箱。取消和执行时限仍由原 Worker／任务容器负责，工具的取消信号同时停止绘图进程。独立会话仅隔离上下文，其输出的语义和布局仍需核对。
 
 Pi consumer 等待 `agent_settled`，并要求最终 assistant 的 `stopReason == "stop"`；`agent_end` 可能出现在重试或压缩之前。受控续跑只处理调用方明确配置且可识别的模型请求错误，沿用当前 Pi session 和任务工作区；报告仍须通过完整 HTML 检查才返回成功。整个 Worker 仍受调用方传入的总 deadline 限制。截图失败记录 `image_error`，HTML 仍可进入 `RENDERED`。

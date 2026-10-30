@@ -55,11 +55,15 @@ export default function (pi) {
           "--session-dir", join(directory, "sessions"), "--append-system-prompt",
           await readFile(join(ctx.cwd, "diagram.md"), "utf8"),
           "--extension", join(ctx.cwd, "request_trace.ts")];
-        // The project's 0.85 pin and the local 1.0 install expose different auth methods.
-        const key = ctx.modelRegistry.getApiKeyAndHeaders
-          ? (await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model)).apiKey
-          : await ctx.modelRegistry.getApiKey(ctx.model);
-        if (key) args.push("--api-key", key);
+        // OAuth stays in auth.json: --api-key would replace it with API-key auth.
+        // Forward non-OAuth keys as well, including runtime-only keys absent from auth.json.
+        if (!ctx.modelRegistry.isUsingOAuth(ctx.model)) {
+          // The project's 0.85 pin and the local 1.0 install expose different auth methods.
+          const key = ctx.modelRegistry.getApiKeyAndHeaders
+            ? (await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model)).apiKey
+            : await ctx.modelRegistry.getApiKey(ctx.model);
+          if (key) args.push("--api-key", key);
+        }
         let lastAssistant;
         await new Promise<void>((resolve, reject) => {
           const child = spawn("pi", args, { cwd: directory,
