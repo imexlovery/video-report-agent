@@ -2,6 +2,7 @@
 
 import html
 import json
+import os
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -9,6 +10,29 @@ from pathlib import Path
 PLACEHOLDER = "<!-- video-report-diagram -->"
 SVG_NS = "http://www.w3.org/2000/svg"
 ET.register_namespace("", SVG_NS)
+
+
+def diagram_model_config(selection: dict | None = None) -> dict | None:
+    """Snapshot an optional drawing model; credentials remain in Pi configuration."""
+    if selection is None:
+        selection = {
+            key: os.getenv(f"DIAGRAM_{key.upper()}", "")
+            for key in ("provider", "model", "thinking")
+        }
+    if not isinstance(selection, dict) or set(selection) - {"provider", "model", "thinking"}:
+        raise ValueError("绘图模型配置只接受 provider、model 和 thinking")
+    if any(not isinstance(value, str) for value in selection.values()):
+        raise ValueError("绘图模型配置必须是字符串")
+    configured = {key: value for key, value in selection.items() if value.strip()}
+    if not configured:
+        return None
+    if not configured.get("provider") or not configured.get("model"):
+        raise ValueError("独立绘图模型须同时配置 provider 和 model")
+    if configured.get("thinking") not in {
+        None, "off", "minimal", "low", "medium", "high", "xhigh", "max",
+    }:
+        raise ValueError("无效的绘图思考强度")
+    return configured
 
 
 def embed_diagram(report: Path, run: Path) -> None:

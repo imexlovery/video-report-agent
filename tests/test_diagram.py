@@ -10,11 +10,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from video_report_agent.diagram import PLACEHOLDER, embed_diagram
+from video_report_agent.diagram import PLACEHOLDER, diagram_model_config, embed_diagram
 from video_report_agent.inspect_report import inspect_report
 from video_report_agent.pi import PiRunner
 from video_report_agent.pipeline import create_run
-from video_report_agent.task_container import stage_inputs
+from video_report_agent.task_container import snapshot_models, stage_inputs
 from video_report_agent.usage import call_costs
 
 SVG = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 200">'
@@ -92,11 +92,44 @@ def test_diagram_flag_is_saved_and_staged(tmp_path, enabled):
     assert json.loads((stage / "input.json").read_text())["diagrams"] is enabled
 
 
+def test_drawing_configuration_is_saved_at_creation_and_staged(tmp_path, monkeypatch):
+    selection = {"provider": "drawing", "model": "drawing-model", "thinking": "high"}
+    for key, value in selection.items():
+        monkeypatch.setenv(f"DIAGRAM_{key.upper()}", value)
+    run = create_run(tmp_path, "BV1aTtb6uE7d",
+                     model_selection={"provider": "main", "model": "main"})
+    monkeypatch.setenv("DIAGRAM_MODEL", "changed-after-queueing")
+    (run / "transcript.md").write_text("source")
+    staged = json.loads((stage_inputs(run) / "input.json").read_text())
+    metadata = json.loads((run / "input.json").read_text())
+    assert metadata["diagram_model_selection"] == staged["diagram_model_selection"] == selection
+    assert metadata["model_selection"] == {"provider": "main", "model": "main"}
+    inherit = create_run(tmp_path, "BV1aTtb6uE7d", diagram_model_selection={})
+    assert "diagram_model_selection" not in json.loads((inherit / "input.json").read_text())
+    disabled = create_run(tmp_path, "BV1aTtb6uE7d", diagrams=False)
+    assert "diagram_model_selection" not in json.loads((disabled / "input.json").read_text())
+
+
+@pytest.mark.parametrize("selection", [
+    {"provider": "drawing"}, {"model": "model"}, {"thinking": "low"},
+    {"provider": "drawing", "model": "model", "api_key": "secret"},
+    {"provider": "drawing", "model": "model", "thinking": "invalid"},
+    {"provider": "drawing", "model": None}, [],
+])
+def test_invalid_drawing_configuration_is_rejected(selection):
+    with pytest.raises(ValueError):
+        diagram_model_config(selection)
+
+
 @pytest.mark.skipif(shutil.which("pi") is None, reason="Pi is not installed")
 @pytest.mark.parametrize("enabled,cancel,auth", [
     (True, False, "runtime_key"), (False, False, "runtime_key"),
     (True, True, "runtime_key"), (True, False, "stored_key"),
     (True, False, "oauth"),
+    (True, False, "oauth_to_key"), (True, False, "key_to_oauth"),
+    (True, False, "key_to_key"), (True, True, "key_to_oauth"),
+    (True, False, "key_to_same_provider"),
+    (True, False, "legacy_no_input"),
 ])
 def test_real_pi_isolated_diagram_and_default_interface(
     tmp_path, monkeypatch, enabled, cancel, auth,
@@ -157,7 +190,7 @@ def test_real_pi_isolated_diagram_and_default_interface(
             self.end_headers()
             for change, finish in [(delta, None), ({}, reason)]:
                 data = {"id": "stub", "object": "chat.completion.chunk", "created": 1,
-                        "model": "diagram-stub", "choices": [
+                        "model": body["model"], "choices": [
                             {"index": 0, "delta": change, "finish_reason": finish}]}
                 if finish:
                     data["usage"] = {"prompt_tokens": 10, "completion_tokens": 20,
@@ -172,22 +205,46 @@ def test_real_pi_isolated_diagram_and_default_interface(
     config = tmp_path / "config"
     config.mkdir()
     # Keep native Codex OAuth validation, with completions served only by the local fixture.
-    provider = "openai-codex" if auth == "oauth" else "diagram-local"
-    key = "synthetic-oauth-access" if auth == "oauth" else "ephemeral-key"
-    if auth != "runtime_key":
-        credential = ({"type": "oauth", "access": key, "refresh": "synthetic-refresh",
-                       "expires": int(time.time() * 1000) + 3_600_000,
-                       "accountId": "synthetic-account"}
-                      if auth == "oauth" else {"type": "api_key", "key": key})
-        (config / "auth.json").write_text(json.dumps({provider: credential}))
-    (config / "models.json").write_text(json.dumps({"providers": {provider: {
-        "baseUrl": f"http://127.0.0.1:{server.server_port}/v1", "api": "openai-completions",
-        "models": [{"id": "diagram-stub", "name": "Fixture", "reasoning": False,
-                    "input": ["text"], "contextWindow": 128000, "maxTokens": 4096,
-                    "cost": {"input": 1, "output": 1, "cacheRead": 0, "cacheWrite": 0}}],
-    }}}))
+    independent = "_to_" in auth
+    provider = "openai-codex" if auth in {"oauth", "oauth_to_key"} else "diagram-local"
+    key = "synthetic-oauth-access" if provider == "openai-codex" else "ephemeral-key"
+    drawing_provider = ("openai-codex" if auth == "key_to_oauth" else "drawing-local"
+                        ) if independent else provider
+    if auth == "key_to_same_provider":
+        drawing_provider = provider
+    drawing_model = "drawing-stub" if independent else "diagram-stub"
+    drawing_key = "separate-drawing-key" if independent else key
+    if drawing_provider == provider:
+        drawing_key = key
+    models, credentials = {}, {}
+    roles = [(provider, "diagram-stub", key)]
+    if independent:
+        roles.append((drawing_provider, drawing_model, drawing_key))
+    for role_provider, role_model, role_key in roles:
+        model_config = models.setdefault(role_provider, {
+            "baseUrl": f"http://127.0.0.1:{server.server_port}/v1", "api": "openai-completions",
+            "models": [],
+        })
+        model_config["models"].append({
+            "id": role_model, "name": "Fixture", "reasoning": independent,
+            "input": ["text"], "contextWindow": 128000, "maxTokens": 4096,
+            "cost": {"input": 1, "output": 1, "cacheRead": 0, "cacheWrite": 0},
+        })
+        if role_provider == "openai-codex":
+            credentials[role_provider] = {
+                "type": "oauth", "access": role_key, "refresh": "synthetic-refresh",
+                "expires": int(time.time() * 1000) + 3_600_000, "accountId": "synthetic-account",
+            }
+        elif auth == "stored_key" or (
+            independent and role_provider == drawing_provider and drawing_provider != provider
+        ):
+            credentials[role_provider] = {"type": "api_key", "key": role_key}
+    (config / "models.json").write_text(json.dumps({"providers": models}))
+    (config / "auth.json").write_text(json.dumps(credentials))
     monkeypatch.setattr("video_report_agent.pi.PI_AGENT_DIR", config)
-    run = create_run(tmp_path / "runs", "BV1aTtb6uE7d", diagrams=enabled)
+    run = create_run(tmp_path / "runs", "BV1aTtb6uE7d", diagrams=enabled,
+                     diagram_model_selection={"provider": drawing_provider, "model": drawing_model,
+                                              "thinking": "high"} if independent else {})
     if enabled:
         # Existing callers omit the flag; omission must also enable the tool.
         metadata = json.loads((run / "input.json").read_text())
@@ -196,9 +253,11 @@ def test_real_pi_isolated_diagram_and_default_interface(
     (run / "transcript.md").write_text(
         "[unit-000001 | 0–1s] 必要原文\n[unit-000002 | 1–2s] FULL_TRANSCRIPT_ONLY\n"
     )
+    if auth == "legacy_no_input":
+        (run / "input.json").unlink()
     try:
         runner = PiRunner(provider=provider, model="diagram-stub",
-                          api_key=key if auth == "runtime_key" else None,
+                          api_key=key if provider not in credentials else None,
                           thinking="off", timeout=40, isolation="local")
         if cancel:
             async def interrupt():
@@ -222,13 +281,32 @@ def test_real_pi_isolated_diagram_and_default_interface(
         events = [json.loads(line) for line in (run / "pi.events.jsonl").read_text().splitlines()]
         drawing = [e for e in events if e.get("_agent_role") == "diagram"]
         assert call_costs(run, {}, None)["llm_calls"] == (5 if enabled else 2)
-        assert authorizations == [f"Bearer {key}"] * len(requests)
-        if auth != "runtime_key":
-            assert json.loads((config / "auth.json").read_text())[provider] == credential
+        assert authorizations == [f"Bearer {drawing_key if not body.get('tools') else key}"
+                                  for body in requests]
+        assert json.loads((config / "auth.json").read_text()) == credentials
+        if auth == "key_to_key":
+            stage = stage_inputs(run)
+            snapshot = run / ".generation-config"
+            snapshot_models(snapshot, config, [
+                {"provider": provider, "model": "diagram-stub", "api_key": key},
+                {"provider": drawing_provider, "model": drawing_model},
+            ])
+            assert json.loads((snapshot / "auth.json").read_text()) == {
+                provider: {"type": "api_key", "key": key},
+                drawing_provider: {"type": "api_key", "key": drawing_key},
+            }
+            staged = (stage / "input.json").read_text()
+            assert key not in staged and drawing_key not in staged
         if enabled:
             assert 'data-report-diagram="true"' in report.read_text()
             assert len([e for e in drawing if e["type"] == "message_end"]) == 1
             child = next(body for body in requests if not body.get("tools"))
+            assert child["model"] == drawing_model
+            assert next(e for e in drawing if e["type"] == "request_start")["provider"] == (
+                drawing_provider
+            )
+            if independent:
+                assert child["reasoning_effort"] == "high"
             assert "FULL_TRANSCRIPT_ONLY" not in json.dumps(child)
             assert "必要原文" in json.dumps(child, ensure_ascii=False)
             assert len(list((run / "assets/diagram/sessions").glob("*.jsonl"))) == 1

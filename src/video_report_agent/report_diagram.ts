@@ -28,6 +28,14 @@ export default function (pi) {
     async execute(_id, params, signal, _update, ctx) {
       if (called) throw new Error("每份报告最多一个绘图任务，不再调用绘图。");
       if (!ctx.model) throw new Error("没有可用的绘图模型。");
+      const input = await readFile(join(ctx.cwd, "input.json"), "utf8").catch(error => {
+        if (error.code === "ENOENT") return "{}";
+        throw error;
+      });
+      const selection = JSON.parse(input).diagram_model_selection;
+      const model = selection
+        ? ctx.modelRegistry.find(selection.provider, selection.model) : ctx.model;
+      if (!model) throw new Error("独立绘图模型未在 Pi 中配置。");
       const lines = (await readFile(join(ctx.cwd, "transcript.md"), "utf8")).split("\n");
       const units = new Map(lines.map(line => [line.match(/^\[([^ |]+) \|/)?.[1], line]));
       if (params.source_units.some(id => !units.has(id))) throw new Error("图示来源 ID 不存在。");
@@ -49,19 +57,20 @@ export default function (pi) {
         await writeFile(join(config, "settings.json"), JSON.stringify({
           retry: { enabled: false, maxRetries: 0, provider: { maxRetries: 0 } },
         }));
-        const args = ["--mode", "rpc", "--provider", ctx.model.provider, "--model", ctx.model.id,
-          "--thinking", pi.getThinkingLevel(), "--no-tools", "--no-extensions", "--no-skills",
+        const args = ["--mode", "rpc", "--provider", model.provider, "--model", model.id,
+          "--thinking", selection?.thinking ?? pi.getThinkingLevel(),
+          "--no-tools", "--no-extensions", "--no-skills",
           "--no-context-files", "--no-prompt-templates", "--no-themes", "--offline",
           "--session-dir", join(directory, "sessions"), "--append-system-prompt",
           await readFile(join(ctx.cwd, "diagram.md"), "utf8"),
           "--extension", join(ctx.cwd, "request_trace.ts")];
         // OAuth stays in auth.json: --api-key would replace it with API-key auth.
         // Forward non-OAuth keys as well, including runtime-only keys absent from auth.json.
-        if (!ctx.modelRegistry.isUsingOAuth(ctx.model)) {
+        if (!ctx.modelRegistry.isUsingOAuth(model)) {
           // The project's 0.85 pin and the local 1.0 install expose different auth methods.
           const key = ctx.modelRegistry.getApiKeyAndHeaders
-            ? (await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model)).apiKey
-            : await ctx.modelRegistry.getApiKey(ctx.model);
+            ? (await ctx.modelRegistry.getApiKeyAndHeaders(model)).apiKey
+            : await ctx.modelRegistry.getApiKey(model);
           if (key) args.push("--api-key", key);
         }
         let lastAssistant;

@@ -32,6 +32,7 @@ def stage_inputs(run: Path) -> Path:
         json.dumps(
             {key: metadata[key] for key in (
                 "url", "video_id", "report_mode", "diagrams", "term_correction",
+                "diagram_model_selection",
                 "search_provider", "search_model",
                 "title", "uploader", "visual_enhancement",
             )

@@ -442,10 +442,18 @@ def test_final_fallback_has_reserved_attempt_and_never_routes_back(tmp_path, pat
     assert state["recovery_count"] == len(sequence) <= 3
 
 
-def test_docker_recovery_snapshots_final_provider(tmp_path, monkeypatch):
+@pytest.mark.parametrize("drawing,enabled", [
+    (None, True), ("drawing", True), ("drawing", False), ("primary", True),
+])
+def test_docker_recovery_snapshots_final_provider(tmp_path, monkeypatch, drawing, enabled):
     from video_report_agent import pi
 
     (tmp_path / "transcript.md").write_text("synthetic transcript")
+    (tmp_path / "input.json").write_text(json.dumps({
+        "diagrams": enabled,
+        **({"diagram_model_selection": {"provider": drawing, "model": "fixture"}}
+           if drawing else {}),
+    }))
     monkeypatch.setattr(pi, "PI_AGENT_DIR", tmp_path / "shared-pi")
     selections = []
 
@@ -462,7 +470,11 @@ def test_docker_recovery_snapshots_final_provider(tmp_path, monkeypatch):
                 "final_fallback": {"provider": "final", "model": "fixture"}}
     asyncio.run(PiRunner(provider="primary", model="fixture", api_key="FAKE",
                         model_recovery=recovery, isolation="docker").run(tmp_path))
-    assert [item["provider"] for item in selections] == ["primary", "alternate", "final"]
+    assert [item["provider"] for item in selections] == (
+        ["primary"] + ([drawing] if drawing and enabled else []) + ["alternate", "final"]
+    )
+    if drawing and enabled:
+        assert selections[1]["api_key"] == ("FAKE" if drawing == "primary" else None)
 
 
 @pytest.mark.parametrize("category,count,seconds,expected_action", [

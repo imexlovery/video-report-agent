@@ -263,6 +263,12 @@ class PiRunner:
                 initialize_pi_config(PI_AGENT_DIR)
                 selections = [{"provider": self.provider, "model": self.model,
                                "api_key": self.api_key}]
+                metadata = json.loads((generation / "input.json").read_text())
+                if metadata.get("diagrams", True) and metadata.get("diagram_model_selection"):
+                    drawing = metadata["diagram_model_selection"]
+                    selections.append({**drawing, "api_key": (
+                        self.api_key if drawing["provider"] == self.provider else None
+                    )})
                 if self.model_recovery:
                     for role in ("alternate", "final_fallback"):
                         if self.model_recovery.get(role):

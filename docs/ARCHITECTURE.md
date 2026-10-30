@@ -64,9 +64,11 @@ Agent 日志默认保留每轮结束消息与 usage、工具参数/结果、生�
 
 生成 Skill 以具体对象、动作和关系直接成文，单一作者归属由题头承接；个人经历、多人分歧和第三方引用保留必要主体。图内只表达关系与必要标签，外部图注仅用短图名，补充论证在正文展开；强调框讲完内容即止，必要归属可用短署名，条件与结论合写。材料处理、生成及检查记录留在工作目录，来源折叠区只保留作品信息和必要定位映射。文风检查纳入既有的一轮集中检查与修订，不增加独立审稿调用。
 
-任务输入 `diagrams` 默认 `true`，`false` 时不提供绘图工具；没有前端选择控件。主 Agent 决定图示必要性、位置、解释目标、局部上下文与来源 ID，至多调用一次 `generate_diagram`。扩展从完整转写提取指定原文，启动全新 Pi RPC 进程／会话，只加载独立绘图指引，不继承主会话历史、不提供任何工具。子会话沿用调用时的模型和思考档位，关闭自动重试，180 秒截止，仅一次输出 SVG。产物与会话保存在 `assets/diagram/`，主上下文只收到插入标记。Python 在检查预览和交付时内联嵌入 SVG、图注及来源绑定；已委派却缺图或缺插入位置时交付失败，不把完整绘图过程交还主 Agent。
+任务输入 `diagrams` 默认 `true`，`false` 时不提供绘图工具；没有前端选择控件。主 Agent 决定图示必要性、位置、解释目标、局部上下文与来源 ID，至多调用一次 `generate_diagram`。扩展从完整转写提取指定原文，启动全新 Pi RPC 进程／会话，只加载独立绘图指引，不继承主会话历史、不提供任何工具。未配置独立绘图模型时，子会话沿用调用时的模型和思考档位；配置后使用保存的绘图模型，关闭自动重试，180 秒截止，仅一次输出 SVG。产物与会话保存在 `assets/diagram/`，主上下文只收到插入标记。Python 在检查预览和交付时内联嵌入 SVG、图注及来源绑定；已委派却缺图或缺插入位置时交付失败，不把完整绘图过程交还主 Agent。
 
-子会话复用任务模型配置与认证：OAuth 从链接的 `auth.json` 读取，不转成 `--api-key`；非 OAuth 模型保留 API Key 传递，包括只在父进程生效的临时 Key。术语 Web Search 的 provider、模型与凭据独立配置，不跟随绘图或主报告的认证方式。
+独立绘图同时设置 `DIAGRAM_PROVIDER` 与 `DIAGRAM_MODEL`，可选 `DIAGRAM_THINKING`；思考强度省略时沿用主会话。新任务将其保存为 `diagram_model_selection`，后续环境修改不改变排队任务；历史任务缺字段时继续沿用主模型。程序调用可通过 `create_run(diagram_model_selection={...})` 指定，传空字典可显式沿用主模型。此配置不改变主报告或术语 Web Search 的模型路由。
+
+子会话按绘图模型的 provider 解析各自的 Pi 认证：OAuth 从链接的 `auth.json` 读取，不转成 `--api-key`；非 OAuth 模型保留 API Key 传递，包括同 provider 下只在父进程生效的临时 Key。不同 provider 使用各自已配置的 Key，不复用主模型的临时 Key。任务输入只保存 provider、model、thinking，不保存凭据。Docker 快照额外包含选定绘图模型及其 API Key，OAuth 仍只支持无隔离 Local；术语 Web Search 的 provider、模型与凭据继续独立配置。
 
 子会话的请求与完成用量通过 RPC notification 写入同一 `pi.events.jsonl`，标记 `_agent_role: diagram`，参与现有费用汇总；这些事件不参与主会话的完成或模型恢复判断。针对实测出现的主 Agent 回读，扩展拦截常规 Read/Bash 对图示材料和检查 HTML 的直接访问，检查器返回 `diagram_count` 与 PNG 供确认；该路径约束不等于文件系统沙箱。取消和执行时限仍由原 Worker／任务容器负责，工具的取消信号同时停止绘图进程。独立会话仅隔离上下文，其输出的语义和布局仍需核对。
 
@@ -82,7 +84,7 @@ Pi consumer 等待 `agent_settled`，并要求最终 assistant 的 `stopReason =
 
 公开仓库的 `.env.example` 为本地 CLI 入门显式设置 `PI_TASK_ISOLATION=local`，复制后无需 Docker 或清理器；这与代码默认值一致，也不改变托管服务 Public 模式强制使用 Docker 的策略。公开 Core 不包含托管服务的 Dockerfile 或 Compose 部署配置。
 
-每个任务仅挂载 `.generation/` 到 `/workspace`，材料为完整转写（含来源 ID）、来源/模式元数据、简介及选定 Skill/template。当前、备用及可选最终模型由可信侧使用已安装 Pi 的离线目录解析；API-key 配置快照单独只读挂载，并复制到容器 tmpfs 中供 Pi 使用。不提供共享认证目录、OAuth、其他任务或调用方环境；不支持隔离模式中的 OAuth 模型。只有报告、assets、sessions、inspection 及术语修正的三个文档回传原 run，回传拒绝符号链接及非普通文件。
+每个任务仅挂载 `.generation/` 到 `/workspace`，材料为完整转写（含来源 ID）、来源/模式元数据、简介及选定 Skill/template。当前、备用、可选最终模型及独立绘图模型由可信侧使用已安装 Pi 的离线目录解析；API-key 配置快照单独只读挂载，并复制到容器 tmpfs 中供 Pi 使用。不提供共享认证目录、OAuth、其他任务或调用方环境；不支持隔离模式中的 OAuth 模型。只有报告、assets、sessions、inspection 及术语修正的三个文档回传原 run，回传拒绝符号链接及非普通文件。
 
 容器复用调用方配置的 `PI_TASK_IMAGE`（默认 `video-report-agent:linux-amd64`），以控制端的非 root UID/GID 运行；只读根文件系统、无 capabilities、no-new-privileges、受限 tmpfs，默认 2 GiB 内存、2 CPU、256 PID。每个任务创建独立 bridge，无端口发布、host PID/IPC/network 或 Docker socket。任务 bridge 与服务及其他任务分离；这没有实现所有宿主机/局域网私网出站封锁。模型凭证可被任务 bash 读取，是当前保留风险。
 

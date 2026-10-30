@@ -170,6 +170,7 @@ CLI 默认自动按“作者字幕轨 → B站 ai-zh → ASR”取得文字稿�
 
 - **存储**：独立 CLI 默认使用 `runs/state.sqlite3`，保存任务、转写、报告 HTML 与缓存等结构化数据。任务目录里的 JSON、转写和 HTML 是执行导出；媒体、PNG、Pi 会话和诊断日志仍存文件。详见 [SQLite 存储](docs/sqlite-storage.md)。
 - **配置**：从工作目录读取 `.env`，进程环境变量优先。Pi 配置保存在工作目录的 `config/pi/`，缺失的模型默认配置会初始化，已有配置保留。其他目录通过启动前的 `PI_CODING_AGENT_DIR` 指定。不要提交凭证。
+- **独立绘图模型**：可同时设置 `DIAGRAM_PROVIDER`、`DIAGRAM_MODEL`，可选 `DIAGRAM_THINKING`；在 Pi 中配置对应 provider 的 API Key 或 OAuth。留空时沿用主报告模型和认证，新配置只影响新任务。OAuth 需要无隔离 Local；Docker 绘图使用 API Key。见 [Core 架构](docs/ARCHITECTURE.md#完成与检查)。
 - **隔离**：示例使用 `PI_TASK_ISOLATION=local`，Pi 工具拥有本机用户权限。Docker 模式需要应用镜像、Docker daemon 与同一 scope 的健康 task cleaner；选用后失败不会退回本地执行。详见 [Core 架构](docs/ARCHITECTURE.md)。
 - **追踪**：`run.trace.jsonl` 记录流水线阶段，`pi.events.jsonl` 记录 Agent 模型与工具事件。完成需等待 `agent_settled`、最终 assistant `stopReason == "stop"`，并通过 HTML 交付检查。
 - **边界**：内置视频入口面向公开 Bilibili 视频，不提供登录或私有视频访问。视频上限 5 小时，执行期限 30 分钟；本地停止后已提交的云 ASR 仍可能继续计费。默认只理解转写，画面中的非语音信息可能缺失。完整流水线的原生 Windows 运行未在此作为已验证方案。

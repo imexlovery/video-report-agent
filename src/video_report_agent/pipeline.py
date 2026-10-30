@@ -14,6 +14,7 @@ from pathlib import Path
 from .asr import AsrError, transcribe_audio
 from .audio import AudioExtractionError, extract_audio
 from .bilibili_subtitles import SubtitleError, fetch_subtitles, validate_sources
+from .diagram import diagram_model_config
 from .failures import asr_failure
 from .ingest import UrlIngestError, download_bilibili_video, validate_bilibili_url
 from .media_config import resolve_media_config
@@ -50,6 +51,7 @@ def create_run(
     *,
     report_mode="standard",
     diagrams=True,
+    diagram_model_selection=None,
     term_correction: bool = False,
     search_provider=None,
     search_model=None,
@@ -105,11 +107,13 @@ def create_run(
         else {}
     )
     source = validate_bilibili_url(url)
+    drawing = diagram_model_config(diagram_model_selection) if diagrams else None
     run = root.resolve() / uuid.uuid4().hex
     metadata = {
         **(search_config(search_provider, search_model) if term_correction else {}),
         **({"model_selection": model_selection} if model_selection else {}),
         **({"model_recovery": model_recovery} if model_recovery else {}),
+        **({"diagram_model_selection": drawing} if drawing else {}),
         **media_config,
         "url": source.canonical_url,
         "video_id": source.video_id,
