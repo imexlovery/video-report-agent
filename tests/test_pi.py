@@ -636,6 +636,7 @@ print(json.dumps({"type":"agent_settled"}),flush=True)
     assert "{{VIDEO_DESCRIPTION}}" in invocation["prompt"]
     assert "不要读取、改写或自行生成视频简介" in invocation["prompt"]
     assert "蓝色或黄色背景" not in invocation["prompt"]
+    assert "布局前读取 modes/standard.md 的选型表" in invocation["prompt"]
 
 
 def test_project_provider_model_and_api_key_are_passed_but_redacted(tmp_path, monkeypatch):

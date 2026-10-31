@@ -127,3 +127,36 @@ def test_brief_template_fills_shared_delivery_contract(tmp_path):
     assert "视频报告·速览" in html
     assert 'href="https://vreport.tri4t.xyz/"' in html
     assert 'class="brief-paper"' in html
+
+
+def test_relation_components_keep_long_content_visible_in_export(tmp_path):
+    """Real CSP/export path, long labels, omitted optional metadata and print."""
+    import re
+
+    from video_report_agent.report_image import render_report_image
+    template = TEMPLATE.read_text()
+    body = re.search(r'<!-- Standard 关系组件示例：(.*?)-->', template, re.S).group(1)
+    # Extract the four complete examples, not their editorial captions.
+    blocks = re.findall(
+        r'(<dl class="definitions">.*?</dl>|<div class="mapping">.*?</div></div>|'
+        r'<ol class="steps steps-route">.*?</ol>|<div class="branches">.*?</ul></div>)',
+        body, re.S,
+    )
+    assert len(blocks) == 4
+    content = ''.join(blocks).replace('带单位的测量值', '条件与范围必须完整保留' * 15)
+    content = content.replace('统一单位的数值', '结果解释与单位' * 18)
+    content = re.sub(r'<span class="mapping-label">.*?</span>', '', content)
+    html = re.sub(r'<!--.*?-->', '', template, flags=re.S)
+    html = html.replace('{{BODY}}', content)
+    html = re.sub(r'\{\{\w+\}\}', '', html)
+    (tmp_path / 'report.html').write_text(html)
+    def check(page, errors):
+        assert not errors
+        for media in ['screen', 'print']:
+            page.emulate_media(media=media)
+            assert page.locator('.mapping-row').inner_text().count('条件与范围必须完整保留') == 15
+            assert page.evaluate("""() => [...document.querySelectorAll(
+                '.mapping-row>*,.definitions dd,.steps-route>li,.branches li'
+            )].every(e => e.scrollWidth <= e.clientWidth + 2
+                && e.scrollHeight <= e.clientHeight + 2)""")
+    assert render_report_image(tmp_path, on_page=check).is_file()

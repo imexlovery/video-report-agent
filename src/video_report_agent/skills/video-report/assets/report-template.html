@@ -37,6 +37,13 @@ footer{display:flex;align-items:baseline;justify-content:space-between;gap:16px;
 @media(min-width:1195px) and (max-width:1448px){.paper{margin-left:310px;margin-right:24px}.report-nav{left:24px}}
 @media(max-width:1194px){.report-nav{display:none}}
 @media print{.report-nav{display:none}}
+
+/* 开放式关系组件：沿用纸面、字号与蓝橙色，不另设题材皮肤。 */
+.definitions{margin:24px 0}.definitions>div{display:grid;grid-template-columns:minmax(120px,170px) minmax(0,1fr);gap:22px;padding:14px 0;border-bottom:1px solid var(--line)}.definitions dt{font-weight:650;color:var(--heading)}.definitions dd{margin:0;min-width:0}.definitions>div:last-child{border-bottom:0}
+.mapping{display:grid;gap:18px;margin:26px 0}.mapping-row{display:grid;grid-template-columns:minmax(0,1fr) 22px minmax(100px,150px) 22px minmax(0,1fr);gap:10px;align-items:center}.mapping-row>div{min-width:0}.mapping-task{padding:8px 12px;background:var(--blue-wash);color:var(--blue);border-radius:5px;text-align:center}.mapping-arrow{color:var(--blue);text-align:center}.mapping-label{display:block;color:var(--muted);font-size:13px}
+.steps.steps-route{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:24px}.steps-route>li{padding:38px 0 0;margin:0;min-width:0}.steps-route>li:before{top:0}.steps-route>li:after{content:"";position:absolute;left:32px;right:0;top:12px;border-top:1px solid var(--line)}.steps-route>li:last-child:after{display:none}.steps-route h3{font-size:17px}.steps-route p{font-size:16px}
+.branches{margin:24px 0}.branches>p{font-weight:650;color:var(--heading)}.branches>ul{list-style:none;margin:14px 0 0 12px;padding:0 0 0 24px;border-left:1px solid #a8bfcd}.branches>ul>li{position:relative;padding:6px 0;margin:8px 0}.branches>ul>li:before{content:"";position:absolute;left:-24px;top:21px;width:16px;border-top:1px solid #a8bfcd}
+@media print{.mapping-row,.definitions>div,.branches>ul>li{break-inside:avoid}}
 </style>
 </head>
 <body><main class="paper">
@@ -123,6 +130,16 @@ Decision Tree：使用嵌套 ul/li，在分支开头写明条件，再写动作�
 </section>
 链接替换为真实原视频的时间定位 URL，点击时间跳到该起点；已有查询参数时用 &amp; 连接，保留分集参数并替换已有定位参数。无可定位的原视频链接时只显示时间文本。每章最多显示一个时间区间，以实际使用来源的最早起点与最晚终点作为章节定位范围，起点向下、终点向上取整至秒；即使来源不连续，也不并列多个区间或追加数量后缀，完整来源保留在隐藏绑定中。统一补零 MM:SS–MM:SS，来源达到一小时则全文使用 HH:MM:SS–HH:MM:SS；无可靠时间时省略 section-time。 -->
 <!-- 主报告只复用现有组件，遵守 Skill 的禁止自由绘图与一次集中修订约定。 -->
+<!-- Standard 关系组件示例：只替换来源支持的内容与 ID，缺失必要关系时回到文字。
+名称与解释 / 证据摘要：dl.definitions；证据字段按来源选择，不填造未知字段。
+<dl class="definitions"><div data-source-units="实际来源ID"><dt>样本与条件</dt><dd>24 个样本，在同一测试条件下观察 8 周。</dd></div><div data-source-units="实际来源ID"><dt>结果与范围</dt><dd>写实际观察结果及适用范围，不外推其他对象。</dd></div></dl>
+输入—处理—输出：每行独立，不把行间先后画成流水线；箭头仅表示本行转换。
+<div class="mapping"><div class="mapping-row" data-source-units="实际来源ID"><div><span class="mapping-label">输入</span>带单位的测量值</div><span class="mapping-arrow" aria-hidden="true">→</span><div class="mapping-task">单位换算</div><span class="mapping-arrow" aria-hidden="true">→</span><div><span class="mapping-label">输出</span>统一单位的数值</div></div></div>
+阶段路线：短阶段可用 steps-route；长解释或很多阶段退回原 steps，保留顺序与条件。
+<ol class="steps steps-route"><li data-source-units="实际来源ID"><h3>采样</h3><p>按同一条件收集样本。</p></li><li data-source-units="实际来源ID"><h3>测量</h3><p>保留方法与单位。</p></li><li data-source-units="实际来源ID"><h3>分析</h3><p>在样本范围内解释结果。</p></li></ol>
+分叉：明确标出条件、候选解释或作用性质；连接线不编码概率或确定因果。
+<div class="branches"><p data-source-units="实际来源ID">结果未改善：两种待检验的解释</p><ul><li data-source-units="实际来源ID"><strong>解释甲：</strong>测量未覆盖目标变化；需检查测量条件。</li><li data-source-units="实际来源ID"><strong>解释乙：</strong>干预未改变目标；需验证干预效果。</li></ul></div>
+-->
 {{BODY}}
 <details><summary>来源说明</summary>{{SOURCES}}</details>
 <footer><span>视频报告·精读</span><a class="footer-link" href="https://vreport.tri4t.xyz/">vreport.tri4t.xyz</a></footer>

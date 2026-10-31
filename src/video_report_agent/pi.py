@@ -445,6 +445,13 @@ class PiRunner:
                 '"$VIDEO_REPORT_PYTHON" -m video_report_agent.inspect_report，'
                 "复核加 --label revision；不探测浏览器或自行编写截图程序。"
             )
+        if report_mode == "standard" and mode_path.is_file():
+            prompt += (
+                "布局前读取 modes/standard.md 的选型表和模板结构示例，"
+                "先确认信息关系、必要字段与适用条件，再选择组件；"
+                "缺数据或表达无收益时回到正文。整篇组件节奏与图文重复检查"
+                "合并到既有的一轮集中检查，不按组件数量配额安排布局。"
+            )
         if self.review:
             prompt += (
                 "本次启用报告检查：写完 report.html 后必须调用 inspect_report。"
