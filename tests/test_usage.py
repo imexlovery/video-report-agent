@@ -215,3 +215,21 @@ def test_visual_usage_is_included_and_invalidates_cached_totals(tmp_path):
     call = usage.execution_statistics(tmp_path, {})["model_calls"][0]
     assert call["stage"] == "visual"
     assert call["message"]["usage"]["cacheRead"] == 20
+
+
+def test_visual_usage_preserves_selected_provider_and_pi_cost(tmp_path):
+    (tmp_path / "visual").mkdir()
+    (tmp_path / "visual/invocation.json").write_text(json.dumps({
+        "request_count": 1, "status": "completed", "provider": "selected-provider",
+        "model": "selected-model", "started_at": 1000, "finished_at": 1001,
+    }))
+    tokens = {"input": 100, "output": 30, "cacheRead": 20, "cacheWrite": 0,
+              "totalTokens": 150, "cost": {"total": 0.02}}
+    (tmp_path / "visual/usage.json").write_text(json.dumps(tokens))
+    result = usage.cached_call_costs(tmp_path, {}, None)
+    assert result["llm_calls"] == 1 and result["tokens"] == 150
+    assert result["llm_usd_estimate"] == 0.02 and result["llm_unpriced_calls"] == 0
+    call = usage.execution_statistics(tmp_path, {})["model_calls"][0]
+    assert call["message"]["provider"] == "selected-provider"
+    assert call["message"]["model"] == "selected-model"
+    assert call["message"]["usage"] == tokens

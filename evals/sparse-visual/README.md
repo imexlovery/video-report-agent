@@ -15,7 +15,7 @@ uv run python evals/sparse-visual/experiment.py prepare \
   --units /absolute/path/canonical-transcript.jsonl \
   --output .local/evals/sparse-visual/example --frames 9
 
-# DEEPSEEK_API_KEY 由本地环境提供，切勿写入命令行、实验材料或提交。
+# 沿用 PI_PROVIDER / PI_MODEL 与项目 Pi 认证；主模型需启用图片输入。
 uv run python evals/sparse-visual/experiment.py describe \
   --output .local/evals/sparse-visual/example
 ```
@@ -24,8 +24,10 @@ uv run python evals/sparse-visual/experiment.py describe \
 通过解码后的 PTS 记录实际时间，保留 FFmpeg 日志和未缩小的独立图片。
 输入视频和转写必须使用同一播放时间轴。
 
-`describe` 将同一批原图和每帧附近 ±15 秒的字幕一次性发给官方 DeepSeek Flash，
-关闭思考模式，限制输出为 6,144 tokens。它不使用工具、重试或自动切换模型。
+`describe` 将同一批原图和每帧附近 ±15 秒的字幕一次性发给主报告模型，
+沿用 Pi 认证与思考档位，限制输出为 6,144 tokens。可用 `--provider`、`--model`、
+`--thinking` 指定本次实验模型；模型须支持图片且配置 `"input": ["text", "image"]`。
+它不使用工具、重试或自动切换模型。
 同一目录只能提交一次描述请求；失败或输出不完整时保留已有响应，不自动付费重跑。
 
 ## 产物与核对
@@ -35,7 +37,7 @@ uv run python evals/sparse-visual/experiment.py describe \
 - `visual/observations.jsonl`：模型派生观察，单独保存来源性质与不确定项，不写回字幕。
 - `parallel.md`：原图、附近原字幕、描述与候选增量的并排阅读材料。
 - `visual/request.json`：模型参数和原始提示；图片以本地路径替代大段 base64，仅留一份原图。
-- `visual/response.json` / `usage.json` / `invocation.json`：原始响应、供应商用量和一次请求的耗时。
+- `visual/response.json` / `usage.json` / `invocation.json`：Pi 规范响应、用量和一次请求的耗时。
 
 候选增量只代表模型对附近字幕的判断。人工逐条核对原图和完整转写，区分：
 全文未说出的具体信息、仅附近没说但全文已说、纠正 ASR 的文字、重复信息、视觉误读。

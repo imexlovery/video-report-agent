@@ -40,11 +40,11 @@ ASR 片段编号保留原始来源位置，过滤空白或无效片段后允许�
 
 任务参数 `visual_enhancement` 默认 `false`，CLI 对应 `--visual-enhancement`。开启后，在完整转写准备好之后执行 `visual` 阶段，再进入原有 Pi 生成。命中转写缓存也会执行此阶段，原字幕与规范单元保持不变。
 
-优先使用已有的主视频媒体；需要另取视频轨时，以所选分 P 的 CID 从 Bilibili API 获取，保存为 `download/visual.mp4`，与 ASR 的 `download/source.*` 分开。当前按 9 个等分时间窗中心取解码帧，以实际 PTS 记录时间。一次官方 `deepseek-flash` 请求读取单帧和附近 ±15 秒字幕，生成独立观察；凭据使用 `DEEPSEEK_API_KEY` 或当前 Pi 配置中已有的 DeepSeek API Key。
+优先使用已有的主视频媒体；需要另取视频轨时，以所选分 P 的 CID 从 Bilibili API 获取，保存为 `download/visual.mp4`，与 ASR 的 `download/source.*` 分开。当前按 9 个等分时间窗中心取解码帧，以实际 PTS 记录时间。一次图文请求读取各帧和附近 ±15 秒字幕，生成独立观察；使用本次主报告 `PiRunner` 已解析的 provider、model、思考档位与认证覆盖，由 `visual_request.mjs` 通过 Pi ModelRuntime 调用，复用项目模型配置、API Key／OAuth 与代理设置。模型须实际支持图片，配置 `input` 须包含 `image`，缺少时在发出请求前报错；不切换视觉供应商。
 
 `visual/observations.jsonl` 与原转写平行保存，报告模型沿用调用方原选择，只读取描述文本；视觉来源用 `data-source-frames`，口述用 `data-source-units`。Docker 生成目录只接收描述文本和开关，不传帧图片，也不为视觉预处理额外传入凭据。视觉准备失败时任务失败，保留诊断，不自动重试或切换模型。
 
-帧图片沿用资源产物保存，视觉专用视频沿用媒体清理；描述、清单、原始响应和用量保存为运行文档。`usage.py` 将视觉请求与报告请求合并计数，视觉价格缺失时计入未定价调用。策略修改集中在 `visual.py`，独立实验入口仍保留在 `evals/sparse-visual/`。
+帧图片沿用资源产物保存，视觉专用视频沿用媒体清理；描述、清单、Pi 规范响应和用量保存为运行文档。`usage.py` 按实际 provider/model 将视觉请求与报告请求合并计数和估算费用，价格缺失时计入未定价调用；历史 DeepSeek 直接调用用量仍可读取。策略修改集中在 `visual.py`，独立实验入口仍保留在 `evals/sparse-visual/`。
 
 规范单元具有 ID、时间范围与来源关系，`transcript.md` 为模型可读视图；报告的 `data-source-units` 用来定位来源，不能单凭绑定合法判断内容忠实。
 

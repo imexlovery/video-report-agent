@@ -2,10 +2,10 @@
 
 import argparse
 import json
-import os
 import shutil
 from pathlib import Path
 
+from video_report_agent.pi import PI_AGENT_DIR, PiRunner, initialize_pi_config
 from video_report_agent.visual import describe_frames, sample_frames
 
 
@@ -19,10 +19,12 @@ def prepare(args):
 
 
 def describe(args):
+    runner = PiRunner(provider=args.provider, model=args.model, thinking=args.thinking)
+    initialize_pi_config(PI_AGENT_DIR)
     result = describe_frames(
         args.output,
-        api_key=os.environ["DEEPSEEK_API_KEY"],
-        model=args.model,
+        provider=runner.provider, model=runner.model, thinking=runner.thinking,
+        api_key=runner.api_key, agent_dir=PI_AGENT_DIR,
         max_tokens=args.max_tokens,
     )
     print(json.dumps(result, ensure_ascii=False))
@@ -35,9 +37,13 @@ def main():
     for name in ("video", "transcript", "units", "output"):
         prep.add_argument(f"--{name}", type=Path, required=True)
     prep.add_argument("--frames", type=int, default=9)
-    desc = commands.add_parser("describe", help="One paid DeepSeek vision request; no retries")
+    desc = commands.add_parser(
+        "describe", help="One paid request using the report model; no retries"
+    )
     desc.add_argument("--output", type=Path, required=True)
-    desc.add_argument("--model", default="deepseek-flash")
+    desc.add_argument("--provider")
+    desc.add_argument("--model")
+    desc.add_argument("--thinking")
     desc.add_argument("--max-tokens", type=int, default=6144)
     args = parser.parse_args()
     (prepare if args.command == "prepare" else describe)(args)

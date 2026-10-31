@@ -10,7 +10,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 # Bump for schema OR counting/pricing semantics changes, even if fields stay identical.
-USAGE_CACHE_VERSION = 4
+USAGE_CACHE_VERSION = 5
 
 
 def read_object(path):
@@ -97,16 +97,21 @@ def _visual_call(run):
     }:
         return None
     raw = read_object(run / "visual" / "usage.json")
-    cached = raw.get("prompt_cache_hit_tokens", 0)
+    if "totalTokens" in raw:
+        tokens = raw
+    else:
+        # Historical direct DeepSeek responses keep their original usage schema.
+        cached = raw.get("prompt_cache_hit_tokens", 0)
+        tokens = {"input": raw.get("prompt_tokens", 0) - cached,
+                  "output": raw.get("completion_tokens", 0), "cacheRead": cached,
+                  "cacheWrite": 0, "totalTokens": raw.get("total_tokens", 0)}
     return {
-        "message": {"role": "assistant", "provider": "deepseek",
+        "message": {"role": "assistant", "provider": invocation.get("provider", "deepseek"),
                     **({"timestamp": round(invocation["started_at"] * 1000)}
                        if invocation.get("started_at") is not None else {}),
                     "model": invocation.get("model", "deepseek-flash"),
                     "stopReason": "stop" if invocation.get("status") == "completed" else "error",
-                    "usage": {"input": raw.get("prompt_tokens", 0) - cached,
-                              "output": raw.get("completion_tokens", 0), "cacheRead": cached,
-                              "cacheWrite": 0, "totalTokens": raw.get("total_tokens", 0)}},
+                    "usage": tokens},
         "received_at": invocation.get("finished_at"), "stage": "visual",
     }
 
@@ -147,7 +152,14 @@ def _llm_costs(run):
     if visual:
         calls += 1
         tokens += visual["message"]["usage"]["totalTokens"]
-        unknown += 1  # Provider usage is known; no additional pricing rule is assumed.
+        estimate = cny_cost(visual["message"], visual.get("received_at"))
+        cost = (visual["message"]["usage"].get("cost") or {}).get("total")
+        if estimate is not None:
+            cny_estimates.append(estimate["total"])
+        elif number(cost) and cost > 0:
+            estimates.append(cost)
+        else:
+            unknown += 1
     return {
         "llm_calls": calls,
         "tokens": tokens,

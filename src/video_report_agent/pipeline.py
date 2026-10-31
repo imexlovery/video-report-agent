@@ -19,7 +19,7 @@ from .failures import asr_failure
 from .ingest import UrlIngestError, download_bilibili_video, validate_bilibili_url
 from .media_config import resolve_media_config
 from .paraformer import CloudAsrError
-from .pi import PI_AGENT_DIR, PiError, PiRunner
+from .pi import PI_AGENT_DIR, PiError, PiRunner, initialize_pi_config
 from .report_image import render_report_image
 from .retention import cleanup_media
 from .reuse import (
@@ -36,7 +36,7 @@ from .term_correction import TERM_DOCUMENTS, search_config
 from .trace import RunTrace
 from .transcript import build_transcript
 from .transcript_foundation import parse_roi
-from .visual import VISUAL_DOCUMENTS, describe_frames, fetch_video, resolve_api_key, sample_frames
+from .visual import VISUAL_DOCUMENTS, describe_frames, fetch_video, sample_frames
 
 
 def write_json(path: Path, data: dict) -> None:
@@ -538,9 +538,13 @@ def generate(run: Path, *, database_path=None, execution_id=None) -> dict:
         if metadata.get("transcript_only"):
             update("TRANSCRIPT_READY")
         else:
+            runner_options = dict(metadata.get("model_selection", {}))
+            if metadata.get("model_recovery"):
+                runner_options["model_recovery"] = metadata["model_recovery"]
+            runner = PiRunner(**runner_options)
             if metadata.get("visual_enhancement", False):
                 update("VISUAL_ANALYSIS")
-                key = resolve_api_key(PI_AGENT_DIR)
+                initialize_pi_config(PI_AGENT_DIR)
                 with trace.span("visual", input={"artifact": "transcript.md"}) as detail:
                     video = next((p for p in (run / "download").glob("source.*")
                                   if p.suffix in {".mp4", ".mkv", ".webm"}), None)
@@ -564,7 +568,11 @@ def generate(run: Path, *, database_path=None, execution_id=None) -> dict:
                         detail.update(reused_from=reused)
                     try:
                         manifest = sample_frames(video, run, run / "canonical-transcript.jsonl")
-                        invocation = describe_frames(run, api_key=key)
+                        invocation = describe_frames(
+                            run, provider=runner.provider, model=runner.model,
+                            thinking=runner.thinking, api_key=runner.api_key,
+                            agent_dir=PI_AGENT_DIR,
+                        )
                         detail.update(output={"frames": manifest["actual_frames"],
                                               "artifact": "visual/observations.jsonl"},
                                       request_seconds=invocation["request_seconds"])
@@ -573,10 +581,6 @@ def generate(run: Path, *, database_path=None, execution_id=None) -> dict:
                         for frame in (run / "visual" / "frames").glob("*.jpg"):
                             store.artifact(run.name, str(frame.relative_to(run)), frame, "resource")
             update("GENERATING")
-            runner_options = dict(metadata.get("model_selection", {}))
-            if metadata.get("model_recovery"):
-                runner_options["model_recovery"] = metadata["model_recovery"]
-            runner = PiRunner(**runner_options)
             with trace.span(
                 "agent",
                 backend=runner.provider,

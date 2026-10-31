@@ -44,79 +44,97 @@ def test_sampling_uses_decoded_timestamps_and_keeps_original_text(tmp_path):
     assert (tmp_path / "transcript.md").read_text() == "[u1 | 0–2s] 原始字幕"
 
 
-def test_description_sends_images_and_preserves_provider_usage(tmp_path, monkeypatch):
+@pytest.fixture
+def vision_model(tmp_path, monkeypatch):
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    if not shutil.which("pi") or not shutil.which("node"):
+        pytest.skip("Pi and Node are required for the local transport test")
+    for key in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy",
+                "https_proxy", "all_proxy", "no_proxy", "NODE_USE_ENV_PROXY"):
+        monkeypatch.delenv(key, raising=False)
     prepared(tmp_path)
     root = tmp_path / "visual"
     root.mkdir()
     (root / "frame.jpg").write_bytes(b"fixture-image")
-    visual.write_json(
-        root / "manifest.json",
-        {
-            "frames": [
-                {
-                    "frame_id": "frame-000001",
-                    "timestamp_ms": 400,
-                    "path": "visual/frame.jpg",
-                    "nearby_subtitles": [{"unit_id": "u1", "canonical_text": "原始字幕"}],
-                }
-            ]
-        },
-    )
-    response = {
-        "id": "response-1",
-        "model": "deepseek-flash",
-        "usage": {"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120},
-        "choices": [
-            {
-                "finish_reason": "stop",
-                "message": {
-                    "content": json.dumps(
-                        {
-                            "frames": [
-                                {
-                                    "frame_id": "frame-000001",
-                                    "description": "红色图形",
-                                    "visible_text": [],
-                                    "candidate_additions": ["红色"],
-                                    "uncertainties": [],
-                                }
-                            ]
-                        }
-                    )
-                },
-            }
-        ],
-    }
+    visual.write_json(root / "manifest.json", {"frames": [{
+        "frame_id": "frame-000001", "timestamp_ms": 400, "path": "visual/frame.jpg",
+        "nearby_subtitles": [{"unit_id": "u1", "canonical_text": "原始字幕"}],
+    }]})
+    response = {"id": "response-1", "model": "report-model", "choices": [{"index": 0,
+        "finish_reason": "stop", "delta": {"role": "assistant", "content": json.dumps({
+            "frames": [{"frame_id": "frame-000001", "description": "红色图形",
+                        "visible_text": [], "candidate_additions": ["红色"],
+                        "uncertainties": []}]})}}],
+        "usage": {"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120}}
     requests = []
 
-    class Reply:
-        def __enter__(self):
-            return self
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            requests.append((self.headers.get("Authorization"), json.loads(
+                self.rfile.read(int(self.headers["Content-Length"])))))
+            if "error" in response:
+                self.send_response(401)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps(response).encode())
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.end_headers()
+            self.wfile.write(("data: " + json.dumps(response) + "\n\ndata: [DONE]\n\n").encode())
 
-        def __exit__(self, *args):
+        def log_message(self, *args):
             pass
 
-        def read(self):
-            return json.dumps(response).encode()
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    agent_dir = tmp_path / "config"
+    agent_dir.mkdir()
+    visual.write_json(agent_dir / "auth.json", {
+        "fixture": {"type": "api_key", "key": "stored-key"},
+    })
+    visual.write_json(agent_dir / "models.json", {"providers": {"fixture": {
+        "api": "openai-completions", "baseUrl": f"http://127.0.0.1:{server.server_port}/v1",
+        "models": [{"id": "report-model", "input": ["text", "image"], "reasoning": True}],
+    }}})
+    try:
+        yield agent_dir, requests, response
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
 
-    def send(request, **options):
-        requests.append(json.loads(request.data))
-        return Reply()
 
-    monkeypatch.setattr(visual, "urlopen", send)
-    result = visual.describe_frames(tmp_path, api_key="SECRET-FIXTURE")
+@pytest.mark.parametrize("key", [None, "runtime-key"])
+def test_description_uses_report_model_images_auth_and_usage(tmp_path, vision_model, key):
+    config, requests, response = vision_model
+    options = {"provider": "fixture", "model": "report-model", "thinking": "low",
+               "agent_dir": config, "api_key": key}
+    result = visual.describe_frames(tmp_path, **options)
     assert result["status"] == "completed"
+    assert (result["provider"], result["model"], result["thinking"]) == (
+        "fixture", "report-model", "low")
     assert len(requests) == 1
-    assert requests[0]["messages"][1]["content"][1]["image_url"]["url"].startswith(
-        "data:image/jpeg;base64,"
-    )
-    assert visual.read_json(root / "usage.json")["total_tokens"] == 120
+    auth, payload = requests[0]
+    assert auth == "Bearer " + (key or "stored-key")
+    assert payload["model"] == "report-model"
+    assert payload["reasoning_effort"] == "low"
+    assert payload["messages"][-1]["content"][1]["image_url"]["url"].startswith(
+        "data:image/jpeg;base64,")
+    root = tmp_path / "visual"
+    assert visual.read_json(root / "usage.json")["totalTokens"] == 120
     row = json.loads((root / "observations.jsonl").read_text())
     assert (row["frame_id"], row["timestamp_ms"]) == ("frame-000001", 400)
     assert row["source_kind"] == "model_derived_visual_observation"
-    assert "SECRET-FIXTURE" not in (root / "request.json").read_text()
+    assert (row["provider"], row["model"]) == ("fixture", "report-model")
+    assert (tmp_path / "transcript.md").read_text() == "[u1 | 0–2s] 原始字幕"
+    assert "runtime-key" not in (root / "request.json").read_text()
+    assert "stored-key" not in (root / "request.json").read_text()
     with pytest.raises(FileExistsError):
-        visual.describe_frames(tmp_path, api_key="SECRET-FIXTURE")
+        visual.describe_frames(tmp_path, **options)
     assert len(requests) == 1
     incomplete = tmp_path / "incomplete"
     (incomplete / "visual").mkdir(parents=True)
@@ -124,20 +142,39 @@ def test_description_sends_images_and_preserves_provider_usage(tmp_path, monkeyp
     (incomplete / "visual/frame.jpg").write_bytes(b"fixture-image")
     response["choices"][0]["finish_reason"] = "length"
     with pytest.raises(visual.VisualError):
-        visual.describe_frames(incomplete, api_key="SECRET-FIXTURE")
+        visual.describe_frames(incomplete, **options)
     assert visual.read_json(incomplete / "visual/invocation.json")["status"] == "failed"
     assert not (incomplete / "visual/observations.jsonl").exists()
     assert len(requests) == 2
 
 
-def test_visual_credentials_use_existing_deepseek_auth(tmp_path, monkeypatch):
-    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
-    with pytest.raises(ValueError, match="DeepSeek API Key"):
-        visual.resolve_api_key(tmp_path)
-    visual.write_json(tmp_path / "auth.json", {"deepseek": {"key": "stored-key"}})
-    assert visual.resolve_api_key(tmp_path) == "stored-key"
-    monkeypatch.setenv("DEEPSEEK_API_KEY", "environment-key")
-    assert visual.resolve_api_key(tmp_path) == "environment-key"
+def test_text_only_report_model_fails_without_sending_request(tmp_path, vision_model):
+    config, requests, _ = vision_model
+    models = visual.read_json(config / "models.json")
+    models["providers"]["fixture"]["models"][0]["input"] = ["text"]
+    visual.write_json(config / "models.json", models)
+    with pytest.raises(visual.VisualError, match=r'input: \["text", "image"\]'):
+        visual.describe_frames(tmp_path, provider="fixture", model="report-model", agent_dir=config)
+    assert requests == []
+    invocation = visual.read_json(tmp_path / "visual/invocation.json")
+    assert invocation["status"] == "failed" and invocation["request_count"] == 0
+
+
+def test_provider_auth_error_does_not_persist_echoed_key_or_retry(tmp_path, vision_model):
+    config, requests, response = vision_model
+    response.clear()
+    response["error"] = {"message": "Rejected Bearer echoed-fixture-key",
+                         "type": "authentication_error", "code": "invalid_api_key"}
+    with pytest.raises(visual.VisualError):
+        visual.describe_frames(tmp_path, provider="fixture", model="report-model",
+                               agent_dir=config, api_key="echoed-fixture-key")
+    assert len(requests) == 1
+    saved = visual.read_json(tmp_path / "visual/response.json")
+    assert saved["stopReason"] == "error" and saved["content"] == []
+    assert "errorMessage" not in saved
+    for artifact in (tmp_path / "visual").glob("*.json"):
+        assert "echoed-fixture-key" not in artifact.read_text()
+    assert not (tmp_path / "visual/observations.jsonl").exists()
 
 
 def test_video_track_fetch_uses_part_metadata_and_keeps_existing_description(tmp_path, monkeypatch):

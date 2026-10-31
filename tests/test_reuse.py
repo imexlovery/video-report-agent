@@ -296,14 +296,14 @@ def test_completed_asr_is_reused_when_transcript_is_incomplete(
     monkeypatch.setattr(pipeline, "extract_audio", extract)
     monkeypatch.setattr(pipeline, "transcribe_audio", transcribe)
     monkeypatch.setattr(pipeline, "build_transcript", build)
-    monkeypatch.setattr(pipeline, "resolve_api_key", lambda _: "fixture-key")
     monkeypatch.setattr(pipeline, "sample_frames", sample)
     monkeypatch.setattr(pipeline, "describe_frames", describe)
     monkeypatch.setattr(pipeline, "fetch_video", lambda *_: pytest.fail("video already cached"))
     monkeypatch.setattr(
         pipeline,
         "PiRunner",
-        lambda: SimpleNamespace(run=report, provider="test", model="test"),
+        lambda: SimpleNamespace(run=report, provider="test", model="test",
+                                thinking="low", api_key="fixture-key"),
     )
     status = pipeline.generate(run)
     assert status["state"] == "RENDERED"
@@ -348,7 +348,8 @@ def test_invalid_asr_is_not_reused(completed, monkeypatch):
     monkeypatch.setattr(
         pipeline,
         "PiRunner",
-        lambda: SimpleNamespace(run=report, provider="test", model="test"),
+        lambda: SimpleNamespace(run=report, provider="test", model="test",
+                                thinking="low", api_key="fixture-key"),
     )
     assert pipeline.generate(run)["state"] == "RENDERED"
     assert called == ["asr"]
@@ -424,7 +425,9 @@ def test_visual_preparation_runs_after_transcript_reuse(
         pipeline.write_json(previous / "input.json", metadata)
     if pruned:
         (previous / "download/source.mp4").unlink()
-    run = pipeline.create_run(previous.parent, URL, visual_enhancement=enabled)
+    selection = {"provider": "fixture", "model": "fixture", "thinking": "low"}
+    run = pipeline.create_run(previous.parent, URL, visual_enhancement=enabled,
+                              model_selection=selection)
     calls = []
 
     def sample(video, current, units):
@@ -438,6 +441,8 @@ def test_visual_preparation_runs_after_transcript_reuse(
         return {"actual_frames": 1}
 
     def describe(current, **options):
+        assert options == {**selection, "api_key": "fixture-key",
+                           "agent_dir": pipeline.PI_AGENT_DIR}
         (current / "visual/observations.jsonl").write_text('{"frame_id":"frame-000001"}\n')
         calls.append("description")
         return {"request_seconds": 0.1}
@@ -455,12 +460,14 @@ def test_visual_preparation_runs_after_transcript_reuse(
             assert (current / "visual/observations.jsonl").is_file()
         (current / "report.html").write_text("<html><body>report</body></html>")
 
-    monkeypatch.setattr(pipeline, "resolve_api_key", lambda _: "fixture-key")
     monkeypatch.setattr(pipeline, "sample_frames", sample)
     monkeypatch.setattr(pipeline, "describe_frames", describe)
     monkeypatch.setattr(pipeline, "fetch_video", download)
-    monkeypatch.setattr(pipeline, "PiRunner", lambda: SimpleNamespace(
-        run=report, provider="fixture", model="fixture"))
+    def runner(**options):
+        assert options == selection
+        return SimpleNamespace(run=report, **selection, api_key="fixture-key")
+
+    monkeypatch.setattr(pipeline, "PiRunner", runner)
     monkeypatch.setattr(pipeline, "render_report_image", lambda _: None)
     status = pipeline.generate(run)
     assert status["state"] == "RENDERED", status

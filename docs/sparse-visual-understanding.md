@@ -2,7 +2,7 @@
 
 状态：2026-10-29 已接入可选主流程，默认关闭。Local 高级设置提供“画面辅助理解”开关并记住选择；Public 隐藏入口，服务端拒绝开启请求。新增代码尚未推送或部署。
 
-实现集中在 [`visual.py`](../src/video_report_agent/visual.py)，独立实验入口 [`evals/sparse-visual/`](../evals/sparse-visual/README.md) 复用同一实现。当前仍使用 9 帧和一次 DeepSeek 画面描述请求，报告模型只读取描述文本与完整原字幕。原始字幕不改；转写缓存命中时照常执行视觉步骤。CLI 使用 `--visual-enhancement`，凭据沿用 `DEEPSEEK_API_KEY` 或 Pi 已有的 DeepSeek API Key。数据、阶段、用量和 Docker 文本传递契约见[架构](ARCHITECTURE.md#可选画面辅助理解)。
+实现集中在 [`visual.py`](../src/video_report_agent/visual.py)，独立实验入口 [`evals/sparse-visual/`](../evals/sparse-visual/README.md) 复用同一实现。当前使用 9 帧和一次画面描述请求，视觉步骤沿用主报告模型、思考档位与 Pi 认证，主模型须实际支持并声明图片输入。报告阶段只读取描述文本与完整原字幕。原始字幕不改；转写缓存命中时照常执行视觉步骤。CLI 使用 `--visual-enhancement`，无需单独的视觉供应商或凭据。数据、阶段、用量和 Docker 文本传递契约见[架构](ARCHITECTURE.md#可选画面辅助理解)。
 
 下文的更多帧数、直接图文及会员收费为历史候选；当前功能不依赖这些方向。主流程真实验证与运行记录在忽略的 `.local/evals/visual-mainflow-20261029/`。
 
