@@ -38,9 +38,10 @@ footer{display:flex;align-items:baseline;justify-content:space-between;gap:16px;
 @media(max-width:1194px){.report-nav{display:none}}
 @media print{.report-nav{display:none}}
 
+.stats.stats-counts{gap:0;border:0;padding:14px 0}.stats-counts>.stat{position:relative;min-width:0;padding:0 20px;text-align:center}.stats-counts>.stat+.stat{border-left:0}.stats-counts>.stat+.stat:before{content:"";position:absolute;left:0;top:0;bottom:0;border-left:1px solid var(--line)}.stats-counts .value{display:grid;grid-template-columns:1fr auto 1fr;align-items:baseline;font-size:30px;font-weight:650;line-height:1.35}.stats-counts .count-amount{grid-column:2}.stats-counts .value small{grid-column:3;justify-self:start;margin-left:4px;font-size:14px;font-weight:400;color:var(--muted)}.stats-counts .caption{font-size:16px;line-height:1.75;color:var(--ink);margin:10px auto 0;max-width:220px}
 /* 开放式关系组件：沿用纸面、字号与蓝橙色，不另设题材皮肤。 */
 .definitions{margin:24px 0}.definitions>div{display:grid;grid-template-columns:minmax(120px,170px) minmax(0,1fr);gap:22px;padding:14px 0;border-bottom:1px solid var(--line)}.definitions dt{font-weight:650;color:var(--heading)}.definitions dd{margin:0;min-width:0}.definitions>div:last-child{border-bottom:0}
-.mapping{display:grid;gap:18px;margin:26px 0}.mapping-row{display:grid;grid-template-columns:minmax(0,1fr) 22px minmax(100px,150px) 22px minmax(0,1fr);gap:10px;align-items:center}.mapping-row>div{min-width:0}.mapping-task{padding:8px 12px;background:var(--blue-wash);color:var(--blue);border-radius:5px;text-align:center}.mapping-arrow{color:var(--blue);text-align:center}.mapping-label{display:block;color:var(--muted);font-size:13px}
+.mapping{margin:26px 0}.mapping-row{display:grid;grid-template-columns:140px minmax(0,1fr);gap:24px;align-items:baseline;padding:17px 0;border-bottom:1px solid var(--line)}.mapping-row:last-child{border-bottom:0}.mapping-task{font-size:17px;font-weight:650;color:var(--heading)}.mapping-relation{display:flex;gap:14px;align-items:baseline;flex-wrap:wrap;min-width:0;font-size:17px;line-height:1.85}.mapping-relation>span{min-width:0;max-width:100%}.mapping-arrow{color:var(--blue);flex:none}
 .steps.steps-route{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:24px}.steps-route>li{padding:38px 0 0;margin:0;min-width:0}.steps-route>li:before{top:0}.steps-route>li:after{content:"";position:absolute;left:32px;right:0;top:12px;border-top:1px solid var(--line)}.steps-route>li:last-child:after{display:none}.steps-route h3{font-size:17px}.steps-route p{font-size:16px}
 .branches{margin:24px 0}.branches>p{font-weight:650;color:var(--heading)}.branches>ul{list-style:none;margin:14px 0 0 12px;padding:0 0 0 24px;border-left:1px solid #a8bfcd}.branches>ul>li{position:relative;padding:6px 0;margin:8px 0}.branches>ul>li:before{content:"";position:absolute;left:-24px;top:21px;width:16px;border-top:1px solid #a8bfcd}
 @media print{.mapping-row,.definitions>div,.branches>ul>li{break-inside:avoid}}
@@ -68,7 +69,7 @@ Decision Tree：使用嵌套 ul/li，在分支开头写明条件，再写动作�
 关系表达：只复用下方已有组件，或用步骤、对照、表格和文字写清对象、方向、边界与条件，不自建图形。
 颜色与线条沿用现有组件，不按卡片奇偶或节点顺序轮换；预计变化在文字中就地标注性质。
 这些结构直接承担内容；复用现有样式，不依赖外部脚本或图库，不要求每份报告使用全部语法。 -->
-<!-- 正文从语义组织生成：section/h2（多个大章节时用 span.num 放连续序号，后接 span 标题文本）、h3/p；可选 callout、keyline、cards/card、comparison、categories/category、ol.steps/li、stats、tiles/tile、bars/bar。不存在必填章节或必用组件。表格默认占满所在容器并自动分配列宽；短标签与短数值的小表可用 table-compact 居中收窄，不为凑满宽度制造大块空白。长说明先按语义分成短段或条目，仍影响跨行比较时移到表外；只有实际渲染出现拥挤才按内容设置 colgroup，不默认固定列宽。柱图仅用于正文必须看见的量级差异，不为每节数字各画一组。同一可比序列保持同色，需要突出来源支持的重点才加 bar-highlight，不按顺序轮换颜色。柱图按 div.bars > div.bar 组织，每个 bar 为 div.bar-head（span.bar-name + span.bar-value）加 span.bar-track>span.bar-fill；bar-fill 的 width 即占比，bar-track 占满整行宽度，同组共用刻度（最大项给 width:100%）。短项目用原生列表、表格或紧凑分栏，名称与数值同行；ol.steps 仅供需要展开解释的步骤选用，圆圈编号与布局沿用模板。p、li 或卡片用 data-source-units 绑定实际支持内容的 ID。 -->
+<!-- 正文从语义组织生成：section/h2（多个大章节时用 span.num 放连续序号，后接 span 标题文本）、h3/p；可选 callout、keyline、cards/card、comparison、categories/category、ol.steps/li、stats、tiles/tile、bars/bar。不存在必填章节或必用组件。表格默认占满所在容器并自动分配列宽；少量类别加单一计数优先 stats stats-counts；多维度比较才用表格，确需小表时用 table-compact 居中收窄。长说明先按语义分成短段或条目，仍影响跨行比较时移到表外；只有实际渲染出现拥挤才按内容设置 colgroup，不默认固定列宽。柱图仅用于正文必须看见的量级差异，不为每节数字各画一组。同一可比序列保持同色，需要突出来源支持的重点才加 bar-highlight，不按顺序轮换颜色。柱图按 div.bars > div.bar 组织，每个 bar 为 div.bar-head（span.bar-name + span.bar-value）加 span.bar-track>span.bar-fill；bar-fill 的 width 即占比，bar-track 占满整行宽度，同组共用刻度（最大项给 width:100%）。短项目用原生列表或紧凑分栏；列表名称与数值同行，小型计数分栏的数字在上、说明在下；ol.steps 仅供需要展开解释的步骤选用，圆圈编号与布局沿用模板。p、li 或卡片用 data-source-units 绑定实际支持内容的 ID。 -->
 <!-- 并列类别内容长短悬殊、主要逐项阅读时，在普通 .categories 上加 .categories-stacked；共同字段需要横向对照时仍用并排卡或表格。 -->
 <!-- 以下示例的内容与编号均为合成展示，生成时逐处替换为实际来源的原生 ID，不沿用样例映射。
 逐项判断与依据示例：少量事项各有长依据与独立判断、主要逐项阅读时使用；需要跨项对齐比较共同字段时保留表格。不为填版式重复写“属实”“正确”等状态词；只有状态差异影响判断时才在正文就地说明。编号只作定位，不表示时间或排名。真实内容按来源替换。
@@ -133,8 +134,11 @@ Decision Tree：使用嵌套 ul/li，在分支开头写明条件，再写动作�
 <!-- Standard 关系组件示例：只替换来源支持的内容与 ID，缺失必要关系时回到文字。
 名称与解释 / 证据摘要：dl.definitions；证据字段按来源选择，不填造未知字段。
 <dl class="definitions"><div data-source-units="实际来源ID"><dt>样本与条件</dt><dd>24 个样本，在同一测试条件下观察 8 周。</dd></div><div data-source-units="实际来源ID"><dt>结果与范围</dt><dd>写实际观察结果及适用范围，不外推其他对象。</dd></div></dl>
-输入—处理—输出：每行独立，不把行间先后画成流水线；箭头仅表示本行转换。
-<div class="mapping"><div class="mapping-row" data-source-units="实际来源ID"><div><span class="mapping-label">输入</span>带单位的测量值</div><span class="mapping-arrow" aria-hidden="true">→</span><div class="mapping-task">单位换算</div><span class="mapping-arrow" aria-hidden="true">→</span><div><span class="mapping-label">输出</span>统一单位的数值</div></div></div>
+输入—处理—输出：任务名作行标题；右侧输入→输出连续排布，箭头两侧等距。独立任务逐行呈现，不连成流水线。不放蓝色处理块，不拆成五列。
+<div class="mapping"><div class="mapping-row" data-source-units="实际来源ID"><strong class="mapping-task">单位换算</strong><div class="mapping-relation"><span>带单位的测量值</span><span class="mapping-arrow" aria-hidden="true">→</span><span>统一单位的数值</span></div></div></div>
+少量类别与单一计数：沿用 stats 的等宽轨道，各项裸数字和说明以同一中轴居中，单位置于数字右侧且不参与中轴计算，分隔线不挤占分栏宽度。分母、观察条件紧邻保留。以下为合成示例；实际数量、单位、类别与来源按内容替换。
+<p data-source-units="实际来源ID">14 个测试样本的结果：</p>
+<div class="stats stats-counts"><div class="stat" data-source-units="实际来源ID"><span class="value"><span class="count-amount">8</span><small>个</small></span><span class="caption">通过</span></div><div class="stat" data-source-units="实际来源ID"><span class="value"><span class="count-amount">2</span><small>个</small></span><span class="caption">需要复测</span></div><div class="stat" data-source-units="实际来源ID"><span class="value"><span class="count-amount">4</span><small>个</small></span><span class="caption">未通过</span></div></div>
 阶段路线：短阶段可用 steps-route；长解释或很多阶段退回原 steps，保留顺序与条件。
 <ol class="steps steps-route"><li data-source-units="实际来源ID"><h3>采样</h3><p>按同一条件收集样本。</p></li><li data-source-units="实际来源ID"><h3>测量</h3><p>保留方法与单位。</p></li><li data-source-units="实际来源ID"><h3>分析</h3><p>在样本范围内解释结果。</p></li></ol>
 分叉：明确标出条件、候选解释或作用性质；连接线不编码概率或确定因果。

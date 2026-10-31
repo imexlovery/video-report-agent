@@ -130,22 +130,23 @@ def test_brief_template_fills_shared_delivery_contract(tmp_path):
 
 
 def test_relation_components_keep_long_content_visible_in_export(tmp_path):
-    """Real CSP/export path, long labels, omitted optional metadata and print."""
+    """Real CSP/export path, long labels, an omitted unit label and print."""
     import re
 
     from video_report_agent.report_image import render_report_image
     template = TEMPLATE.read_text()
     body = re.search(r'<!-- Standard 关系组件示例：(.*?)-->', template, re.S).group(1)
-    # Extract the four complete examples, not their editorial captions.
-    blocks = re.findall(
-        r'(<dl class="definitions">.*?</dl>|<div class="mapping">.*?</div></div>|'
-        r'<ol class="steps steps-route">.*?</ol>|<div class="branches">.*?</ul></div>)',
-        body, re.S,
-    )
-    assert len(blocks) == 4
+    # Each complete example occupies one template line, including nested containers.
+    blocks = [line for line in body.splitlines() if line.startswith((
+        '<dl class="definitions">', '<div class="mapping">',
+        '<div class="stats stats-counts">', '<ol class="steps steps-route">',
+        '<div class="branches">',
+    ))]
+    assert len(blocks) == 5
     content = ''.join(blocks).replace('带单位的测量值', '条件与范围必须完整保留' * 15)
     content = content.replace('统一单位的数值', '结果解释与单位' * 18)
-    content = re.sub(r'<span class="mapping-label">.*?</span>', '', content)
+    content = content.replace('单位换算', '性质与活性预测')
+    content = content.replace('<small>个</small>', '', 1)
     html = re.sub(r'<!--.*?-->', '', template, flags=re.S)
     html = html.replace('{{BODY}}', content)
     html = re.sub(r'\{\{\w+\}\}', '', html)
@@ -159,4 +160,25 @@ def test_relation_components_keep_long_content_visible_in_export(tmp_path):
                 '.mapping-row>*,.definitions dd,.steps-route>li,.branches li'
             )].every(e => e.scrollWidth <= e.clientWidth + 2
                 && e.scrollHeight <= e.clientHeight + 2)""")
+            assert page.locator('.mapping-task').evaluate(
+                'e=>e.getBoundingClientRect().height<=parseFloat(getComputedStyle(e).lineHeight)+1'
+            )
+            centers = page.evaluate("""() => [...document.querySelectorAll(
+                '.stats-counts>.stat'
+            )].map(e => {
+                const box=e.getBoundingClientRect();
+                const r=document.createRange();
+                r.selectNodeContents(e.querySelector('.count-amount'));
+                const label=document.createRange();
+                label.selectNodeContents(e.querySelector('.caption'));
+                const caption=label.getBoundingClientRect();
+                const text=r.getBoundingClientRect();
+                return {cell:(box.left+box.right)/2, text:(text.left+text.right)/2,
+                    label:(caption.left+caption.right)/2};
+            })""")
+            assert len(centers) == 3
+            assert all(abs(c['cell'] - c['text']) < 1 for c in centers)
+            assert all(abs(c['cell'] - c['label']) < 1 for c in centers)
+            gaps = [centers[i+1]['cell'] - centers[i]['cell'] for i in range(2)]
+            assert abs(gaps[0] - gaps[1]) < 1
     assert render_report_image(tmp_path, on_page=check).is_file()
