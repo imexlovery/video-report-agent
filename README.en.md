@@ -9,7 +9,7 @@ Turn video transcripts into HTML reports you can skim, study and save. Use the [
 | What you want to do | Start here |
 |---|---|
 | Generate a report online | [Open VReport](https://vreport.tri4t.xyz) |
-| Give an existing transcript to your own Coding Agent | [Download Skill ZIP v0.5.0](https://github.com/imexlovery/video-report-agent/releases/download/skill-zip-v0.5.0/video-report-skill-v0.5.0.zip) · [Quick start and examples (Chinese)](docs/skill-bundle/README.md) |
+| Give an existing transcript to your own Coding Agent | [Download Skill ZIP v0.5.1](https://github.com/imexlovery/video-report-agent/releases/download/skill-zip-v0.5.1/video-report-skill-v0.5.1.zip) · [Quick start and examples (Chinese)](docs/skill-bundle/README.md) |
 | Run the complete workflow from a video URL | [CLI installation](#option-2-run-the-complete-cli-pipeline) |
 
 ## See the result
@@ -58,7 +58,7 @@ ASR converts speech into text; your Coding Agent's model reads it and generates 
 
 ### 2. Get the complete Skill directory
 
-Download and extract [Skill ZIP v0.5.0](https://github.com/imexlovery/video-report-agent/releases/download/skill-zip-v0.5.0/video-report-skill-v0.5.0.zip). It includes the complete Skill, a short Chinese guide, and a paired transcript and HTML example. Start with the bundled `README.md`.
+Download and extract [Skill ZIP v0.5.1](https://github.com/imexlovery/video-report-agent/releases/download/skill-zip-v0.5.1/video-report-skill-v0.5.1.zip). It includes the complete Skill, a short Chinese guide, and a paired transcript and HTML example. Start with the bundled `README.md`.
 
 To get the source code, clone the repository:
 

@@ -9,7 +9,7 @@
 | 你想做什么 | 从这里开始 |
 |---|---|
 | 在线生成报告 | [打开 VReport](https://vreport.tri4t.xyz) |
-| 把已有转写交给自己的 Coding Agent | [下载 Skill ZIP v0.5.0](https://github.com/imexlovery/video-report-agent/releases/download/skill-zip-v0.5.0/video-report-skill-v0.5.0.zip) · [简短使用说明与示例](docs/skill-bundle/README.md) |
+| 把已有转写交给自己的 Coding Agent | [下载 Skill ZIP v0.5.1](https://github.com/imexlovery/video-report-agent/releases/download/skill-zip-v0.5.1/video-report-skill-v0.5.1.zip) · [简短使用说明与示例](docs/skill-bundle/README.md) |
 | 从视频链接运行完整流程 | [完整 CLI 安装说明](#方式二运行完整-cli-流水线) |
 
 ## 先看成品
@@ -58,7 +58,7 @@ ASR 负责把语音变成文字，Coding Agent 的模型负责阅读和生成报
 
 ### 2. 获取完整 Skill 目录
 
-下载 [Skill ZIP v0.5.0](https://github.com/imexlovery/video-report-agent/releases/download/skill-zip-v0.5.0/video-report-skill-v0.5.0.zip) 并解压。包内有完整 Skill、简短说明，以及配套的转写和 HTML 示例；可以先按包内 `README.md` 试用。
+下载 [Skill ZIP v0.5.1](https://github.com/imexlovery/video-report-agent/releases/download/skill-zip-v0.5.1/video-report-skill-v0.5.1.zip) 并解压。包内有完整 Skill、简短说明，以及配套的转写和 HTML 示例；可以先按包内 `README.md` 试用。
 
 需要源码时，也可以克隆仓库：
 
