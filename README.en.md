@@ -52,7 +52,7 @@ This is the most direct way to reuse the core asset. It needs no project Python 
 
 ### 1. Prepare a complete transcript
 
-Use your own ASR tool or complete existing subtitles and save them as `transcript.md`, TXT or SRT. Preserve timestamps and speakers when possible. Without reliable times, the report omits the corresponding chapter times.
+Use creator-provided subtitles, Bilibili AI subtitles, your own ASR transcript or another complete text, saved as `transcript.md`, TXT or SRT. Preserve timestamps and speakers when possible. Without reliable times, the report omits the corresponding chapter times.
 
 ASR converts speech into text; your Coding Agent's model reads it and generates the report. Choose these independently.
 
@@ -101,12 +101,13 @@ Replace `standard` with `brief` for an overview. Open `output/report.html` in a 
 
 ## Option 2: run the complete CLI pipeline
 
-Start with a Bilibili URL and automate downloading, transcription and generation:
+Start with a Bilibili URL and automate transcript acquisition and report generation:
 
 ```text
 Bilibili URL
-  → yt-dlp download → FFmpeg audio extraction
-  → ASR → canonical transcript (text, source IDs, times)
+  → get text: creator subtitles → Bilibili AI subtitles → ASR (default order)
+      when ASR is needed: yt-dlp download → FFmpeg audio extraction → ASR
+  → canonical transcript (text, source IDs, times)
   → Pi RPC + video-report Skill → HTML
   → Chromium PNG export
 ```
@@ -131,7 +132,7 @@ These instructions use Pi 0.85.0, the project's adapter baseline. `uv sync` does
 
 ### Configure the model and ASR
 
-Edit the root `.env`, supply report-model credentials and choose one ASR backend. This example uses cloud transcription:
+Edit the root `.env` and supply report-model credentials. Configure an ASR backend when you use it. This example sets up cloud ASR for automatic fallback or manual selection:
 
 ```dotenv
 PI_PROVIDER=deepseek
@@ -165,15 +166,79 @@ uv run video-report generate 'https://www.bilibili.com/video/BV...' --report-mod
 
 Outputs live in `runs/<run-id>/`. Read `report.html` or `report.png`; use `transcript.md` for source review. HTML can complete even if image export fails, so check `image_error` in `status.json` before assuming the PNG exists.
 
-The CLI defaults to creator-provided subtitles → Bilibili ai-zh → ASR and stops collecting once usable subtitles are available. Choose `--sources asr` for ASR alone, or list multiple sources for manual comparison/fusion. Web source controls are available only in Local advanced settings; Web OCR is disabled. The Core CLI retains legacy `--transcript-mode fused` subtitle/OCR support with `uv sync --extra enhancement`; include `--extra mlx` for local MLX. See the [source selection guide](docs/subtitle-sources.md) for subtitle login and transcript-only commands, or run `uv run video-report generate --help` for all options.
+### Choose subtitle and transcript sources
+
+The CLI defaults to `auto`: creator-provided subtitles → Bilibili AI subtitles (`ai-zh`) → ASR. Once usable subtitle content is available, report generation starts. ASR runs only when both subtitle sources are unavailable. Use `--sources` to choose explicitly:
+
+| Source | CLI arguments | Behavior |
+|---|---|---|
+| Creator subtitles | `--sources subtitle_track` | Use a non-AI subtitle track returned by Bilibili |
+| Bilibili AI subtitles | `--sources bilibili_ai` | Fetch the platform's existing Chinese `ai-zh` subtitles |
+| ASR | `--sources asr` | Download media and transcribe with the configured `mlx` or `paraformer` backend |
+| Local subtitle file | `--sources subtitle_track --subtitle-file captions.srt` | Import SRT, VTT or ASS subtitles |
+| Multiple sources | `--sources bilibili_ai asr` | Collect every selected source; the first usable source in argument order is primary, with the others used for local corrections |
+
+```sh
+# Use only Bilibili AI subtitles
+uv run video-report generate 'https://www.bilibili.com/video/BV...' --sources bilibili_ai
+
+# Export only the transcript for your own Coding Agent
+uv run video-report transcribe 'https://www.bilibili.com/video/BV...' --sources bilibili_ai
+```
+
+Manual selection collects only the selected sources; the AI-only example fails if its subtitles are unavailable. Selecting both AI subtitles and ASR collects both. Subtitle-only runs require no media download or ASR credentials unless visual enhancement is enabled.
+
+If subtitles require authentication, set `BILIBILI_SUBTITLE_BROWSER=chrome` (or another browser supported by yt-dlp) in `.env` to use its existing Bilibili login, or supply `BILIBILI_SESSDATA` through the process environment. Browsers are not read by default. Keep credentials out of Git. Importing subtitle files requires `uv sync --extra enhancement`. See the [source selection guide](docs/subtitle-sources.md).
+
+The Protobuf field parsing for Bilibili's newer AI subtitle endpoint references [ccBilly-aipm/bilibili-ai-subtitle](https://github.com/ccBilly-aipm/bilibili-ai-subtitle) (MIT). Thank you to its author for publishing the extraction workflow and protocol implementation that informed this support.
+
+### Optional tools and capabilities
+
+These switches apply to the complete Core pipeline. The standalone Skill ZIP uses your own Agent's tools and configuration.
+
+| Tool / capability | Default | Enable or disable |
+|---|---|---|
+| Term correction | Off | Add `--term-correction` to enable; omit to disable. Python: `create_run(..., term_correction=True/False)` |
+| Visual enhancement | Off | Add `--visual-enhancement` to enable; omit to disable. Python: `visual_enhancement=True/False` |
+| Report inspection (`inspect_report`) | Dedicated tool off | Set `REPORT_REVIEW=1` in `.env` to enable, `0` to disable. Python: `PiRunner(review=True/False)` |
+| Independent diagrams (`generate_diagram`) | On, used as needed | Python: `create_run(..., diagrams=False)` to disable, `True` to enable. No CLI switch currently |
+| OCR (legacy fusion workflow) | Off | Use `--transcript-mode fused --ocr-mode auto` to enable, `--ocr-mode off` to disable. Requires the `enhancement` extra |
+
+Visual enhancement obtains a video track, samples nine frames and uses the task's selected report model to describe them. It shares the report model's provider, model, thinking level and Pi authentication (API Key or OAuth), then passes the descriptions to the report Agent. No separate vision model or key is needed. The model must support images and declare `"input": ["text", "image"]` in its `config/pi/models.json` entry; missing image input produces an explicit error. Enabling this adds one multimodal request's latency and usage.
+
+Independent diagrams allow at most one drawing call; the Agent can decide no diagram is needed. The drawing model can be configured separately as described below.
+
+Report inspection gives the same Agent programmatic findings and available screenshots, allowing at most two inspections and one consolidated revision. `REPORT_REVIEW=0` disables the dedicated tool; the Skill still asks for consolidated checks and can invoke the inspector through Bash. Basic file/shell tools, HTML delivery checks and final PNG export are part of the regular workflow, with no corresponding CLI disable switches. Run `uv run video-report generate --help` for all options.
+
+### Configure search for term correction
+
+Term correction checks important names as questions arise during reading or writing and preserves the original transcript. `--term-correction` enables `record_term_review`, `lookup_term` and `fetch_term_source`. Search and page fetch share a limit of three requests per task and may incur charges. Choose one search provider in `.env`, independently of the report model:
+
+```dotenv
+# Option 1: DeepSeek Search/Fetch (default provider)
+TERM_SEARCH_PROVIDER=deepseek
+DEEPSEEK_SEARCH_API_KEY=your-official-deepseek-key
+```
+
+```dotenv
+# Option 2: OpenAI Responses Web Search
+TERM_SEARCH_PROVIDER=openai
+OPENAI_SEARCH_API_KEY=your-openai-api-key
+OPENAI_SEARCH_MODEL=gpt-6-luna
+```
+
+DeepSeek reads `DEEPSEEK_SEARCH_API_KEY`, falling back to `DEEPSEEK_API_KEY`. OpenAI reads `OPENAI_SEARCH_API_KEY`, falling back to `OPENAI_API_KEY`. Neither uses `PI_API_KEY` or `DASHSCOPE_API_KEY`; provide credentials for the corresponding official service. OpenAI's search model is independently configurable: the example explicitly selects `gpt-6-luna`; the code defaults to `gpt-6.1-sol` when `OPENAI_SEARCH_MODEL` is absent. Model tokens and search are billed separately.
+
+After saving the configuration, add `--term-correction` to the generation command. Search configuration alone does not enable correction. Provider settings are saved on new tasks; restart a running service after changing `.env`. See [term correction](docs/term-correction.md) for evidence rules and Docker configuration.
 
 ## Runtime and data
 
 - **Storage:** standalone CLI uses `runs/state.sqlite3` by default for tasks, transcripts, report HTML and caches. Task-directory JSON, transcripts and HTML are execution exports; media, PNG, Pi sessions and diagnostic logs remain files. See [SQLite storage](docs/sqlite-storage.md).
 - **Configuration:** `.env` is read from the working directory; process environment variables take precedence. Pi configuration lives in `config/pi/` there. Missing model defaults are initialized; existing configuration is preserved. Set `PI_CODING_AGENT_DIR` before startup to choose another directory. Do not commit credentials.
+- **Independent drawing model:** set both `DIAGRAM_PROVIDER` and `DIAGRAM_MODEL`, with optional `DIAGRAM_THINKING`, and configure that provider's API Key or OAuth in Pi. Leave them blank to inherit the report model and authentication. Changes apply to new tasks. OAuth requires Local execution; Docker drawing uses API Keys. See [Core architecture](docs/ARCHITECTURE.md).
 - **Isolation:** the example uses `PI_TASK_ISOLATION=local`; Pi tools have your local user permissions. Docker mode requires an application image, Docker daemon and healthy task cleaner with the same scope. It does not fall back to local execution on failure. See [Core architecture](docs/ARCHITECTURE.md).
 - **Traces:** `run.trace.jsonl` records pipeline stages; `pi.events.jsonl` records model and tool events. Completion requires `agent_settled`, final assistant `stopReason == "stop"`, and HTML delivery checks.
-- **Limits:** built-in ingestion targets public Bilibili videos, without login or private-video access. Videos are limited to five hours, execution to 30 minutes. Submitted cloud ASR may continue charging after a local stop. Default understanding comes from the transcript, so visual-only information may be missing. Native Windows execution of the full pipeline is not presented as verified here.
+- **Limits:** built-in ingestion targets public Bilibili videos; subtitle extraction can use an existing login, while private videos are outside the supported scope. Videos are limited to five hours, execution to 30 minutes. Submitted cloud ASR may continue charging after a local stop. Default understanding comes from the transcript, so visual-only information may be missing. Native Windows execution of the full pipeline is not presented as verified here.
 
 ## Development and further reading
 
