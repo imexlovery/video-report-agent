@@ -76,7 +76,7 @@ Agent 日志默认保留每轮结束消息与 usage、工具参数/结果、生�
 
 Pi consumer 等待 `agent_settled`，并要求最终 assistant 的 `stopReason == "stop"`；`agent_end` 可能出现在重试或压缩之前。受控续跑只处理调用方明确配置且可识别的模型请求错误，沿用当前 Pi session 和任务工作区；报告仍须通过完整 HTML 检查才返回成功。整个 Worker 仍受调用方传入的总 deadline 限制。截图失败记录 `image_error`，HTML 仍可进入 `RENDERED`。
 
-`REPORT_REVIEW` 默认关闭。开启后向同一 Agent 提供检查工具；工具返回 `semantic_review: not_performed`、`visual_quality: not_scored`，不保证模型调用、修复或质量提升。
+`REPORT_REVIEW` 默认关闭。开启后向同一 Agent 提供检查工具；工具或同一检查器的 Bash CLI 检查来源 ID 与布局，并返回转述、元叙述、正文作者姓名和明显重复句段的候选位置（章节、DOM 路径、来源 ID、重复的前一位置）。内容检测只覆盖表层模式与至少 24 字的相同句段，跳过题头来源、导航、简介与来源说明；作者姓名按输入的 uploader 精确匹配，别称、同义重复及图文语义重复由当前 Agent 在原有集中修订中判断。必要归属可能命中，检查器不删词、不作语义通过判定；仍返回 `semantic_review: not_performed`、`visual_quality: not_scored`，不保证模型调用、修复或质量提升。
 
 ## Pi 任务容器
 

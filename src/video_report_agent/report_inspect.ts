@@ -7,7 +7,7 @@ export default function (pi) {
   pi.registerTool({
     name: "inspect_report",
     label: "Inspect report",
-    description: "检查当前 report.html 的来源 ID、页面溢出、裁切候选和加载问题，保存草稿与截图。最多调用两次；不验证语义真实性，不评分审美。",
+    description: "检查 report.html 的来源 ID、溢出、裁切和加载问题，并定位转述、元叙述、作者姓名及重复文本候选，保存草稿与截图。内容候选需结合原文判断，保留必要归属，不机械删词。最多两次；不验证语义真实性或归属正确性，不评分审美。",
     parameters: Type.Object({}),
     async execute(_id, _params, signal, _onUpdate, ctx) {
       if (calls >= 2) throw new Error("检查预算已用完。停止修订，诚实报告剩余问题。");
