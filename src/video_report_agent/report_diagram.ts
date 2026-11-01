@@ -20,8 +20,8 @@ export default function (pi) {
     label: "Generate diagram",
     description: "把一个确需图示的解释目标交给独立 Pi 会话。每份报告最多一次；只返回插入标记，不把绘图代码或过程带入主上下文。",
     parameters: Type.Object({
-      goal: Type.String({ description: "图示帮助读者理解什么关系或疑问" }),
-      context: Type.String({ description: "只写待画的对象、关系、数值和成立条件；不用“某人说”等来源引导句，人物属于图示对象或必要归属时保留；来源定位用 source_units，不夹带取材说明、绘制要求或声明" }),
+      goal: Type.String({ description: "读者需要看懂什么、哪些关系值得画出来；不无必要地预设链条、节点图或布局" }),
+      context: Type.String({ description: "只写待画的对象、关系、数值，保留成立条件、可能性和不确定性；不用“某人说”等来源引导句，人物属于图示对象或必要归属时保留；来源定位用 source_units，不夹带取材说明、绘制要求或声明" }),
       source_units: Type.Array(Type.String(), { minItems: 1, maxItems: 24 }),
       caption: Type.String({ description: "简短图名，只标明图示主题，不写小结、结论、备注或来源转述" }),
     }),
