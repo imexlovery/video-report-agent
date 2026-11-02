@@ -7,7 +7,7 @@ import shutil
 import time
 from pathlib import Path
 
-from .diagram import embed_diagram
+from .diagram import diagrams_enabled, embed_diagram
 from .report_content import fill_video_description
 from .report_image import render_report_image
 
@@ -162,14 +162,15 @@ def inspect_report(run: Path, label: str = "final") -> dict:
     shutil.copy2(report, target / "report.html")
     # Preview the same postprocessing as delivery without changing the agent's working file.
     # Metadata is deliberately read from the original run, while source.html stays raw.
-    embed_diagram(target / "report.html", run)
+    metadata_path = run / "input.json"
+    metadata = json.loads(metadata_path.read_text()) if metadata_path.is_file() else {}
+    if diagrams_enabled(metadata):
+        embed_diagram(target / "report.html", run)
     fill_video_description(target / "report.html", run)
     source_ids = set(re.findall(r"^\[([^ |]+) \|", (run / "transcript.md").read_text(), re.M))
     observations = run / "visual" / "observations.jsonl"
     frame_ids = ({json.loads(line)["frame_id"] for line in observations.read_text().splitlines()
                   if line.strip()} if observations.is_file() else set())
-    metadata_path = run / "input.json"
-    metadata = json.loads(metadata_path.read_text()) if metadata_path.is_file() else {}
     uploader = metadata.get("uploader")
     result = {"status": "error", "inspector_version": "1.2",
               "scope": "layout_reference_integrity_and_content_candidates",

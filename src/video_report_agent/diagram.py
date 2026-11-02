@@ -12,6 +12,10 @@ SVG_NS = "http://www.w3.org/2000/svg"
 ET.register_namespace("", SVG_NS)
 
 
+def diagrams_enabled(metadata: dict) -> bool:
+    return metadata.get("report_mode", "standard") != "brief" and metadata.get("diagrams", True)
+
+
 def diagram_model_config(selection: dict | None = None) -> dict | None:
     """Snapshot an optional drawing model; credentials remain in Pi configuration."""
     if selection is None:
@@ -39,7 +43,8 @@ def embed_diagram(report: Path, run: Path) -> None:
     content = report.read_text()
     directory = run / "assets" / "diagram"
     if PLACEHOLDER not in content:
-        if (directory / "request.json").exists() and 'data-report-diagram="true"' not in content:
+        if ((directory / "request.json").exists() and (directory / "diagram.svg").exists()
+                and 'data-report-diagram="true"' not in content):
             raise ValueError("Requested diagram is missing from the report")
         return
     if content.count(PLACEHOLDER) != 1:

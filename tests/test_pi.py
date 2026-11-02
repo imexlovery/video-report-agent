@@ -442,15 +442,18 @@ def test_final_fallback_has_reserved_attempt_and_never_routes_back(tmp_path, pat
     assert state["recovery_count"] == len(sequence) <= 3
 
 
-@pytest.mark.parametrize("drawing,enabled", [
-    (None, True), ("drawing", True), ("drawing", False), ("primary", True),
+@pytest.mark.parametrize("drawing,enabled,mode", [
+    (None, True, "standard"), ("drawing", True, "standard"),
+    ("drawing", False, "standard"), ("primary", True, "standard"),
+    ("drawing", True, "brief"),
 ])
-def test_docker_recovery_snapshots_final_provider(tmp_path, monkeypatch, drawing, enabled):
+def test_docker_recovery_snapshots_final_provider(tmp_path, monkeypatch, drawing, enabled, mode):
     from video_report_agent import pi
 
     (tmp_path / "transcript.md").write_text("synthetic transcript")
     (tmp_path / "input.json").write_text(json.dumps({
         "diagrams": enabled,
+        "report_mode": mode,
         **({"diagram_model_selection": {"provider": drawing, "model": "fixture"}}
            if drawing else {}),
     }))
@@ -470,10 +473,11 @@ def test_docker_recovery_snapshots_final_provider(tmp_path, monkeypatch, drawing
                 "final_fallback": {"provider": "final", "model": "fixture"}}
     asyncio.run(PiRunner(provider="primary", model="fixture", api_key="FAKE",
                         model_recovery=recovery, isolation="docker").run(tmp_path))
+    has_drawing = drawing and enabled and mode != "brief"
     assert [item["provider"] for item in selections] == (
-        ["primary"] + ([drawing] if drawing and enabled else []) + ["alternate", "final"]
+        ["primary"] + ([drawing] if has_drawing else []) + ["alternate", "final"]
     )
-    if drawing and enabled:
+    if has_drawing:
         assert selections[1]["api_key"] == ("FAKE" if drawing == "primary" else None)
 
 

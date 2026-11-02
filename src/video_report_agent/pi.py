@@ -12,7 +12,7 @@ import time
 from contextlib import ExitStack
 from pathlib import Path
 
-from .diagram import embed_diagram
+from .diagram import diagrams_enabled, embed_diagram
 from .pi_trace import compact_event
 from .report_content import fill_video_description
 from .task_container import (
@@ -264,7 +264,7 @@ class PiRunner:
                 selections = [{"provider": self.provider, "model": self.model,
                                "api_key": self.api_key}]
                 metadata = json.loads((generation / "input.json").read_text())
-                if metadata.get("diagrams", True) and metadata.get("diagram_model_selection"):
+                if diagrams_enabled(metadata) and metadata.get("diagram_model_selection"):
                     drawing = metadata["diagram_model_selection"]
                     selections.append({**drawing, "api_key": (
                         self.api_key if drawing["provider"] == self.provider else None
@@ -323,7 +323,7 @@ class PiRunner:
             env["OPENAI_SEARCH_MODEL"] = search.get("search_model", "")
             prepare_term_correction(generation or workspace, metadata)
         report_mode = metadata.get("report_mode", "standard")
-        diagrams = metadata.get("diagrams", True)
+        diagrams = diagrams_enabled(metadata)
         if report_mode not in ("standard", "brief"):
             raise PiError("INPUT_REJECTED", "report_mode must be standard or brief")
         skill = generation or workspace
@@ -574,7 +574,8 @@ class PiRunner:
             if report.is_symlink() or not report.is_file():
                 raise PiError("EXTERNAL_MODEL_FAILURE", "Pi ended without report.html")
             try:
-                embed_diagram(report, workspace)
+                if diagrams:
+                    embed_diagram(report, workspace)
             except (ValueError, OSError) as exc:
                 raise PiError("EXTERNAL_MODEL_FAILURE", "独立图示未正确生成或嵌入。") from exc
             fill_video_description(report, workspace)

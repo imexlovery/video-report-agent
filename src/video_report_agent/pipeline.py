@@ -107,6 +107,7 @@ def create_run(
         else {}
     )
     source = validate_bilibili_url(url)
+    diagrams = diagrams and report_mode != "brief"
     drawing = diagram_model_config(diagram_model_selection) if diagrams else None
     run = root.resolve() / uuid.uuid4().hex
     metadata = {

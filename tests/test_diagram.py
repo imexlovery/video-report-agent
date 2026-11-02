@@ -50,6 +50,16 @@ def test_embedding_and_missing_position(tmp_path, reference):
         embed_diagram(report, tmp_path)
 
 
+def test_failed_drawing_request_does_not_block_text_report(tmp_path):
+    diagram = tmp_path / "assets/diagram"
+    diagram.mkdir(parents=True)
+    (diagram / "request.json").write_text('{"source_units": ["u1"], "caption": "test"}')
+    report = tmp_path / "report.html"
+    report.write_text("<html><body>completed report without a diagram</body></html>")
+    embed_diagram(report, tmp_path)
+    assert report.read_text() == "<html><body>completed report without a diagram</body></html>"
+
+
 @pytest.mark.parametrize("element", [
     '<script>alert(1)</script>', '<style>body{display:none}</style>',
     '<image href="https://example.test/a.png"/>', '<path onload="alert(1)"/>',
@@ -66,21 +76,25 @@ def test_svg_cannot_load_resources_or_change_the_report(tmp_path, element):
         embed_diagram(report, tmp_path)
 
 
-def test_inspection_previews_embedded_diagram_without_rewriting_parent(tmp_path):
+@pytest.mark.parametrize("mode", ["standard", "brief"])
+def test_inspection_previews_embedded_diagram_without_rewriting_parent(tmp_path, mode):
     diagram = tmp_path / "assets/diagram"
     diagram.mkdir(parents=True)
     (diagram / "request.json").write_text('{"source_units": ["u1"], "caption": "test"}')
     (diagram / "diagram.svg").write_text(SVG)
     (tmp_path / "transcript.md").write_text("[u1 | 0–1s] source")
     report = tmp_path / "report.html"
-    source = f"<html><body>{PLACEHOLDER}</body></html>"
+    (tmp_path / "input.json").write_text(json.dumps({"report_mode": mode, "diagrams": True}))
+    source = (f"<html><body>{PLACEHOLDER}</body></html>" if mode == "standard"
+              else '<html><body><p data-source-units="u1">brief</p></body></html>')
     report.write_text(source)
     result = inspect_report(tmp_path)
     assert result["status"] == "checked"
-    assert result["diagram_count"] == 1
+    assert result["diagram_count"] == (1 if mode == "standard" else 0)
     assert result["findings"] == []
     assert report.read_text() == source
-    assert 'data-report-diagram="true"' in (tmp_path / "inspection/final/report.html").read_text()
+    preview = (tmp_path / "inspection/final/report.html").read_text()
+    assert ('data-report-diagram="true"' in preview) is (mode == "standard")
 
 
 @pytest.mark.parametrize("enabled", [True, False])
@@ -133,6 +147,7 @@ def test_invalid_drawing_configuration_is_rejected(selection):
 ])
 def test_real_pi_isolated_diagram_and_default_interface(
     tmp_path, monkeypatch, enabled, cancel, auth, *, isolation="local", evidence=None,
+    child_failure=False,
 ):
     requests = []
     authorizations = []
@@ -149,6 +164,10 @@ def test_real_pi_isolated_diagram_and_default_interface(
             child = not body.get("tools")
             if child:
                 child_started.set()
+                if child_failure:
+                    self.send_response(503)
+                    self.end_headers()
+                    return
                 if cancel:
                     release.wait(10)
                 delta, reason = {"content": SVG}, "stop"
@@ -164,7 +183,7 @@ def test_real_pi_isolated_diagram_and_default_interface(
                 delta = {"tool_calls": [{"index": 0, "id": "first", "type": "function",
                           "function": {"name": name, "arguments": json.dumps(args)}}]}
                 reason = "tool_calls"
-            elif enabled and not any(
+            elif enabled and not child_failure and not any(
                 call.get("function", {}).get("name") == "read"
                 for message in body["messages"] for call in message.get("tool_calls", [])
             ):
@@ -180,7 +199,8 @@ def test_real_pi_isolated_diagram_and_default_interface(
                 delta = {"tool_calls": [{"index": 0, "id": "write", "type": "function",
                          "function": {"name": "write", "arguments": json.dumps({
                              "path": "report.html",
-                             "content": f"<html><body>{PLACEHOLDER}</body></html>",
+                             "content": ("<html><body>text only</body></html>" if child_failure
+                                         else f"<html><body>{PLACEHOLDER}</body></html>"),
                          })}}]}
                 reason = "tool_calls"
             else:
@@ -282,7 +302,8 @@ def test_real_pi_isolated_diagram_and_default_interface(
         report = asyncio.run(runner.run(run))
         events = [json.loads(line) for line in (run / "pi.events.jsonl").read_text().splitlines()]
         drawing = [e for e in events if e.get("_agent_role") == "diagram"]
-        assert call_costs(run, {}, None)["llm_calls"] == (5 if enabled else 2)
+        if not child_failure:
+            assert call_costs(run, {}, None)["llm_calls"] == (5 if enabled else 2)
         assert authorizations == [f"Bearer {drawing_key if not body.get('tools') else key}"
                                   for body in requests]
         assert json.loads((config / "auth.json").read_text()) == credentials
@@ -299,7 +320,12 @@ def test_real_pi_isolated_diagram_and_default_interface(
             }
             staged = (stage / "input.json").read_text()
             assert key not in staged and drawing_key not in staged
-        if enabled:
+        if child_failure:
+            assert (run / "assets/diagram/request.json").is_file()
+            assert not (run / "assets/diagram/diagram.svg").exists()
+            assert report.read_text() == "<html><body>text only</body></html>"
+            assert any(e.get("message", {}).get("stopReason") == "error" for e in drawing)
+        elif enabled:
             assert 'data-report-diagram="true"' in report.read_text()
             assert len([e for e in drawing if e["type"] == "message_end"]) == 1
             child = next(body for body in requests if not body.get("tools"))
@@ -337,3 +363,10 @@ def test_real_pi_isolated_diagram_and_default_interface(
         server.shutdown()
         server.server_close()
         thread.join()
+
+
+@pytest.mark.skipif(shutil.which("pi") is None, reason="Pi is not installed")
+def test_real_pi_failed_drawing_allows_completed_report(tmp_path, monkeypatch):
+    test_real_pi_isolated_diagram_and_default_interface(
+        tmp_path, monkeypatch, True, False, "runtime_key", child_failure=True,
+    )

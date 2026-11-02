@@ -13,8 +13,12 @@ from video_report_agent.pipeline import create_run
 
 @pytest.mark.parametrize("mode", ["standard", "brief"])
 def test_create_run_saves_mode(tmp_path, mode):
-    run = create_run(tmp_path, "BV1aTtb6uE7d", report_mode=mode)
-    assert json.loads((run / "input.json").read_text())["report_mode"] == mode
+    run = create_run(tmp_path, "BV1aTtb6uE7d", report_mode=mode, diagrams=True,
+                     diagram_model_selection={"provider": "drawing", "model": "fixture"})
+    metadata = json.loads((run / "input.json").read_text())
+    assert metadata["report_mode"] == mode
+    assert metadata["diagrams"] is (mode == "standard")
+    assert ("diagram_model_selection" in metadata) is (mode == "standard")
 
 
 @pytest.mark.parametrize("mode", ["auto", "", None, ["brief"]])
@@ -30,10 +34,13 @@ def test_pi_uses_saved_mode_and_copies_only_selected_rules(
     tmp_path, monkeypatch, mode, copied_skill,
 ):
     run = create_run(tmp_path, "BV1aTtb6uE7d", report_mode=mode or "standard")
+    metadata = json.loads((run / "input.json").read_text())
     if mode is None:
-        metadata = json.loads((run / "input.json").read_text())
         metadata.pop("report_mode")
-        (run / "input.json").write_text(json.dumps(metadata))
+    if mode == "brief":
+        # Queued runs created before Brief disabled diagrams can still request them.
+        metadata["diagrams"] = True
+    (run / "input.json").write_text(json.dumps(metadata))
     original = (run / "input.json").read_bytes()
     # Old working directories may still contain resources staged by an earlier runner.
     (run / "modes").mkdir()
@@ -42,6 +49,10 @@ def test_pi_uses_saved_mode_and_copies_only_selected_rules(
         (run / "modes" / name).write_text("stale guide")
     for name in ("report-template.html", "brief-report-template.html"):
         (run / "assets" / name).write_text("stale template")
+    if mode == "brief":
+        stale = run / "assets/diagram"
+        stale.mkdir()
+        (stale / "diagram.svg").write_text("old drawing")
     (run / "transcript.md").write_text("Complete source text")
     executable = tmp_path / "fake-pi"
     executable.write_text('''#!/usr/bin/env python3
@@ -77,6 +88,10 @@ print(json.dumps({"type":"agent_settled"}), flush=True)
         review=False, skill_dir=copied if copied_skill else None, isolation="local",
     ).run(run))
     assert (run / "input.json").read_bytes() == original
+    invocation = json.loads((run / "invocation.json").read_text())
+    tools = invocation["command"][invocation["command"].index("--tools") + 1]
+    assert ("generate_diagram" in tools) is (mode != "brief")
+    assert ("本次启用独立图示" in invocation["prompt"]) is (mode != "brief")
 
 
 def test_cli_passes_mode(tmp_path, monkeypatch):

@@ -201,12 +201,12 @@ These switches apply to the complete Core pipeline. The standalone Skill ZIP use
 | Term correction | Off | Add `--term-correction` to enable; omit to disable. Python: `create_run(..., term_correction=True/False)` |
 | Visual enhancement | Off | Add `--visual-enhancement` to enable; omit to disable. Python: `visual_enhancement=True/False` |
 | Report inspection (`inspect_report`) | Dedicated tool off | Set `REPORT_REVIEW=1` in `.env` to enable, `0` to disable. Python: `PiRunner(review=True/False)` |
-| Independent diagrams (`generate_diagram`) | On, used as needed | Python: `create_run(..., diagrams=False)` to disable, `True` to enable. No CLI switch currently |
+| Independent diagrams (`generate_diagram`) | On as needed for Standard; off for Brief | Python: `create_run(..., diagrams=False)` disables it for Standard. Brief does not currently offer it; no CLI switch |
 | OCR (legacy fusion workflow) | Off | Use `--transcript-mode fused --ocr-mode auto` to enable, `--ocr-mode off` to disable. Requires the `enhancement` extra |
 
 Visual enhancement obtains a video track, samples nine frames and uses the task's selected report model to describe them. It shares the report model's provider, model, thinking level and Pi authentication (API Key or OAuth), then passes the descriptions to the report Agent. No separate vision model or key is needed. The model must support images and declare `"input": ["text", "image"]` in its `config/pi/models.json` entry; missing image input produces an explicit error. Enabling this adds one multimodal request's latency and usage.
 
-Independent diagrams allow at most one drawing call; the Agent can decide no diagram is needed. The drawing model can be configured separately as described below.
+Standard allows at most one independent drawing call; the Agent can decide no diagram is needed. The drawing model can be configured separately as described below.
 
 Report inspection gives the same Agent programmatic findings and available screenshots, allowing at most two inspections and one consolidated revision. `REPORT_REVIEW=0` disables the dedicated tool; the Skill still asks for consolidated checks and can invoke the inspector through Bash. Basic file/shell tools, HTML delivery checks and final PNG export are part of the regular workflow, with no corresponding CLI disable switches. Run `uv run video-report generate --help` for all options.
 

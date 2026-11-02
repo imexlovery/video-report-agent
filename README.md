@@ -200,12 +200,12 @@ B站 AI 自动字幕的新接口 Protobuf 字段解析参考了 [ccBilly-aipm/bi
 | 术语纠错 `term_correction` | 关闭 | CLI 添加 `--term-correction` 开启，省略即关闭；Python 用 `create_run(..., term_correction=True/False)` |
 | 画面辅助理解 | 关闭 | CLI 添加 `--visual-enhancement` 开启，省略即关闭；Python 用 `visual_enhancement=True/False` |
 | 报告检查 `inspect_report` | 专用工具关闭 | `.env` 设置 `REPORT_REVIEW=1` 开启，`0` 关闭；Python 可用 `PiRunner(review=True/False)` |
-| 独立图示 `generate_diagram` | 开启，Agent 按需调用 | Python 用 `create_run(..., diagrams=False)` 关闭，`True` 开启；当前没有 CLI 开关 |
+| 独立图示 `generate_diagram` | Standard 开启，Agent 按需调用；Brief 关闭 | Standard 可用 Python `create_run(..., diagrams=False)` 关闭；Brief 暂不提供此功能；当前没有 CLI 开关 |
 | OCR 画面文字识别（旧融合流程） | 关闭 | CLI 用 `--transcript-mode fused --ocr-mode auto` 开启，`--ocr-mode off` 关闭；需安装 `enhancement` 扩展 |
 
 画面辅助会额外取得视频轨、抽取 9 帧，使用本次任务选定的主报告模型生成画面描述，再交给报告 Agent。它沿用主模型的 provider、model、思考档位与 Pi 认证（API Key 或 OAuth），无需单独的视觉模型或 Key。主模型须实际支持图片，并在 `config/pi/models.json` 对应模型中声明 `"input": ["text", "image"]`；未声明图片输入时会明确报错。开启后会增加一次图文模型请求的耗时与用量。
 
-独立图示最多调用一次，可通过下方的独立绘图模型配置指定模型；开启时也可由 Agent 判断无需绘图。
+Standard 的独立图示最多调用一次，可通过下方的独立绘图模型配置指定模型；开启时也可由 Agent 判断无需绘图。
 
 报告检查工具向同一 Agent 返回程序检查结果与可用截图，最多检查两次、集中修订一次。`REPORT_REVIEW=0` 关闭专用工具；Skill 仍要求集中自检，也可以通过 Bash 调用检查器。基础读写／命令工具、HTML 交付检查和最终 PNG 导出属于常规流程，当前没有对应 CLI 关闭参数。完整参数见 `uv run video-report generate --help`。
 
