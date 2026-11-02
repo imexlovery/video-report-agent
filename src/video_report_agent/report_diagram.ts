@@ -6,6 +6,19 @@ import { join } from "node:path";
 
 const placeholder = "<!-- video-report-diagram -->";
 
+function retryable(message) {
+  if (message?.stopReason !== "error") return false;
+  const error = String(message.errorMessage ?? "").toLowerCase();
+  const status = Number(error.match(/\b(408|409|429|4\d\d|5\d\d)\b/)?.[1] ?? 0);
+  if (message.rawStopReason === "content_filter" || /data_inspection_failed|inappropriate content/.test(error)
+      || [401, 402, 403].includes(status)
+      || /invalid[ _-]?api[ _-]?key|authentication|unauthorized|insufficient[_ ]quota|quota exceeded|billing/.test(error)) {
+    return false;
+  }
+  return [408, 409, 429].includes(status) || status >= 500
+    || /internal_error|terminated|stream ended without finish_reason|stream ended before a terminal response event|timed out|timeout|connection error|connection reset|connection refused|econnreset|econnrefused|socket hang up|network error|unexpected eof/.test(error);
+}
+
 export default function (pi) {
   let called = false;
   pi.on("tool_call", event => {
@@ -80,6 +93,11 @@ export default function (pi) {
           let buffer = "";
           let settled = false;
           let failure;
+          let retryTimer;
+          let retries = 0;
+          const prompt = JSON.stringify({ type: "prompt", message: JSON.stringify(request) }) + "\n";
+          const retryPrompt = JSON.stringify({ type: "prompt",
+            message: "请根据本会话最初的绘图请求重新生成完整 SVG，只输出 SVG。" }) + "\n";
           const stop = () => child.kill("SIGKILL");
           const terminate = () => {
             stop(); rmSync(config, { recursive: true, force: true }); process.exit(143);
@@ -110,12 +128,19 @@ export default function (pi) {
                 if (event.type === "response" && event.success === false) {
                   failure = new Error("绘图会话无法开始。"); stop();
                 }
-                if (event.type === "agent_settled") { settled = true; stop(); }
+                if (event.type === "agent_settled") {
+                  if (!failure && !signal?.aborted && retries === 0 && retryable(lastAssistant)) {
+                    retries++;
+                    lastAssistant = undefined;
+                    retryTimer = setTimeout(() => child.stdin.write(retryPrompt), 2000);
+                  } else { settled = true; stop(); }
+                }
               } catch { failure = new Error("绘图会话返回了无效事件。"); stop(); }
             }
           });
           const cleanup = () => {
             clearTimeout(timer);
+            clearTimeout(retryTimer);
             signal?.removeEventListener("abort", stop);
             process.removeListener("SIGTERM", terminate);
           };
@@ -127,7 +152,7 @@ export default function (pi) {
               reject(new Error("绘图会话未正常完成。"));
             } else resolve();
           });
-          child.stdin.write(JSON.stringify({ type: "prompt", message: JSON.stringify(request) }) + "\n");
+          child.stdin.write(prompt);
         });
         const svg = lastAssistant.content.filter(part => part.type === "text").map(part => part.text).join("\n").trim();
         await writeFile(join(directory, "diagram.svg"), svg);

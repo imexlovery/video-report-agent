@@ -1,11 +1,13 @@
 import json
 import os
+import sys
 import time
 from types import SimpleNamespace
 
 import pytest
 from storage_fixtures import import_fixtures
 
+from video_report_agent import pi as pi_module
 from video_report_agent import pipeline
 from video_report_agent.asr import DEFAULT_ASR_MODEL, normalize_asr_segments
 from video_report_agent.ingest import validate_bilibili_url
@@ -248,6 +250,40 @@ def test_no_history_runs_normal_pipeline(tmp_path, monkeypatch):
     monkeypatch.setattr(pipeline, "download_bilibili_video", download)
     assert pipeline.generate(run)["state"] == "FAILED"
     assert calls == ["download"]
+
+
+def test_failed_diagram_placeholder_does_not_block_pipeline_delivery(
+    completed, tmp_path, monkeypatch,
+):
+    previous, metadata = completed
+    for key in ("DIAGRAM_PROVIDER", "DIAGRAM_MODEL", "DIAGRAM_THINKING", "PI_API_KEY",
+                "VIDEO_REPORT_SKILL_DIR"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("PI_PROVIDER", "fixture")
+    monkeypatch.setenv("PI_MODEL", "fixture")
+    monkeypatch.setenv("PI_TASK_ISOLATION", "local")
+    monkeypatch.setattr(pi_module, "PI_AGENT_DIR", tmp_path / "pi-config")
+    run = pipeline.create_run(previous.parent, URL,
+                              asr_backend=metadata["asr_backend"], asr_model=metadata["asr_model"])
+    fake_pi = tmp_path / "pi"
+    fake_pi.write_text(
+        f'#!{sys.executable}\n'
+        'import json, pathlib, sys\n'
+        'json.loads(sys.stdin.readline())\n'
+        'pathlib.Path("assets/diagram").mkdir(parents=True, exist_ok=True)\n'
+        'pathlib.Path("assets/diagram/request.json").write_text("{}")\n'
+        'pathlib.Path("report.html").write_text('
+        '"<html><body>report<!-- video-report-diagram --></body></html>")\n'
+        'print(json.dumps({"type":"message_end","message":{"role":"assistant","stopReason":"stop"}}))\n'
+        'print(json.dumps({"type":"agent_settled"}), flush=True)\n'
+    )
+    fake_pi.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path) + os.pathsep + os.environ["PATH"])
+    status = pipeline.generate(run)
+    assert status["state"] == "RENDERED", status
+    assert "image_error" not in status
+    assert "<body>report</body>" in (run / "report.html").read_text()
+    assert (run / "report.png").read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
 
 
 @pytest.mark.parametrize("visual_enabled", [False, True])

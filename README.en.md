@@ -206,7 +206,7 @@ These switches apply to the complete Core pipeline. The standalone Skill ZIP use
 
 Visual enhancement obtains a video track, samples nine frames and uses the task's selected report model to describe them. It shares the report model's provider, model, thinking level and Pi authentication (API Key or OAuth), then passes the descriptions to the report Agent. No separate vision model or key is needed. The model must support images and declare `"input": ["text", "image"]` in its `config/pi/models.json` entry; missing image input produces an explicit error. Enabling this adds one multimodal request's latency and usage.
 
-Standard allows at most one independent drawing call; the Agent can decide no diagram is needed. The drawing model can be configured separately as described below.
+Standard allows at most one independent drawing tool call; the Agent can decide no diagram is needed. The drawing model can be configured separately as described below. Transient request failures receive at most one retry within the 180-second limit; if the diagram still cannot be embedded, its placeholder is removed and the otherwise complete report is delivered.
 
 Report inspection gives the same Agent programmatic findings and available screenshots, allowing at most two inspections and one consolidated revision. `REPORT_REVIEW=0` disables the dedicated tool; the Skill still asks for consolidated checks and can invoke the inspector through Bash. Basic file/shell tools, HTML delivery checks and final PNG export are part of the regular workflow, with no corresponding CLI disable switches. Run `uv run video-report generate --help` for all options.
 

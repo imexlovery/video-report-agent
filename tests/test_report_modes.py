@@ -92,6 +92,7 @@ print(json.dumps({"type":"agent_settled"}), flush=True)
     tools = invocation["command"][invocation["command"].index("--tools") + 1]
     assert ("generate_diagram" in tools) is (mode != "brief")
     assert ("本次启用独立图示" in invocation["prompt"]) is (mode != "brief")
+    assert ("绘图失败时，用正文或现有组件表达" in invocation["prompt"]) is (mode != "brief")
 
 
 def test_cli_passes_mode(tmp_path, monkeypatch):
