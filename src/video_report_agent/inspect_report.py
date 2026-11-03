@@ -99,9 +99,10 @@ def content_candidates(blocks: list[dict], uploader: str = "") -> list[dict]:
     """Locate surface patterns only. Attribution and information gain need source review."""
     patterns = {
         "possible_third_person_narration": re.compile(
-            r"(?:讲者|视频作者)|(?:作者|UP\s*主|视频)"
+            r"(?:讲者|讲述者|叙述者|演示者|视频作者)|(?:作者|UP\s*主|视频)"
             r"(?:中|里|在视频中|在这里|接着|随后|同时|还|又)?"
             r"(?:提到|指出|认为|表示|强调|介绍|解释|讲述|叙述|转述|列举|交代|引述|讲到|提出|给出|称|说)"
+            r"|(?<!其)(?:他|她)(?:认为|觉得|指出|表示|解释|强调)"
         ),
         "possible_meta_narration": re.compile(r"本报告|本文|本图|这份报告|报告中的|本节将"),
     }
