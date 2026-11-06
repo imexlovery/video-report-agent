@@ -151,14 +151,14 @@ def content_candidates(blocks: list[dict], uploader: str = "") -> list[dict]:
     return findings
 
 
-def inspect_report(run: Path, label: str = "final") -> dict:
+def inspect_report(run: Path, label: str = "final", *, report_file: Path | None = None) -> dict:
     run = run.resolve()
     if not re.fullmatch(r"[a-zA-Z0-9_-]+", label):
         raise ValueError("Invalid inspection label")
     target = run / "inspection" / label
     target.mkdir(parents=True, exist_ok=False)
     started = time.monotonic()
-    report = run / "report.html"
+    report = Path(report_file) if report_file is not None else run / "report.html"
     shutil.copy2(report, target / "source.html")
     shutil.copy2(report, target / "report.html")
     # Preview the same postprocessing as delivery without changing the agent's working file.

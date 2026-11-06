@@ -17,6 +17,7 @@
 | [pi.py](../src/video_report_agent/pi.py)、[产品 Skill](../src/video_report_agent/skills/video-report/SKILL.md) | 选择模式资产、Pi RPC 和完成判断；Skill 规定内容与表达 |
 | [report_diagram.ts](../src/video_report_agent/report_diagram.ts)、[diagram.py](../src/video_report_agent/diagram.py) | 主 Agent 按需委派独立绘图会话，程序将 SVG 嵌入指定位置 |
 | [report_content.py](../src/video_report_agent/report_content.py)、[report_image.py](../src/video_report_agent/report_image.py) | 原始简介处理、HTML 后处理与长图导出 |
+| [style_edit.py](../src/video_report_agent/style_edit.py)、[style_source.ts](../src/video_report_agent/style_source.ts) | 一次独立文风校订、按来源单元核对与安全合并 |
 | [storage.py](../src/video_report_agent/storage.py) | SQLite 正文、执行身份、缓存认领与结构化事实；支持调用方活动事务 |
 | [reuse.py](../src/video_report_agent/reuse.py)、[retention.py](../src/video_report_agent/retention.py) | 兼容输入复用与媒体清理 |
 | [trace.py](../src/video_report_agent/trace.py)、[usage.py](../src/video_report_agent/usage.py) | 阶段事件、调用用量和费用估算缓存 |
@@ -62,7 +63,9 @@ Agent 日志默认保留每轮结束消息与 usage、工具参数/结果、生�
 
 ## 完成与检查
 
-生成 Skill 以具体对象、动作和关系直接成文，单一作者归属由题头承接；个人经历、多人分歧和第三方引用保留必要主体。图内只表达关系与必要标签，外部图注仅用短图名，补充论证在正文展开；强调框讲完内容即止，必要归属可用短署名，条件与结论合写。材料处理、生成及检查记录留在工作目录，来源折叠区只保留作品信息和必要定位映射。文风检查纳入既有的一轮集中检查与修订，不增加独立审稿调用。
+生成 Skill 以具体对象、动作和关系直接成文，单一作者归属由题头承接；个人经历、多人分歧和第三方引用保留必要主体。图内只表达关系与必要标签，外部图注仅用短图名，补充论证在正文展开；强调框讲完内容即止，必要归属可用短署名，条件与结论合写。材料处理、生成及检查记录留在工作目录，来源折叠区只保留作品信息和必要定位映射。
+
+完整报告生成并嵌入图示后、PNG 渲染前执行一次独立 Pi 文风校订；复用最终完成主报告的模型、思考档位与认证，不切换供应商。校订只改正文措辞，同一会话复核修改并可按来源 ID 查询转写；章节、图示、链接、来源标记与样式保持原样。程序按段落保护可明确识别的数字和公式，局部冲突恢复该段，保留其他修改；结构不可安全合并、校订失败或检查失败时保存候选并交付原稿。`style/before.html`、`style/candidate.html`、`style/delivered.html`、差异和结果随任务文档保存；`status.style_edit` 与 Agent 阶段记录校订结果，模型用量并入任务统计。校订使用既有 Local/Docker 隔离与总期限；中断时保存已产生的候选并恢复原稿。程序检查不证明语义、条件或观点范围全部正确。
 
 主报告优先委派具体事件或例子中的一个局部关系；主体、连线或限定过多时缩小选题，少用需猜含义的符号，背景、来源说明和证据分级留正文。独立图示用少量主体、最少连线和短标签直接表达，配色自由简洁。主 Skill 的语言规则以具体文字写入 `diagram.md` 并实际加载；正文、委派参数和图示均保留原文条件、时态与判断强度，条件下的强结论不逐层改弱，原文的可能性不升级为确定；具体前提表达一次，不自行加推演、尚未证实等评价。沿用单个独立绘图会话，不新增角色。
 

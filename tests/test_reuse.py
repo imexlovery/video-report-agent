@@ -204,6 +204,56 @@ def test_pipeline_reuses_inputs_and_generates_new_report(
     ).stat().st_ino
 
 
+@pytest.mark.parametrize("outcome", ["applied", "fallback"])
+def test_style_runs_once_before_report_persistence_and_records_fallback(completed, monkeypatch,
+                                                                      outcome):
+    previous, _ = completed
+    run = pipeline.create_run(previous.parent, URL)
+    original = '<html><body><p data-source-units="unit-000001">原稿</p></body></html>'
+    revised = original.replace('原稿', '修订稿')
+    calls = []
+
+    async def generate_report(current):
+        calls.append("generation")
+        (current / "report.html").write_text(original)
+
+    def style(current, _runner):
+        calls.append("style")
+        assert (current / "report.html").read_text() == original
+        directory = current / "style"
+        directory.mkdir()
+        (directory / "before.html").write_text(original)
+        (directory / "changes.diff").write_text("fixture diff")
+        result = {"status": outcome, **({"reason": "rejected"} if outcome == "fallback" else {})}
+        (directory / "result.json").write_text(json.dumps(result))
+        if outcome == "applied":
+            (current / "report.html").write_text(revised)
+        return result
+
+    def render(current):
+        calls.append("render")
+        assert (current / "report.html").read_text() == (
+            revised if outcome == "applied" else original)
+        (current / "report.png").write_bytes(b"fixture")
+
+    monkeypatch.setattr(pipeline, "PiRunner", lambda: SimpleNamespace(
+        run=generate_report, provider="fixture", model="fixture"))
+    monkeypatch.setattr(pipeline, "edit_report", style)
+    monkeypatch.setattr(pipeline, "render_report_image", render)
+    result = pipeline.generate(run)
+    assert result["state"] == "RENDERED"
+    assert result["style_edit"]["status"] == outcome
+    assert calls == ["generation", "style", "render"]
+    from video_report_agent.storage import Store
+
+    store = Store(previous.parent / "state.sqlite3", initialize=False)
+    assert store.html(run.name) == (revised if outcome == "applied" else original)
+    assert store.documents(run.name)["style/before.html"] == original
+    trace = [json.loads(line) for line in (run / "run.trace.jsonl").read_text().splitlines()]
+    end = next(e for e in trace if e["stage"] == "agent" and e["type"] == "stage_end")
+    assert end["style_edit"]["status"] == outcome
+
+
 @pytest.mark.parametrize("change", ["model", "mode", "ocr", "subtitle", "partial", "degraded"])
 def test_incompatible_or_incomplete_text_is_not_reused(completed, change):
     previous, metadata = completed

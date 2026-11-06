@@ -4,9 +4,10 @@ import json
 import os
 import time
 
+import pytest
 from test_pi import Process
 
-from video_report_agent.pi import PiRunner
+from video_report_agent.pi import PiError, PiRunner
 from video_report_agent.pi_trace import compact_event
 from video_report_agent.retention import cleanup_media
 from video_report_agent.usage import _llm_costs
@@ -59,6 +60,21 @@ def test_default_does_not_write_raw_log(tmp_path, monkeypatch):
     asyncio.run(PiRunner()._consume(Process(events), tmp_path, 'task'))
     assert not (tmp_path / 'pi.raw.events.jsonl').exists()
     assert compact_event({'type': 'auto_retry_start', 'attempt': 2})['attempt'] == 2
+
+
+def test_style_model_failure_does_not_persist_provider_error(tmp_path, monkeypatch):
+    monkeypatch.setenv('PI_TRACE_FULL', '1')
+    events = [
+        {'type': 'message_end', 'message': {'role': 'assistant', 'stopReason': 'error',
+                                            'errorMessage': 'private provider diagnostic',
+                                            'content': [{'type': 'text',
+                                                         'text': 'private provider diagnostic'}]}},
+        {'type': 'agent_settled'},
+    ]
+    with pytest.raises(PiError):
+        asyncio.run(PiRunner()._consume(Process(events), tmp_path, 'task', agent_role='style'))
+    assert 'private provider diagnostic' not in (tmp_path / 'pi.events.jsonl').read_text()
+    assert not (tmp_path / 'pi.raw.events.jsonl').exists()
 
 
 def test_raw_retention_only_expires_terminal_debug_logs(tmp_path, monkeypatch):

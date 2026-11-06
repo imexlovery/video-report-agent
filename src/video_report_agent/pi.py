@@ -627,6 +627,8 @@ class PiRunner:
         model_recovery: dict | None = None,
         model_state: dict | None = None,
         deadline: float | None = None,
+        agent_role: str | None = None,
+        attempt_offset: int = 0,
     ) -> dict:
         async def send(command):
             process.stdin.write((json.dumps(command) + "\n").encode())
@@ -638,12 +640,12 @@ class PiRunner:
         pending_recovery = None
         pending_model_command = None
         failures = {}
-        request_sequence = 0
+        request_sequence = attempt_offset
         with ExitStack() as stack:
             log = stack.enter_context((workspace / "pi.events.jsonl").open("ab"))
             raw = (
                 stack.enter_context((workspace / "pi.raw.events.jsonl").open("ab"))
-                if os.getenv("PI_TRACE_FULL", "0") == "1" else None
+                if os.getenv("PI_TRACE_FULL", "0") == "1" and agent_role != "style" else None
             )
             while line := await process.stdout.readline():
                 event = json.loads(line)
@@ -670,7 +672,18 @@ class PiRunner:
                     timing = json.loads(event["message"].removeprefix("video-report-trace:"))
                     timing["_trace_received_at"] = event["_trace_received_at"]
                     event = timing
-                compact = compact_event(event)
+                if agent_role and "_agent_role" not in event:
+                    event["_agent_role"] = agent_role
+                logged_event = event
+                if agent_role == "style":
+                    message = event.get("message")
+                    if (event.get("type") == "message_end" and isinstance(message, dict)
+                            and message.get("stopReason") == "error"):
+                        logged_event = {**event, "message": {
+                            **message, "errorMessage": "文风校订模型请求未完成", "content": []}}
+                    elif event.get("type") == "response" and event.get("success") is False:
+                        logged_event = {**event, "error": "文风校订请求未完成"}
+                compact = compact_event(logged_event)
                 if compact is not None:
                     log.write((json.dumps(compact, ensure_ascii=False) + "\n").encode())
                     log.flush()
@@ -726,6 +739,8 @@ class PiRunner:
                         "requested_at": event.get("timestamp"),
                         "input_bytes": event.get("input_bytes"),
                     }
+                    if agent_role:
+                        active_request["agent_role"] = agent_role
                     if pending_recovery:
                         model_state["recovery_count"] += 1
                         active_request.update(

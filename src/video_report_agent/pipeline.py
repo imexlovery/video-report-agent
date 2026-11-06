@@ -32,6 +32,7 @@ from .reuse import (
     validated_transcript,
 )
 from .storage import CacheProductionFailed, Store
+from .style_edit import STYLE_DOCUMENTS, edit_report, recover_interrupted_style
 from .term_correction import TERM_DOCUMENTS, search_config
 from .trace import RunTrace
 from .transcript import build_transcript
@@ -589,7 +590,23 @@ def generate(run: Path, *, database_path=None, execution_id=None) -> dict:
                 input={"artifact": "transcript.md"},
             ) as detail:
                 asyncio.run(runner.run(run))
-                detail.update(output={"artifact": "report.html"})
+                style_started = time.monotonic()
+                try:
+                    style = edit_report(run, runner)
+                except Exception as exc:
+                    recover_interrupted_style(run)
+                    style = {"status": "fallback", "reason": "style_runtime_error",
+                             "error_type": type(exc).__name__}
+                status["style_edit"] = {
+                    key: style[key] for key in ("status", "reason") if key in style
+                }
+                store.capture(run, execution_id, names=STYLE_DOCUMENTS)
+                detail.update(output={"artifact": "report.html"},
+                              style_edit=status["style_edit"],
+                              style_model={key: style[key] for key in
+                                           ("provider", "model", "thinking") if key in style},
+                              style_elapsed_ms=round(
+                                  (time.monotonic() - style_started) * 1000, 3))
             store.save_report(run, execution_id, (run / "report.html").read_text())
             for asset in (run / "assets").rglob("*"):
                 if asset.is_file() and not asset.is_symlink():

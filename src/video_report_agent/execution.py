@@ -10,6 +10,7 @@ from pathlib import Path
 from .pipeline import write_json
 from .retention import cleanup_cancelled_run
 from .storage import Store
+from .style_edit import STYLE_DOCUMENTS, recover_interrupted_style
 from .task_container import wait_for_cleanup
 from .trace import RunTrace
 from .usage import execution_statistics
@@ -82,6 +83,10 @@ def generate(
             # Docker tasks are supervised outside this process group. Wait for
             # parent-death cleanup before cancellation deletes generation files.
             wait_for_cleanup(run)
+            if recover_interrupted_style(run):
+                RunTrace(run).emit("style_recovered", "style-recovery", "style",
+                                   status="fallback", reason="interrupted")
+            store.capture(run, execution_id, names=STYLE_DOCUMENTS)
     path = run / "status.json"
     record = store.run(run.name)
     status = record["result"] or record["status"]
