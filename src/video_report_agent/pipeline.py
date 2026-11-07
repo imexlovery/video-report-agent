@@ -54,6 +54,8 @@ def create_run(
     diagrams=True,
     diagram_model_selection=None,
     term_correction: bool = False,
+    report_inspection: bool = False,
+    style_edit: bool = True,
     search_provider=None,
     search_model=None,
     visual_enhancement: bool = False,
@@ -122,6 +124,8 @@ def create_run(
         "report_mode": report_mode,
         "diagrams": diagrams,
         "term_correction": term_correction,
+        "report_inspection": report_inspection,
+        "style_edit": style_edit,
         "visual_enhancement": visual_enhancement,
         "transcript_mode": transcript_mode,
         **({"transcript_sources": transcript_sources} if transcript_sources is not None else {}),
@@ -543,7 +547,7 @@ def generate(run: Path, *, database_path=None, execution_id=None) -> dict:
             runner_options = dict(metadata.get("model_selection", {}))
             if metadata.get("model_recovery"):
                 runner_options["model_recovery"] = metadata["model_recovery"]
-            runner = PiRunner(**runner_options)
+            runner = PiRunner(review=metadata.get("report_inspection", False), **runner_options)
             if metadata.get("visual_enhancement", False):
                 update("VISUAL_ANALYSIS")
                 initialize_pi_config(PI_AGENT_DIR)
@@ -592,7 +596,8 @@ def generate(run: Path, *, database_path=None, execution_id=None) -> dict:
                 asyncio.run(runner.run(run))
                 style_started = time.monotonic()
                 try:
-                    style = edit_report(run, runner)
+                    style = (edit_report(run, runner) if metadata.get("style_edit", True)
+                             else {"status": "skipped"})
                 except Exception as exc:
                     recover_interrupted_style(run)
                     style = {"status": "fallback", "reason": "style_runtime_error",

@@ -145,10 +145,9 @@ def test_edit_keeps_original_candidate_and_partial_delivery(tmp_path, monkeypatc
         (stage / "report.html").write_text(candidate)
 
     monkeypatch.setattr(style_edit, "_execute", change)
-    monkeypatch.setattr(style_edit, "inspect_report", lambda *_a, **_k: {
-        "status": "checked", "findings": []})
     result = style_edit.edit_report(tmp_path, runner)
     assert result["status"] == "applied"
+    assert not (tmp_path / "inspection").exists()
     assert result["numeric_or_formula_blocks_restored"] == 1
     assert (tmp_path / "style/before.html").read_text() == REPORT
     assert (tmp_path / "style/candidate.html").read_text() == candidate
@@ -245,8 +244,6 @@ def test_real_pi_edit_session_with_source_lookup_and_usage(tmp_path, monkeypatch
             '{"kind":"request_started","attempt":5,"model":"main"}\n')
     monkeypatch.setattr("video_report_agent.pi.PI_AGENT_DIR", config)
     monkeypatch.setattr(style_edit, "PI_AGENT_DIR", config)
-    monkeypatch.setattr(style_edit, "inspect_report", lambda *_a, **_k: {
-        "status": "checked", "findings": []})
     try:
         runner = PiRunner(provider="style-local", model="style-stub", api_key="local-only",
                           thinking="off", timeout=30, isolation="local")

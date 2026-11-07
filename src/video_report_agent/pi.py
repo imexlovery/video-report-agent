@@ -443,11 +443,7 @@ class PiRunner:
                 "Profile 只指导内容关系表达，不覆盖所选模式的展开程度。"
                 "只使用当前模式的模板、样式与组件，不读取或混入另一模式的视觉资源。"
                 "本次主报告禁止自由绘图或新写 CSS，只复用模板已有 UI 组件。"
-                "首稿后按 Skill 的集中修订约定，先一次完成全部检查，再最多一次集中修订、"
-                "一次局部复核，随后立即结束，不逐项检查或多次修改。"
-                "直接使用现有 inspect_report；仅有 Bash 时调用 "
-                '"$VIDEO_REPORT_PYTHON" -m video_report_agent.inspect_report，'
-                "复核加 --label revision；不探测浏览器或自行编写截图程序。"
+                "检查环节是否执行以本次报告检查开关为准。"
             )
         if report_mode == "standard" and mode_path.is_file():
             prompt += (
@@ -467,6 +463,9 @@ class PiRunner:
                 "不改原始转写，不为报告检查调用外部搜索或ASR。检查失败时诚实说明，不能声称检查通过。"
                 "若工具没有返回图片，只能声称完成程序检查。"
             )
+        else:
+            prompt += ("本次报告检查关闭：完成完整初稿后直接结束，不执行 Skill 的集中检查、修订或复核环节。"
+                       "不要调用 inspect_report，也不要通过 Bash 运行检查器、截图或自行编写检查程序。")
         logged_command = list(command)
         if self.api_key and generation is None:
             api_key_index = logged_command.index("--api-key")

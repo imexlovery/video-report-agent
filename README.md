@@ -199,7 +199,8 @@ B站 AI 自动字幕的新接口 Protobuf 字段解析参考了 [ccBilly-aipm/bi
 |---|---|---|
 | 术语纠错 `term_correction` | 关闭 | CLI 添加 `--term-correction` 开启，省略即关闭；Python 用 `create_run(..., term_correction=True/False)` |
 | 画面辅助理解 | 关闭 | CLI 添加 `--visual-enhancement` 开启，省略即关闭；Python 用 `visual_enhancement=True/False` |
-| 报告检查 `inspect_report` | 专用工具关闭 | `.env` 设置 `REPORT_REVIEW=1` 开启，`0` 关闭；Python 可用 `PiRunner(review=True/False)` |
+| 报告检查 `report_inspection` | 关闭 | CLI `--report-inspection` 开启；Python `create_run(..., report_inspection=True/False)` |
+| 独立文风校订 `style_edit` | 开启 | CLI `--no-style-edit` 关闭、`--style-edit` 开启；Python `create_run(..., style_edit=True/False)` |
 | 独立图示 `generate_diagram` | Standard 开启，Agent 按需调用；Brief 关闭 | Standard 可用 Python `create_run(..., diagrams=False)` 关闭；Brief 暂不提供此功能；当前没有 CLI 开关 |
 | OCR 画面文字识别（旧融合流程） | 关闭 | CLI 用 `--transcript-mode fused --ocr-mode auto` 开启，`--ocr-mode off` 关闭；需安装 `enhancement` 扩展 |
 
@@ -207,7 +208,7 @@ B站 AI 自动字幕的新接口 Protobuf 字段解析参考了 [ccBilly-aipm/bi
 
 Standard 的独立图示工具最多调用一次，可通过下方的独立绘图模型配置指定模型；开启时也可由 Agent 判断无需绘图。绘图遇到可恢复的请求错误时最多重试一次，共用 180 秒时限；仍无法嵌入时清除占位符，交付已正常完成的正文。
 
-报告检查工具向同一 Agent 返回程序检查结果与可用截图，最多检查两次、集中修订一次。`REPORT_REVIEW=0` 关闭专用工具；Skill 仍要求集中自检，也可以通过 Bash 调用检查器。基础读写／命令工具、HTML 交付检查和最终 PNG 导出属于常规流程，当前没有对应 CLI 关闭参数。完整参数见 `uv run video-report generate --help`。
+报告检查工具向同一 Agent 返回程序检查结果与可用截图，最多检查两次、集中修订一次。任务关闭报告检查时，写完初稿直接结束，不通过 Bash 运行检查器。文风校订独立可选，校订后不再运行检查器。`REPORT_REVIEW` 仅作为独立构造 `PiRunner` 时的默认值，完整任务以任务参数为准。基础读写／命令工具、HTML 交付检查和最终 PNG 导出属于常规流程，当前没有对应 CLI 关闭参数。完整参数见 `uv run video-report generate --help`。
 
 ### 术语纠错的搜索服务配置
 

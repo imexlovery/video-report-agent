@@ -63,9 +63,8 @@ mode = metadata.get("report_mode", "standard")
 assert f"report_mode={mode}" in prompt
 assert f"modes/{mode}.md" in prompt
 assert "禁止自由绘图或新写 CSS" in prompt
-assert "最多一次集中修订" in prompt
-assert "一次局部复核" in prompt
-assert '"$VIDEO_REPORT_PYTHON" -m video_report_agent.inspect_report' in prompt
+assert "本次报告检查关闭" in prompt
+assert "不要通过 Bash 运行检查器" in prompt
 assert sorted(p.name for p in pathlib.Path("modes").glob("*.md")) == [f"{mode}.md"]
 template = "brief-report-template.html" if mode == "brief" else "report-template.html"
 other = "report-template.html" if mode == "brief" else "brief-report-template.html"

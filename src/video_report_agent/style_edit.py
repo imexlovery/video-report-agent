@@ -14,7 +14,6 @@ from collections import Counter
 from html.parser import HTMLParser
 from pathlib import Path
 
-from .inspect_report import inspect_report
 from .pi import PI_AGENT_DIR, PiError, PiRunner, initialize_pi_config
 from .task_container import TASK_PATH, launch_command, snapshot_models
 
@@ -480,14 +479,6 @@ async def _execute(run: Path, stage: Path, runner: PiRunner, selection: dict) ->
             shutil.rmtree(stage / ".pi-agent", ignore_errors=True)
 
 
-def _issues(check: dict) -> Counter:
-    kinds = {"horizontal_overflow", "broken_image", "invalid_source_ids", "invalid_frame_ids",
-             "missing_source_bindings", "resource_or_script_error"}
-    return Counter((item.get("kind"), item.get("tag"), item.get("id"),
-                    tuple(item.get("invalid_ids", [])), item.get("detail"))
-                   for item in check.get("findings", []) if item.get("kind") in kinds)
-
-
 def recover_interrupted_style(run: Path) -> bool:
     """Preserve an interrupted candidate and restore the untouched report."""
     directory = run / "style"
@@ -560,16 +551,6 @@ def edit_report(run: Path, runner: PiRunner) -> dict:
         delivered, checks = merge_style_change(before, candidate)
         result.update(checks)
         _atomic_text(path, delivered)
-        check = inspect_report(run, "style-final", report_file=path)
-        result["inspection_status"] = check["status"]
-        if check["status"] != "checked":
-            raise ValueError("校订后检查未完成")
-        issues = _issues(check)
-        if issues:
-            previous = inspect_report(run, "style-before", report_file=directory / "before.html")
-            if previous["status"] != "checked" or issues - _issues(previous):
-                raise ValueError("校订后出现新的结构、来源或布局问题")
-            result["existing_findings"] = sum(issues.values())
         _atomic_text(report, delivered)
         result["status"] = "applied" if delivered != before else "unchanged"
         result.pop("reason")

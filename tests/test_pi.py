@@ -615,7 +615,8 @@ def test_rejected_prompt(tmp_path):
         )
 
 
-def test_missing_output_and_run_cwd(tmp_path, monkeypatch):
+@pytest.mark.parametrize("review", [False, True])
+def test_missing_output_and_run_cwd(tmp_path, monkeypatch, review):
     executable = tmp_path / "fake-pi"
     executable.write_text("""#!/usr/bin/env python3
 import json,sys,os
@@ -632,10 +633,13 @@ print(json.dumps({"type":"agent_settled"}),flush=True)
     workspace.mkdir()
     (workspace / "transcript.md").write_text("sample")
     with pytest.raises(PiError, match="without report.html"):
-        asyncio.run(PiRunner(review=True, isolation="local").run(workspace))
+        asyncio.run(PiRunner(review=review, isolation="local").run(workspace))
     invocation = json.loads((workspace / "invocation.json").read_text())
     assert Path(invocation["cwd"]) == workspace
-    assert "read,write,edit,bash,inspect_report,generate_diagram" in invocation["command"]
+    expected = "read,write,edit,bash" + (",inspect_report" if review else "") + ",generate_diagram"
+    assert expected in invocation["command"]
+    assert ("本次报告检查关闭" in invocation["prompt"]) is (not review)
+    assert ("写完 report.html 后必须调用 inspect_report" in invocation["prompt"]) is review
     assert "--extension" in invocation["command"]
     assert "{{VIDEO_DESCRIPTION}}" in invocation["prompt"]
     assert "不要读取、改写或自行生成视频简介" in invocation["prompt"]

@@ -763,3 +763,14 @@ def test_visual_caption_is_staged_without_raw_images(tmp_path):
     assert json.loads((stage / "input.json").read_text())["visual_enhancement"] is True
     assert (stage / "visual/observations.jsonl").read_text() == '{"frame_id":"frame-000001"}\n'
     assert not (stage / "visual/frames").exists()
+
+
+@pytest.mark.parametrize("inspection,style", [(False, False), (False, True), (True, False), (True, True)])
+def test_stage_inputs_keeps_finishing_options(tmp_path, inspection, style):
+    (tmp_path / "transcript.md").write_text("synthetic")
+    (tmp_path / "input.json").write_text(json.dumps({
+        "report_inspection": inspection, "style_edit": style}))
+    stage = task_container.stage_inputs(tmp_path)
+    saved = json.loads((stage / "input.json").read_text())
+    assert saved["report_inspection"] is inspection
+    assert saved["style_edit"] is style
