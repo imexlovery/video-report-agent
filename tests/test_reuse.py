@@ -1,11 +1,13 @@
 import json
 import os
+import sys
 import time
 from types import SimpleNamespace
 
 import pytest
 from storage_fixtures import import_fixtures
 
+from video_report_agent import pi as pi_module
 from video_report_agent import pipeline
 from video_report_agent.asr import DEFAULT_ASR_MODEL, normalize_asr_segments
 from video_report_agent.ingest import validate_bilibili_url
@@ -154,6 +156,7 @@ def test_pipeline_reuses_inputs_and_generates_new_report(
         previous.parent,
         URL + "?p=1&share_source=copy",
         report_mode=target_mode or "standard",
+        style_edit=False,
     )
     original_input = json.loads((run / "input.json").read_text())
     if target_mode is None:
@@ -180,7 +183,7 @@ def test_pipeline_reuses_inputs_and_generates_new_report(
     monkeypatch.setattr(
         pipeline,
         "PiRunner",
-        lambda: SimpleNamespace(run=generate_report, provider="test", model="test"),
+        lambda *, review: SimpleNamespace(run=generate_report, provider="test", model="test"),
     )
     status = pipeline.generate(run)
     assert status["state"] == "RENDERED"
@@ -200,6 +203,56 @@ def test_pipeline_reuses_inputs_and_generates_new_report(
     assert (run / "canonical-transcript.jsonl").stat().st_ino != (
         previous / "canonical-transcript.jsonl"
     ).stat().st_ino
+
+
+@pytest.mark.parametrize("outcome", ["applied", "fallback"])
+def test_style_runs_once_before_report_persistence_and_records_fallback(completed, monkeypatch,
+                                                                      outcome):
+    previous, _ = completed
+    run = pipeline.create_run(previous.parent, URL)
+    original = '<html><body><p data-source-units="unit-000001">原稿</p></body></html>'
+    revised = original.replace('原稿', '修订稿')
+    calls = []
+
+    async def generate_report(current):
+        calls.append("generation")
+        (current / "report.html").write_text(original)
+
+    def style(current, _runner):
+        calls.append("style")
+        assert (current / "report.html").read_text() == original
+        directory = current / "style"
+        directory.mkdir()
+        (directory / "before.html").write_text(original)
+        (directory / "changes.diff").write_text("fixture diff")
+        result = {"status": outcome, **({"reason": "rejected"} if outcome == "fallback" else {})}
+        (directory / "result.json").write_text(json.dumps(result))
+        if outcome == "applied":
+            (current / "report.html").write_text(revised)
+        return result
+
+    def render(current):
+        calls.append("render")
+        assert (current / "report.html").read_text() == (
+            revised if outcome == "applied" else original)
+        (current / "report.png").write_bytes(b"fixture")
+
+    monkeypatch.setattr(pipeline, "PiRunner", lambda *, review: SimpleNamespace(
+        run=generate_report, provider="fixture", model="fixture"))
+    monkeypatch.setattr(pipeline, "edit_report", style)
+    monkeypatch.setattr(pipeline, "render_report_image", render)
+    result = pipeline.generate(run)
+    assert result["state"] == "RENDERED"
+    assert result["style_edit"]["status"] == outcome
+    assert calls == ["generation", "style", "render"]
+    from video_report_agent.storage import Store
+
+    store = Store(previous.parent / "state.sqlite3", initialize=False)
+    assert store.html(run.name) == (revised if outcome == "applied" else original)
+    assert store.documents(run.name)["style/before.html"] == original
+    trace = [json.loads(line) for line in (run / "run.trace.jsonl").read_text().splitlines()]
+    end = next(e for e in trace if e["stage"] == "agent" and e["type"] == "stage_end")
+    assert end["style_edit"]["status"] == outcome
 
 
 @pytest.mark.parametrize("change", ["model", "mode", "ocr", "subtitle", "partial", "degraded"])
@@ -250,6 +303,40 @@ def test_no_history_runs_normal_pipeline(tmp_path, monkeypatch):
     assert calls == ["download"]
 
 
+def test_failed_diagram_placeholder_does_not_block_pipeline_delivery(
+    completed, tmp_path, monkeypatch,
+):
+    previous, metadata = completed
+    for key in ("DIAGRAM_PROVIDER", "DIAGRAM_MODEL", "DIAGRAM_THINKING", "PI_API_KEY",
+                "VIDEO_REPORT_SKILL_DIR"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("PI_PROVIDER", "fixture")
+    monkeypatch.setenv("PI_MODEL", "fixture")
+    monkeypatch.setenv("PI_TASK_ISOLATION", "local")
+    monkeypatch.setattr(pi_module, "PI_AGENT_DIR", tmp_path / "pi-config")
+    run = pipeline.create_run(previous.parent, URL,
+                              asr_backend=metadata["asr_backend"], asr_model=metadata["asr_model"])
+    fake_pi = tmp_path / "pi"
+    fake_pi.write_text(
+        f'#!{sys.executable}\n'
+        'import json, pathlib, sys\n'
+        'json.loads(sys.stdin.readline())\n'
+        'pathlib.Path("assets/diagram").mkdir(parents=True, exist_ok=True)\n'
+        'pathlib.Path("assets/diagram/request.json").write_text("{}")\n'
+        'pathlib.Path("report.html").write_text('
+        '"<html><body>report<!-- video-report-diagram --></body></html>")\n'
+        'print(json.dumps({"type":"message_end","message":{"role":"assistant","stopReason":"stop"}}))\n'
+        'print(json.dumps({"type":"agent_settled"}), flush=True)\n'
+    )
+    fake_pi.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path) + os.pathsep + os.environ["PATH"])
+    status = pipeline.generate(run)
+    assert status["state"] == "RENDERED", status
+    assert "image_error" not in status
+    assert "<body>report</body>" in (run / "report.html").read_text()
+    assert (run / "report.png").read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+
+
 @pytest.mark.parametrize("visual_enabled", [False, True])
 def test_completed_asr_is_reused_when_transcript_is_incomplete(
     completed, monkeypatch, visual_enabled
@@ -258,7 +345,8 @@ def test_completed_asr_is_reused_when_transcript_is_incomplete(
     metadata.update(transcript_mode="fused", download_audio_only=False)
     pipeline.write_json(previous / "input.json", metadata)
     (previous / "canonical-transcript.jsonl").unlink()
-    run = pipeline.create_run(previous.parent, URL, visual_enhancement=visual_enabled)
+    run = pipeline.create_run(previous.parent, URL, visual_enhancement=visual_enabled,
+                              style_edit=False)
     calls = []
 
     def extract(media, output):
@@ -302,7 +390,7 @@ def test_completed_asr_is_reused_when_transcript_is_incomplete(
     monkeypatch.setattr(
         pipeline,
         "PiRunner",
-        lambda: SimpleNamespace(run=report, provider="test", model="test",
+        lambda *, review: SimpleNamespace(run=report, provider="test", model="test",
                                 thinking="low", api_key="fixture-key"),
     )
     status = pipeline.generate(run)
@@ -319,7 +407,7 @@ def test_invalid_asr_is_not_reused(completed, monkeypatch):
     previous, _ = completed
     (previous / "canonical-transcript.jsonl").unlink()
     (previous / "asr.json").write_text("{}")
-    run = pipeline.create_run(previous.parent, URL)
+    run = pipeline.create_run(previous.parent, URL, style_edit=False)
     called = []
 
     def extract(media, output):
@@ -348,7 +436,7 @@ def test_invalid_asr_is_not_reused(completed, monkeypatch):
     monkeypatch.setattr(
         pipeline,
         "PiRunner",
-        lambda: SimpleNamespace(run=report, provider="test", model="test",
+        lambda *, review: SimpleNamespace(run=report, provider="test", model="test",
                                 thinking="low", api_key="fixture-key"),
     )
     assert pipeline.generate(run)["state"] == "RENDERED"
@@ -427,7 +515,7 @@ def test_visual_preparation_runs_after_transcript_reuse(
         (previous / "download/source.mp4").unlink()
     selection = {"provider": "fixture", "model": "fixture", "thinking": "low"}
     run = pipeline.create_run(previous.parent, URL, visual_enhancement=enabled,
-                              model_selection=selection)
+                              model_selection=selection, style_edit=False)
     calls = []
 
     def sample(video, current, units):
@@ -464,7 +552,7 @@ def test_visual_preparation_runs_after_transcript_reuse(
     monkeypatch.setattr(pipeline, "describe_frames", describe)
     monkeypatch.setattr(pipeline, "fetch_video", download)
     def runner(**options):
-        assert options == selection
+        assert options == {**selection, "review": False}
         return SimpleNamespace(run=report, **selection, api_key="fixture-key")
 
     monkeypatch.setattr(pipeline, "PiRunner", runner)

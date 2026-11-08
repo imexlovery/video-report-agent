@@ -23,6 +23,9 @@ def main():
         run = sub.add_parser(command)
         run.add_argument("url")
         run.add_argument("--report-mode", choices=["standard", "brief"], default="standard")
+        run.add_argument("--report-inspection", action="store_true", help="初稿后运行报告检查")
+        run.add_argument("--style-edit", action=argparse.BooleanOptionalAction, default=True,
+                         help="独立文风校订（默认开启；--no-style-edit 跳过）")
         run.add_argument("--term-correction", action="store_true", help="核对并修正名称与术语")
         run.add_argument(
             "--visual-enhancement", action="store_true", help="抽帧生成画面描述辅助理解"
@@ -64,6 +67,8 @@ def main():
                 args.url,
                 report_mode=args.report_mode,
                 term_correction=args.term_correction,
+                report_inspection=args.report_inspection,
+                style_edit=args.style_edit,
                 visual_enhancement=args.visual_enhancement,
                 transcript_mode=args.transcript_mode,
                 transcript_sources=args.sources,

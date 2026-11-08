@@ -43,6 +43,33 @@ def test_worker_completes_without_provider_call(tmp_path):
     assert "Bilibili" in status["error"]
 
 
+def test_timeout_restores_interrupted_style_before_capturing_documents(tmp_path, monkeypatch):
+    run = create_run(tmp_path, "BV1aTtb6uE7d")
+    original = subprocess.Popen
+    code = (
+        "import json,time; from pathlib import Path; "
+        "Path('style').mkdir(); "
+        "Path('style/before.html').write_text('<html>before</html>'); "
+        "Path('style/result.json').write_text(json.dumps("
+        "{'status':'fallback','reason':'interrupted'})); "
+        "Path('report.html').write_text('<html>candidate</html>'); "
+        "time.sleep(30)"
+    )
+
+    def launch(_command, **kwargs):
+        return original([sys.executable, "-c", code], cwd=run, **kwargs)
+
+    monkeypatch.setattr(execution.subprocess, "Popen", launch)
+    status = execution.generate(run, timeout=0.8)
+    assert status["state"] == "FAILED"
+    assert (run / "report.html").read_text() == '<html>before</html>'
+    documents = Store(tmp_path / "state.sqlite3", initialize=False).documents(run.name)
+    assert documents["style/before.html"] == '<html>before</html>'
+    assert json.loads(documents["style/result.json"])["reason"] == "interrupted"
+    assert "candidate" in documents["style/candidate.html"]
+    assert documents["style/delivered.html"] == '<html>before</html>'
+
+
 def test_cancel_stops_worker_and_child(tmp_path, monkeypatch):
     import threading
 

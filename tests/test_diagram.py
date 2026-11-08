@@ -12,7 +12,7 @@ import pytest
 
 from video_report_agent.diagram import PLACEHOLDER, diagram_model_config, embed_diagram
 from video_report_agent.inspect_report import inspect_report
-from video_report_agent.pi import PiRunner
+from video_report_agent.pi import SKILL, PiRunner
 from video_report_agent.pipeline import create_run
 from video_report_agent.task_container import snapshot_models, stage_inputs
 from video_report_agent.usage import call_costs
@@ -46,8 +46,61 @@ def test_embedding_and_missing_position(tmp_path, reference):
     embed_diagram(report, tmp_path)
     assert report.read_text() == result
     report.write_text("<html><body>forgot the diagram</body></html>")
-    with pytest.raises(ValueError, match="missing"):
-        embed_diagram(report, tmp_path)
+    embed_diagram(report, tmp_path)
+    assert report.read_text() == "<html><body>forgot the diagram</body></html>"
+
+
+def test_failed_drawing_request_does_not_block_text_report(tmp_path):
+    diagram = tmp_path / "assets/diagram"
+    diagram.mkdir(parents=True)
+    (diagram / "request.json").write_text('{"source_units": ["u1"], "caption": "test"}')
+    report = tmp_path / "report.html"
+    report.write_text("<html><body>completed report without a diagram</body></html>")
+    embed_diagram(report, tmp_path)
+    assert report.read_text() == "<html><body>completed report without a diagram</body></html>"
+
+
+def test_valid_drawing_embeds_in_packaged_report_template(tmp_path):
+    diagram = tmp_path / "assets/diagram"
+    diagram.mkdir(parents=True)
+    (diagram / "request.json").write_text('{"source_units": ["u1"], "caption": "test"}')
+    (diagram / "diagram.svg").write_text(SVG)
+    template = (SKILL / "assets/report-template.html").read_text()
+    assert template.count("{{BODY}}") == 1
+    report = tmp_path / "report.html"
+    report.write_text(template.replace("{{BODY}}", f"<section>{PLACEHOLDER}</section>"))
+    embed_diagram(report, tmp_path)
+    result = report.read_text()
+    assert PLACEHOLDER not in result
+    assert '<figure data-report-diagram="true" data-source-units="u1">' in result
+
+
+@pytest.mark.parametrize("problem", [
+    "missing_svg", "missing_request", "bad_svg", "bad_request", "bad_caption", "duplicate",
+    "zero_viewbox", "script_position", "attribute_position",
+])
+def test_unusable_drawing_removes_placeholder_and_keeps_report(tmp_path, problem):
+    diagram = tmp_path / "assets/diagram"
+    diagram.mkdir(parents=True)
+    if problem != "missing_request":
+        caption = None if problem == "bad_caption" else "test"
+        request = json.dumps({"source_units": ["u1"], "caption": caption})
+        (diagram / "request.json").write_text("invalid" if problem == "bad_request" else request)
+    if problem != "missing_svg":
+        svg = "<svg" if problem == "bad_svg" else SVG
+        if problem == "zero_viewbox":
+            svg = svg.replace('viewBox="0 0 600 200"', 'viewBox="0 0 0 0"')
+        (diagram / "diagram.svg").write_text(svg)
+    report = tmp_path / "report.html"
+    markers = PLACEHOLDER * (2 if problem == "duplicate" else 1)
+    source = f"<html><body>before{markers}after</body></html>"
+    if problem == "script_position":
+        source = f'<html><body>before<script>window.x="{markers}"</script>after</body></html>'
+    elif problem == "attribute_position":
+        source = f'<html><body>before<div title="{markers}"></div>after</body></html>'
+    report.write_text(source)
+    embed_diagram(report, tmp_path)
+    assert report.read_text() == source.replace(PLACEHOLDER, "")
 
 
 @pytest.mark.parametrize("element", [
@@ -61,26 +114,51 @@ def test_svg_cannot_load_resources_or_change_the_report(tmp_path, element):
     (diagram / "request.json").write_text('{"source_units": ["u1"], "caption": "test"}')
     (diagram / "diagram.svg").write_text(SVG.replace("</svg>", element + "</svg>"))
     report = tmp_path / "report.html"
-    report.write_text(PLACEHOLDER)
-    with pytest.raises(ValueError):
-        embed_diagram(report, tmp_path)
+    report.write_text(f"<html><body>before{PLACEHOLDER}after</body></html>")
+    embed_diagram(report, tmp_path)
+    assert report.read_text() == "<html><body>beforeafter</body></html>"
 
 
-def test_inspection_previews_embedded_diagram_without_rewriting_parent(tmp_path):
+@pytest.mark.parametrize("mode", ["standard", "brief"])
+def test_inspection_previews_embedded_diagram_without_rewriting_parent(tmp_path, mode):
     diagram = tmp_path / "assets/diagram"
     diagram.mkdir(parents=True)
     (diagram / "request.json").write_text('{"source_units": ["u1"], "caption": "test"}')
     (diagram / "diagram.svg").write_text(SVG)
     (tmp_path / "transcript.md").write_text("[u1 | 0–1s] source")
     report = tmp_path / "report.html"
-    source = f"<html><body>{PLACEHOLDER}</body></html>"
+    (tmp_path / "input.json").write_text(json.dumps({"report_mode": mode, "diagrams": True}))
+    source = (f"<html><body>{PLACEHOLDER}</body></html>" if mode == "standard"
+              else '<html><body><p data-source-units="u1">brief</p></body></html>')
     report.write_text(source)
     result = inspect_report(tmp_path)
     assert result["status"] == "checked"
-    assert result["diagram_count"] == 1
+    assert result["diagram_count"] == (1 if mode == "standard" else 0)
     assert result["findings"] == []
     assert report.read_text() == source
-    assert 'data-report-diagram="true"' in (tmp_path / "inspection/final/report.html").read_text()
+    preview = (tmp_path / "inspection/final/report.html").read_text()
+    assert ('data-report-diagram="true"' in preview) is (mode == "standard")
+
+
+@pytest.mark.parametrize("problem", ["missing_svg", "script_position"])
+def test_inspection_previews_report_without_failed_drawing(tmp_path, problem):
+    diagram = tmp_path / "assets/diagram"
+    diagram.mkdir(parents=True)
+    (diagram / "request.json").write_text('{"source_units": ["u1"], "caption": "test"}')
+    (tmp_path / "transcript.md").write_text("[u1 | 0–1s] source")
+    report = tmp_path / "report.html"
+    marker = PLACEHOLDER
+    if problem == "script_position":
+        (diagram / "diagram.svg").write_text(SVG)
+        marker = f'<script>window.example="{PLACEHOLDER}"</script>'
+    source = f'<html><body><p data-source-units="u1">body</p>{marker}</body></html>'
+    report.write_text(source)
+    result = inspect_report(tmp_path)
+    assert result["status"] == "checked"
+    assert result["diagram_count"] == 0
+    assert report.read_text() == source
+    preview = (tmp_path / "inspection/final/report.html").read_text()
+    assert preview == source.replace(PLACEHOLDER, "")
 
 
 @pytest.mark.parametrize("enabled", [True, False])
@@ -133,6 +211,7 @@ def test_invalid_drawing_configuration_is_rejected(selection):
 ])
 def test_real_pi_isolated_diagram_and_default_interface(
     tmp_path, monkeypatch, enabled, cancel, auth, *, isolation="local", evidence=None,
+    child_failure=False, transient_failure=None, failure_status=503, cancel_in_retry=False,
 ):
     requests = []
     authorizations = []
@@ -149,6 +228,30 @@ def test_real_pi_isolated_diagram_and_default_interface(
             child = not body.get("tools")
             if child:
                 child_started.set()
+                child_attempt = sum(not body.get("tools") for body in requests)
+                if child_failure or transient_failure and child_attempt == 1:
+                    if transient_failure == "stream" and not child_failure:
+                        self.send_response(200)
+                        self.send_header("Content-Type", "text/event-stream")
+                        self.end_headers()
+                        part = {"id": "stub", "object": "chat.completion.chunk", "created": 1,
+                                "model": body["model"], "choices": [
+                                    {"index": 0, "delta": {"content": "partial"},
+                                     "finish_reason": None}]}
+                        self.wfile.write(("data: " + json.dumps(part) + "\n\n").encode())
+                        self.wfile.flush()
+                        self.close_connection = True
+                        return
+                    body = {"error": {"message": (
+                        "Provider returned error: invalid API key" if failure_status == 401
+                        else "Temporary provider failure"), "type": "invalid_request_error"}}
+                    payload = json.dumps(body).encode()
+                    self.send_response(failure_status)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(payload)))
+                    self.end_headers()
+                    self.wfile.write(payload)
+                    return
                 if cancel:
                     release.wait(10)
                 delta, reason = {"content": SVG}, "stop"
@@ -164,7 +267,7 @@ def test_real_pi_isolated_diagram_and_default_interface(
                 delta = {"tool_calls": [{"index": 0, "id": "first", "type": "function",
                           "function": {"name": name, "arguments": json.dumps(args)}}]}
                 reason = "tool_calls"
-            elif enabled and not any(
+            elif enabled and not child_failure and not any(
                 call.get("function", {}).get("name") == "read"
                 for message in body["messages"] for call in message.get("tool_calls", [])
             ):
@@ -180,7 +283,9 @@ def test_real_pi_isolated_diagram_and_default_interface(
                 delta = {"tool_calls": [{"index": 0, "id": "write", "type": "function",
                          "function": {"name": "write", "arguments": json.dumps({
                              "path": "report.html",
-                             "content": f"<html><body>{PLACEHOLDER}</body></html>",
+                             "content": (f"<html><body>text only{PLACEHOLDER}</body></html>"
+                                         if child_failure
+                                         else f"<html><body>{PLACEHOLDER}</body></html>"),
                          })}}]}
                 reason = "tool_calls"
             else:
@@ -261,12 +366,22 @@ def test_real_pi_isolated_diagram_and_default_interface(
                           api_key=key if provider not in credentials else None,
                           thinking="off", timeout=90 if isolation == "docker" else 40,
                           isolation=isolation)
-        if cancel:
+        if cancel or cancel_in_retry:
             async def interrupt():
                 task = asyncio.create_task(runner.run(run))
                 try:
                     async with asyncio.timeout(15):
-                        while not child_started.is_set():
+                        while True:
+                            if cancel_in_retry:
+                                events_path = run / "pi.events.jsonl"
+                                lines = (events_path.read_text().splitlines()
+                                         if events_path.exists() else [])
+                                ready = any('"_agent_role": "diagram"' in line
+                                            and '"type": "agent_settled"' in line for line in lines)
+                            else:
+                                ready = child_started.is_set()
+                            if ready:
+                                break
                             await asyncio.sleep(0.05)
                     task.cancel()
                     with pytest.raises(asyncio.CancelledError):
@@ -278,11 +393,14 @@ def test_real_pi_isolated_diagram_and_default_interface(
             assert str(run / "assets/diagram/sessions") not in processes
             assert not (run / ".diagram-config").exists()
             assert not (run / "report.html").exists()
+            if cancel_in_retry:
+                assert sum(not body.get("tools") for body in requests) == 1
             return
         report = asyncio.run(runner.run(run))
         events = [json.loads(line) for line in (run / "pi.events.jsonl").read_text().splitlines()]
         drawing = [e for e in events if e.get("_agent_role") == "diagram"]
-        assert call_costs(run, {}, None)["llm_calls"] == (5 if enabled else 2)
+        if not child_failure and not transient_failure:
+            assert call_costs(run, {}, None)["llm_calls"] == (5 if enabled else 2)
         assert authorizations == [f"Bearer {drawing_key if not body.get('tools') else key}"
                                   for body in requests]
         assert json.loads((config / "auth.json").read_text()) == credentials
@@ -299,9 +417,28 @@ def test_real_pi_isolated_diagram_and_default_interface(
             }
             staged = (stage / "input.json").read_text()
             assert key not in staged and drawing_key not in staged
-        if enabled:
+        if child_failure:
+            assert sum(not body.get("tools") for body in requests) == (
+                1 if failure_status == 401 else 2
+            )
+            assert (run / "assets/diagram/request.json").is_file()
+            assert not (run / "assets/diagram/diagram.svg").exists()
+            assert report.read_text() == "<html><body>text only</body></html>"
+            assert any(e.get("message", {}).get("stopReason") == "error" for e in drawing)
+        elif enabled:
+            assert sum(not body.get("tools") for body in requests) == (
+                2 if transient_failure else 1
+            )
+            if transient_failure:
+                retried = [body for body in requests if not body.get("tools")][1]
+                history = json.dumps(retried["messages"], ensure_ascii=False)
+                assert history.count("必要原文") == 1
+                assert "本会话最初的绘图请求" in history
+                assert "partial" not in history
             assert 'data-report-diagram="true"' in report.read_text()
-            assert len([e for e in drawing if e["type"] == "message_end"]) == 1
+            assert len([e for e in drawing if e["type"] == "message_end"]) == (
+                2 if transient_failure else 1
+            )
             child = next(body for body in requests if not body.get("tools"))
             assert child["model"] == drawing_model
             assert next(e for e in drawing if e["type"] == "request_start")["provider"] == (
@@ -337,3 +474,36 @@ def test_real_pi_isolated_diagram_and_default_interface(
         server.shutdown()
         server.server_close()
         thread.join()
+
+
+@pytest.mark.skipif(shutil.which("pi") is None, reason="Pi is not installed")
+def test_real_pi_failed_drawing_allows_completed_report(tmp_path, monkeypatch):
+    test_real_pi_isolated_diagram_and_default_interface(
+        tmp_path, monkeypatch, True, False, "runtime_key", child_failure=True,
+    )
+
+
+@pytest.mark.skipif(shutil.which("pi") is None, reason="Pi is not installed")
+@pytest.mark.parametrize(("failure", "status"), [
+    ("http", 503), ("stream", 503), ("http", 409), ("http", 429),
+])
+def test_real_pi_retries_transient_drawing_failure(tmp_path, monkeypatch, failure, status):
+    test_real_pi_isolated_diagram_and_default_interface(
+        tmp_path, monkeypatch, True, False, "runtime_key", transient_failure=failure,
+        failure_status=status,
+    )
+
+
+@pytest.mark.skipif(shutil.which("pi") is None, reason="Pi is not installed")
+def test_real_pi_does_not_retry_drawing_auth_failure(tmp_path, monkeypatch):
+    test_real_pi_isolated_diagram_and_default_interface(
+        tmp_path, monkeypatch, True, False, "runtime_key", child_failure=True, failure_status=401,
+    )
+
+
+@pytest.mark.skipif(shutil.which("pi") is None, reason="Pi is not installed")
+def test_real_pi_cancellation_stops_pending_drawing_retry(tmp_path, monkeypatch):
+    test_real_pi_isolated_diagram_and_default_interface(
+        tmp_path, monkeypatch, True, False, "runtime_key",
+        transient_failure="http", cancel_in_retry=True,
+    )

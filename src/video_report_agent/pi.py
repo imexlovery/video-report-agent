@@ -12,7 +12,7 @@ import time
 from contextlib import ExitStack
 from pathlib import Path
 
-from .diagram import embed_diagram
+from .diagram import diagrams_enabled, embed_diagram
 from .pi_trace import compact_event
 from .report_content import fill_video_description
 from .task_container import (
@@ -264,7 +264,7 @@ class PiRunner:
                 selections = [{"provider": self.provider, "model": self.model,
                                "api_key": self.api_key}]
                 metadata = json.loads((generation / "input.json").read_text())
-                if metadata.get("diagrams", True) and metadata.get("diagram_model_selection"):
+                if diagrams_enabled(metadata) and metadata.get("diagram_model_selection"):
                     drawing = metadata["diagram_model_selection"]
                     selections.append({**drawing, "api_key": (
                         self.api_key if drawing["provider"] == self.provider else None
@@ -323,7 +323,7 @@ class PiRunner:
             env["OPENAI_SEARCH_MODEL"] = search.get("search_model", "")
             prepare_term_correction(generation or workspace, metadata)
         report_mode = metadata.get("report_mode", "standard")
-        diagrams = metadata.get("diagrams", True)
+        diagrams = diagrams_enabled(metadata)
         if report_mode not in ("standard", "brief"):
             raise PiError("INPUT_REJECTED", "report_mode must be standard or brief")
         skill = generation or workspace
@@ -430,11 +430,14 @@ class PiRunner:
                 "优先具体事件或例子中的局部关系，少用需读者猜含义的抽象符号；"
                 "只问一个问题，并列问题只选其一，其余关系留正文；需要很多主体、连线或长篇限定时继续缩小选题。"
                 "最多调用一次 generate_diagram，提供读者要看懂的一个问题、必要局部事实与条件、"
-                "原文来源 ID 和短图名，不预设复杂布局。委派保留原文与正文相同的条件、时态和判断强度，"
+                "原文来源 ID 和短图名，不预设复杂布局。"
+                "委派保留原文与正文相同的条件、时态和判断强度，"
                 "不添加推演、未证实等评价，不把强结论改为可能。背景、来源说明、证据分级留在正文，"
                 "不要求图示承载这些内容或免责声明。普通文字或现有组件已能讲清时不画图。"
                 "独立会话按内容自由选择简洁形式与配色，程序负责嵌入；主报告只放置返回的原样标记，"
-                "不读取 diagram.md、report_diagram.ts、绘图代码或会话记录，不自行改图。检查预览包含最终图示。"
+                "不读取 diagram.md、report_diagram.ts、绘图代码或会话记录，不自行改图。"
+                "检查预览包含最终图示。"
+                "绘图失败时，用正文或现有组件表达，不放占位符或依赖图示的说明。"
             )
         if mode_path.is_file():
             prompt += (
@@ -442,11 +445,7 @@ class PiRunner:
                 "Profile 只指导内容关系表达，不覆盖所选模式的展开程度。"
                 "只使用当前模式的模板、样式与组件，不读取或混入另一模式的视觉资源。"
                 "本次主报告禁止自由绘图或新写 CSS，只复用模板已有 UI 组件。"
-                "首稿后按 Skill 的集中修订约定，先一次完成全部检查，再最多一次集中修订、"
-                "一次局部复核，随后立即结束，不逐项检查或多次修改。"
-                "直接使用现有 inspect_report；仅有 Bash 时调用 "
-                '"$VIDEO_REPORT_PYTHON" -m video_report_agent.inspect_report，'
-                "复核加 --label revision；不探测浏览器或自行编写截图程序。"
+                "检查环节是否执行以本次报告检查开关为准。"
             )
         if report_mode == "standard" and mode_path.is_file():
             prompt += (
@@ -465,6 +464,12 @@ class PiRunner:
                 "首次检查无实际问题则直接交付。最多两次检查，不增加独立评审角色，"
                 "不改原始转写，不为报告检查调用外部搜索或ASR。检查失败时诚实说明，不能声称检查通过。"
                 "若工具没有返回图片，只能声称完成程序检查。"
+            )
+        else:
+            prompt += (
+                "本次报告检查关闭：完成完整初稿后直接结束，"
+                "不执行 Skill 的集中检查、修订或复核环节。"
+                "不要调用 inspect_report，也不要通过 Bash 运行检查器、截图或自行编写检查程序。"
             )
         logged_command = list(command)
         if self.api_key and generation is None:
@@ -574,7 +579,8 @@ class PiRunner:
             if report.is_symlink() or not report.is_file():
                 raise PiError("EXTERNAL_MODEL_FAILURE", "Pi ended without report.html")
             try:
-                embed_diagram(report, workspace)
+                if diagrams:
+                    embed_diagram(report, workspace)
             except (ValueError, OSError) as exc:
                 raise PiError("EXTERNAL_MODEL_FAILURE", "独立图示未正确生成或嵌入。") from exc
             fill_video_description(report, workspace)
@@ -625,6 +631,8 @@ class PiRunner:
         model_recovery: dict | None = None,
         model_state: dict | None = None,
         deadline: float | None = None,
+        agent_role: str | None = None,
+        attempt_offset: int = 0,
     ) -> dict:
         async def send(command):
             process.stdin.write((json.dumps(command) + "\n").encode())
@@ -636,12 +644,12 @@ class PiRunner:
         pending_recovery = None
         pending_model_command = None
         failures = {}
-        request_sequence = 0
+        request_sequence = attempt_offset
         with ExitStack() as stack:
             log = stack.enter_context((workspace / "pi.events.jsonl").open("ab"))
             raw = (
                 stack.enter_context((workspace / "pi.raw.events.jsonl").open("ab"))
-                if os.getenv("PI_TRACE_FULL", "0") == "1" else None
+                if os.getenv("PI_TRACE_FULL", "0") == "1" and agent_role != "style" else None
             )
             while line := await process.stdout.readline():
                 event = json.loads(line)
@@ -668,7 +676,18 @@ class PiRunner:
                     timing = json.loads(event["message"].removeprefix("video-report-trace:"))
                     timing["_trace_received_at"] = event["_trace_received_at"]
                     event = timing
-                compact = compact_event(event)
+                if agent_role and "_agent_role" not in event:
+                    event["_agent_role"] = agent_role
+                logged_event = event
+                if agent_role == "style":
+                    message = event.get("message")
+                    if (event.get("type") == "message_end" and isinstance(message, dict)
+                            and message.get("stopReason") == "error"):
+                        logged_event = {**event, "message": {
+                            **message, "errorMessage": "文风校订模型请求未完成", "content": []}}
+                    elif event.get("type") == "response" and event.get("success") is False:
+                        logged_event = {**event, "error": "文风校订请求未完成"}
+                compact = compact_event(logged_event)
                 if compact is not None:
                     log.write((json.dumps(compact, ensure_ascii=False) + "\n").encode())
                     log.flush()
@@ -724,6 +743,8 @@ class PiRunner:
                         "requested_at": event.get("timestamp"),
                         "input_bytes": event.get("input_bytes"),
                     }
+                    if agent_role:
+                        active_request["agent_role"] = agent_role
                     if pending_recovery:
                         model_state["recovery_count"] += 1
                         active_request.update(

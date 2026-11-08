@@ -7,7 +7,7 @@ import shutil
 import time
 from pathlib import Path
 
-from .diagram import embed_diagram
+from .diagram import diagrams_enabled, embed_diagram
 from .report_content import fill_video_description
 from .report_image import render_report_image
 
@@ -99,9 +99,10 @@ def content_candidates(blocks: list[dict], uploader: str = "") -> list[dict]:
     """Locate surface patterns only. Attribution and information gain need source review."""
     patterns = {
         "possible_third_person_narration": re.compile(
-            r"(?:讲者|视频作者)|(?:作者|UP\s*主|视频)"
+            r"(?:讲者|讲述者|叙述者|演示者|视频作者)|(?:作者|UP\s*主|视频)"
             r"(?:中|里|在视频中|在这里|接着|随后|同时|还|又)?"
             r"(?:提到|指出|认为|表示|强调|介绍|解释|讲述|叙述|转述|列举|交代|引述|讲到|提出|给出|称|说)"
+            r"|(?<!其)(?:他|她)(?:认为|觉得|指出|表示|解释|强调)"
         ),
         "possible_meta_narration": re.compile(r"本报告|本文|本图|这份报告|报告中的|本节将"),
     }
@@ -150,26 +151,27 @@ def content_candidates(blocks: list[dict], uploader: str = "") -> list[dict]:
     return findings
 
 
-def inspect_report(run: Path, label: str = "final") -> dict:
+def inspect_report(run: Path, label: str = "final", *, report_file: Path | None = None) -> dict:
     run = run.resolve()
     if not re.fullmatch(r"[a-zA-Z0-9_-]+", label):
         raise ValueError("Invalid inspection label")
     target = run / "inspection" / label
     target.mkdir(parents=True, exist_ok=False)
     started = time.monotonic()
-    report = run / "report.html"
+    report = Path(report_file) if report_file is not None else run / "report.html"
     shutil.copy2(report, target / "source.html")
     shutil.copy2(report, target / "report.html")
     # Preview the same postprocessing as delivery without changing the agent's working file.
     # Metadata is deliberately read from the original run, while source.html stays raw.
-    embed_diagram(target / "report.html", run)
+    metadata_path = run / "input.json"
+    metadata = json.loads(metadata_path.read_text()) if metadata_path.is_file() else {}
+    if diagrams_enabled(metadata):
+        embed_diagram(target / "report.html", run)
     fill_video_description(target / "report.html", run)
     source_ids = set(re.findall(r"^\[([^ |]+) \|", (run / "transcript.md").read_text(), re.M))
     observations = run / "visual" / "observations.jsonl"
     frame_ids = ({json.loads(line)["frame_id"] for line in observations.read_text().splitlines()
                   if line.strip()} if observations.is_file() else set())
-    metadata_path = run / "input.json"
-    metadata = json.loads(metadata_path.read_text()) if metadata_path.is_file() else {}
     uploader = metadata.get("uploader")
     result = {"status": "error", "inspector_version": "1.2",
               "scope": "layout_reference_integrity_and_content_candidates",

@@ -17,6 +17,7 @@
 | [pi.py](../src/video_report_agent/pi.py)、[产品 Skill](../src/video_report_agent/skills/video-report/SKILL.md) | 选择模式资产、Pi RPC 和完成判断；Skill 规定内容与表达 |
 | [report_diagram.ts](../src/video_report_agent/report_diagram.ts)、[diagram.py](../src/video_report_agent/diagram.py) | 主 Agent 按需委派独立绘图会话，程序将 SVG 嵌入指定位置 |
 | [report_content.py](../src/video_report_agent/report_content.py)、[report_image.py](../src/video_report_agent/report_image.py) | 原始简介处理、HTML 后处理与长图导出 |
+| [style_edit.py](../src/video_report_agent/style_edit.py)、[style_source.ts](../src/video_report_agent/style_source.ts) | 一次独立文风校订、按来源单元核对与安全合并 |
 | [storage.py](../src/video_report_agent/storage.py) | SQLite 正文、执行身份、缓存认领与结构化事实；支持调用方活动事务 |
 | [reuse.py](../src/video_report_agent/reuse.py)、[retention.py](../src/video_report_agent/retention.py) | 兼容输入复用与媒体清理 |
 | [trace.py](../src/video_report_agent/trace.py)、[usage.py](../src/video_report_agent/usage.py) | 阶段事件、调用用量和费用估算缓存 |
@@ -62,11 +63,13 @@ Agent 日志默认保留每轮结束消息与 usage、工具参数/结果、生�
 
 ## 完成与检查
 
-生成 Skill 以具体对象、动作和关系直接成文，单一作者归属由题头承接；个人经历、多人分歧和第三方引用保留必要主体。图内只表达关系与必要标签，外部图注仅用短图名，补充论证在正文展开；强调框讲完内容即止，必要归属可用短署名，条件与结论合写。材料处理、生成及检查记录留在工作目录，来源折叠区只保留作品信息和必要定位映射。文风检查纳入既有的一轮集中检查与修订，不增加独立审稿调用。
+生成 Skill 以具体对象、动作和关系直接成文，单一作者归属由题头承接；个人经历、多人分歧和第三方引用保留必要主体。图内只表达关系与必要标签，外部图注仅用短图名，补充论证在正文展开；强调框讲完内容即止，必要归属可用短署名，条件与结论合写。材料处理、生成及检查记录留在工作目录，来源折叠区只保留作品信息和必要定位映射。
 
-主报告优先委派具体事件或例子中的一个局部关系；主体、连线或限定过多时缩小选题，少用需猜含义的符号，背景、来源说明和证据分级留正文。独立图示用少量主体、最少连线和短标签直接表达，配色自由简洁。主 Skill 的语言规则以具体文字写入 `diagram.md` 并实际加载；正文、委派参数和图示均保留原文条件、时态与判断强度，条件下的强结论不逐层改弱，原文的可能性不升级为确定；具体前提表达一次，不自行加推演、尚未证实等评价。沿用一次自主生成，不新增流程。
+报告收尾由两个独立任务开关控制：`report_inspection` 默认关闭，开启后由主 Agent 调用 `inspect_report` 并按需集中修订；关闭时写完初稿直接结束，不通过 Bash 另行检查。`style_edit` 默认开启，在主报告结束后、PNG 渲染前执行一次独立 Pi 文风校订；关闭时记录 `skipped` 并直接交付。校订复用最终完成主报告的模型、思考档位与认证，以初稿已表达的事实与含义为准，只改正文措辞，不重新裁定事实或添加解释句、限定、免责声明；同一会话复核修改，按来源 ID 查询转写仅用于理解措辞，含义不确定时保留原句。程序合并保护章节、图示、链接、来源、样式及可明确识别的数字和公式；局部冲突恢复该段，结构无法安全合并或校订失败时交付原稿。校订后不再调用 `inspect_report` 或生成检查截图，直接保存 HTML 并尝试长图渲染。`style/before.html`、`style/candidate.html`、`style/delivered.html`、差异和结果随任务保存；模型用量并入任务统计。Local/Docker 使用同一任务参数，CLI 提供 `--report-inspection`、`--style-edit` / `--no-style-edit`。程序合并检查不判断语义或完整性。
 
-任务输入 `diagrams` 默认 `true`，`false` 时不提供绘图工具；没有前端选择控件。主 Agent 决定图示必要性、位置、解释目标、局部上下文与来源 ID，至多调用一次 `generate_diagram`。扩展从完整转写提取指定原文，启动全新 Pi RPC 进程／会话，只加载独立绘图指引，不继承主会话历史、不提供任何工具。未配置独立绘图模型时，子会话沿用调用时的模型和思考档位；配置后使用保存的绘图模型，关闭自动重试，180 秒截止，仅一次输出 SVG。产物与会话保存在 `assets/diagram/`，主上下文只收到插入标记。Python 在检查预览和交付时内联嵌入 SVG、图注及来源绑定；已委派却缺图或缺插入位置时交付失败，不把完整绘图过程交还主 Agent。
+主报告优先委派具体事件或例子中的一个局部关系；主体、连线或限定过多时缩小选题，少用需猜含义的符号，背景、来源说明和证据分级留正文。独立图示用少量主体、最少连线和短标签直接表达，配色自由简洁。主 Skill 的语言规则以具体文字写入 `diagram.md` 并实际加载；正文、委派参数和图示均保留原文条件、时态与判断强度，条件下的强结论不逐层改弱，原文的可能性不升级为确定；具体前提表达一次，不自行加推演、尚未证实等评价。沿用单个独立绘图会话，不新增角色。
+
+Standard 的任务输入 `diagrams` 默认 `true`，`false` 时不提供绘图工具；Brief 暂时始终关闭独立图示，包括已排队且保存了旧开关的任务。没有前端选择控件。主 Agent 决定图示必要性、位置、解释目标、局部上下文与来源 ID，至多调用一次 `generate_diagram`。扩展从完整转写提取指定原文，启动全新 Pi RPC 进程／会话，只加载独立绘图指引，不继承主会话历史、不提供任何工具。未配置独立绘图模型时，子会话沿用调用时的模型和思考档位；配置后使用保存的绘图模型。明确的瞬态请求错误由工具在同一会话内最多重试一次，认证或额度错误不重试，Pi 和供应商层不额外重试；两次请求共用 180 秒截止。产物与会话保存在 `assets/diagram/`，主上下文只收到插入标记。Python 在检查预览和交付时内联嵌入 SVG、图注及来源绑定；绘图失败、SVG 无效或缺少有效插入位置时，移除图示占位符并交付正常完成的正文，不把完整绘图过程交还主 Agent。
 
 独立绘图同时设置 `DIAGRAM_PROVIDER` 与 `DIAGRAM_MODEL`，可选 `DIAGRAM_THINKING`；思考强度省略时沿用主会话。新任务将其保存为 `diagram_model_selection`，后续环境修改不改变排队任务；历史任务缺字段时继续沿用主模型。程序调用可通过 `create_run(diagram_model_selection={...})` 指定，传空字典可显式沿用主模型。此配置不改变主报告或术语 Web Search 的模型路由。
 
@@ -76,7 +79,7 @@ Agent 日志默认保留每轮结束消息与 usage、工具参数/结果、生�
 
 Pi consumer 等待 `agent_settled`，并要求最终 assistant 的 `stopReason == "stop"`；`agent_end` 可能出现在重试或压缩之前。受控续跑只处理调用方明确配置且可识别的模型请求错误，沿用当前 Pi session 和任务工作区；报告仍须通过完整 HTML 检查才返回成功。整个 Worker 仍受调用方传入的总 deadline 限制。截图失败记录 `image_error`，HTML 仍可进入 `RENDERED`。
 
-`REPORT_REVIEW` 默认关闭。开启后向同一 Agent 提供检查工具；工具或同一检查器的 Bash CLI 检查来源 ID 与布局，并返回转述、元叙述、正文作者姓名和明显重复句段的候选位置（章节、DOM 路径、来源 ID、重复的前一位置）。内容检测只覆盖表层模式与至少 24 字的相同句段，跳过题头来源、导航、简介与来源说明；作者姓名按输入的 uploader 精确匹配，别称、同义重复及图文语义重复由当前 Agent 在原有集中修订中判断。必要归属可能命中，检查器不删词、不作语义通过判定；仍返回 `semantic_review: not_performed`、`visual_quality: not_scored`，不保证模型调用、修复或质量提升。
+任务参数 `report_inspection` 默认关闭，开启后向同一 Agent 提供检查工具；`REPORT_REVIEW` 仅影响未显式指定 review 的独立 PiRunner，不覆盖任务开关。检查工具检查来源 ID 与布局，并返回转述、元叙述、正文作者姓名和明显重复句段的候选位置（章节、DOM 路径、来源 ID、重复的前一位置）。内容检测只覆盖表层模式与至少 24 字的相同句段，跳过题头来源、导航、简介与来源说明；作者姓名按输入的 uploader 精确匹配，别称、同义重复及图文语义重复由当前 Agent 在原有集中修订中判断。必要归属可能命中，检查器不删词、不作语义通过判定；仍返回 `semantic_review: not_performed`、`visual_quality: not_scored`，不保证模型调用、修复或质量提升。
 
 ## Pi 任务容器
 

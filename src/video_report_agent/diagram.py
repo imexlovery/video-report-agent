@@ -2,14 +2,44 @@
 
 import html
 import json
+import math
 import os
 import re
 import xml.etree.ElementTree as ET
+from html.parser import HTMLParser
 from pathlib import Path
 
 PLACEHOLDER = "<!-- video-report-diagram -->"
 SVG_NS = "http://www.w3.org/2000/svg"
 ET.register_namespace("", SVG_NS)
+
+
+class _DiagramPositions(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.in_body = False
+        self.blocked = 0
+        self.count = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "body":
+            self.in_body = True
+        if tag in {"script", "style", "textarea", "title", "template"}:
+            self.blocked += 1
+
+    def handle_endtag(self, tag):
+        if tag == "body":
+            self.in_body = False
+        if tag in {"script", "style", "textarea", "title", "template"} and self.blocked:
+            self.blocked -= 1
+
+    def handle_comment(self, data):
+        if self.in_body and not self.blocked and data.strip() == "video-report-diagram":
+            self.count += 1
+
+
+def diagrams_enabled(metadata: dict) -> bool:
+    return metadata.get("report_mode", "standard") != "brief" and metadata.get("diagrams", True)
 
 
 def diagram_model_config(selection: dict | None = None) -> dict | None:
@@ -37,47 +67,56 @@ def diagram_model_config(selection: dict | None = None) -> dict | None:
 
 def embed_diagram(report: Path, run: Path) -> None:
     content = report.read_text()
-    directory = run / "assets" / "diagram"
     if PLACEHOLDER not in content:
-        if (directory / "request.json").exists() and 'data-report-diagram="true"' not in content:
-            raise ValueError("Requested diagram is missing from the report")
         return
-    if content.count(PLACEHOLDER) != 1:
-        raise ValueError("Expected one diagram position")
-    request = json.loads((directory / "request.json").read_text())
-    svg = ET.fromstring((directory / "diagram.svg").read_text())
-    if svg.tag != f"{{{SVG_NS}}}svg" or not svg.get("viewBox"):
-        raise ValueError("Diagram must be SVG with a viewBox")
-    # Inline SVG must remain self-contained and must not style the surrounding report.
-    for node in svg.iter():
-        if node.tag.rsplit("}", 1)[-1].lower() in {"script", "style", "foreignobject", "image"}:
-            raise ValueError("Unsupported diagram element")
-        for key, value in node.attrib.items():
-            key = key.rsplit("}", 1)[-1].lower()
-            if key.startswith("on") or (key == "href" and not value.startswith("#")):
-                raise ValueError("Diagram must not contain active or external resources")
-            if any(not ref.strip(" \t'\"").startswith("#")
-                   for ref in re.findall(r"url\(([^)]+)\)", value, re.I)):
-                raise ValueError("Diagram must not contain external resources")
-    ids = {node.get("id"): "report-diagram-" + node.get("id")
-           for node in svg.iter() if node.get("id")}
-    for node in svg.iter():
-        for key, value in list(node.attrib.items()):
-            if key == "id":
-                node.set(key, ids[value])
-            else:
-                value = re.sub(
-                    r"url\(\s*(['\"]?)#([^)'\"\s]+)\1\s*\)",
-                    lambda match: f"url(#{ids.get(match[2], match[2])})", value,
-                )
-                if value.startswith("#") and value[1:] in ids:
-                    value = "#" + ids[value[1:]]
-                node.set(key, value)
-    svg.set("width", "100%")
-    svg.attrib.pop("height", None)
-    svg.set("style", "display:block;width:100%;height:auto")
-    sources = html.escape(" ".join(request["source_units"]), quote=True)
-    figure = (f'<figure data-report-diagram="true" data-source-units="{sources}">'
-              f'{ET.tostring(svg, encoding="unicode")}<figcaption>'
-              f'{html.escape(request["caption"])}</figcaption></figure>')
+    figure = ""
+    try:
+        positions = _DiagramPositions()
+        positions.feed(content)
+        if content.count(PLACEHOLDER) != 1 or positions.count != 1:
+            raise ValueError("Expected one diagram position")
+        directory = run / "assets" / "diagram"
+        request = json.loads((directory / "request.json").read_text())
+        svg = ET.fromstring((directory / "diagram.svg").read_text())
+        if svg.tag != f"{{{SVG_NS}}}svg" or not svg.get("viewBox"):
+            raise ValueError("Diagram must be SVG with a viewBox")
+        viewbox = [float(value) for value in re.split(r"[\s,]+", svg.get("viewBox").strip())]
+        if (len(viewbox) != 4 or not all(math.isfinite(value) for value in viewbox)
+                or viewbox[2] <= 0 or viewbox[3] <= 0):
+            raise ValueError("Diagram viewBox must have positive dimensions")
+        # Inline SVG must remain self-contained and must not style the surrounding report.
+        for node in svg.iter():
+            if node.tag.rsplit("}", 1)[-1].lower() in {"script", "style", "foreignobject", "image"}:
+                raise ValueError("Unsupported diagram element")
+            for key, value in node.attrib.items():
+                key = key.rsplit("}", 1)[-1].lower()
+                if key.startswith("on") or (key == "href" and not value.startswith("#")):
+                    raise ValueError("Diagram must not contain active or external resources")
+                if any(not ref.strip(" \t'\"").startswith("#")
+                       for ref in re.findall(r"url\(([^)]+)\)", value, re.I)):
+                    raise ValueError("Diagram must not contain external resources")
+        ids = {node.get("id"): "report-diagram-" + node.get("id")
+               for node in svg.iter() if node.get("id")}
+        for node in svg.iter():
+            for key, value in list(node.attrib.items()):
+                if key == "id":
+                    node.set(key, ids[value])
+                else:
+                    value = re.sub(
+                        r"url\(\s*(['\"]?)#([^)'\"\s]+)\1\s*\)",
+                        lambda match: f"url(#{ids.get(match[2], match[2])})", value,
+                    )
+                    if value.startswith("#") and value[1:] in ids:
+                        value = "#" + ids[value[1:]]
+                    node.set(key, value)
+        svg.set("width", "100%")
+        svg.attrib.pop("height", None)
+        svg.set("style", "display:block;width:100%;height:auto")
+        sources = html.escape(" ".join(request["source_units"]), quote=True)
+        figure = (f'<figure data-report-diagram="true" data-source-units="{sources}">'
+                  f'{ET.tostring(svg, encoding="unicode")}<figcaption>'
+                  f'{html.escape(request["caption"])}</figcaption></figure>')
+    except (OSError, ValueError, ET.ParseError, KeyError, TypeError, AttributeError):
+        # Diagram failure must not prevent delivery of an otherwise complete report.
+        pass
     report.write_text(content.replace(PLACEHOLDER, figure))

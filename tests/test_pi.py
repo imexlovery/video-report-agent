@@ -442,15 +442,18 @@ def test_final_fallback_has_reserved_attempt_and_never_routes_back(tmp_path, pat
     assert state["recovery_count"] == len(sequence) <= 3
 
 
-@pytest.mark.parametrize("drawing,enabled", [
-    (None, True), ("drawing", True), ("drawing", False), ("primary", True),
+@pytest.mark.parametrize("drawing,enabled,mode", [
+    (None, True, "standard"), ("drawing", True, "standard"),
+    ("drawing", False, "standard"), ("primary", True, "standard"),
+    ("drawing", True, "brief"),
 ])
-def test_docker_recovery_snapshots_final_provider(tmp_path, monkeypatch, drawing, enabled):
+def test_docker_recovery_snapshots_final_provider(tmp_path, monkeypatch, drawing, enabled, mode):
     from video_report_agent import pi
 
     (tmp_path / "transcript.md").write_text("synthetic transcript")
     (tmp_path / "input.json").write_text(json.dumps({
         "diagrams": enabled,
+        "report_mode": mode,
         **({"diagram_model_selection": {"provider": drawing, "model": "fixture"}}
            if drawing else {}),
     }))
@@ -470,10 +473,11 @@ def test_docker_recovery_snapshots_final_provider(tmp_path, monkeypatch, drawing
                 "final_fallback": {"provider": "final", "model": "fixture"}}
     asyncio.run(PiRunner(provider="primary", model="fixture", api_key="FAKE",
                         model_recovery=recovery, isolation="docker").run(tmp_path))
+    has_drawing = drawing and enabled and mode != "brief"
     assert [item["provider"] for item in selections] == (
-        ["primary"] + ([drawing] if drawing and enabled else []) + ["alternate", "final"]
+        ["primary"] + ([drawing] if has_drawing else []) + ["alternate", "final"]
     )
-    if drawing and enabled:
+    if has_drawing:
         assert selections[1]["api_key"] == ("FAKE" if drawing == "primary" else None)
 
 
@@ -611,7 +615,8 @@ def test_rejected_prompt(tmp_path):
         )
 
 
-def test_missing_output_and_run_cwd(tmp_path, monkeypatch):
+@pytest.mark.parametrize("review", [False, True])
+def test_missing_output_and_run_cwd(tmp_path, monkeypatch, review):
     executable = tmp_path / "fake-pi"
     executable.write_text("""#!/usr/bin/env python3
 import json,sys,os
@@ -628,10 +633,13 @@ print(json.dumps({"type":"agent_settled"}),flush=True)
     workspace.mkdir()
     (workspace / "transcript.md").write_text("sample")
     with pytest.raises(PiError, match="without report.html"):
-        asyncio.run(PiRunner(review=True, isolation="local").run(workspace))
+        asyncio.run(PiRunner(review=review, isolation="local").run(workspace))
     invocation = json.loads((workspace / "invocation.json").read_text())
     assert Path(invocation["cwd"]) == workspace
-    assert "read,write,edit,bash,inspect_report,generate_diagram" in invocation["command"]
+    expected = "read,write,edit,bash" + (",inspect_report" if review else "") + ",generate_diagram"
+    assert expected in invocation["command"]
+    assert ("本次报告检查关闭" in invocation["prompt"]) is (not review)
+    assert ("写完 report.html 后必须调用 inspect_report" in invocation["prompt"]) is review
     assert "--extension" in invocation["command"]
     assert "{{VIDEO_DESCRIPTION}}" in invocation["prompt"]
     assert "不要读取、改写或自行生成视频简介" in invocation["prompt"]

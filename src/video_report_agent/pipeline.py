@@ -32,6 +32,7 @@ from .reuse import (
     validated_transcript,
 )
 from .storage import CacheProductionFailed, Store
+from .style_edit import STYLE_DOCUMENTS, edit_report, recover_interrupted_style
 from .term_correction import TERM_DOCUMENTS, search_config
 from .trace import RunTrace
 from .transcript import build_transcript
@@ -53,6 +54,8 @@ def create_run(
     diagrams=True,
     diagram_model_selection=None,
     term_correction: bool = False,
+    report_inspection: bool = False,
+    style_edit: bool = True,
     search_provider=None,
     search_model=None,
     visual_enhancement: bool = False,
@@ -107,6 +110,7 @@ def create_run(
         else {}
     )
     source = validate_bilibili_url(url)
+    diagrams = diagrams and report_mode != "brief"
     drawing = diagram_model_config(diagram_model_selection) if diagrams else None
     run = root.resolve() / uuid.uuid4().hex
     metadata = {
@@ -120,6 +124,8 @@ def create_run(
         "report_mode": report_mode,
         "diagrams": diagrams,
         "term_correction": term_correction,
+        "report_inspection": report_inspection,
+        "style_edit": style_edit,
         "visual_enhancement": visual_enhancement,
         "transcript_mode": transcript_mode,
         **({"transcript_sources": transcript_sources} if transcript_sources is not None else {}),
@@ -541,7 +547,7 @@ def generate(run: Path, *, database_path=None, execution_id=None) -> dict:
             runner_options = dict(metadata.get("model_selection", {}))
             if metadata.get("model_recovery"):
                 runner_options["model_recovery"] = metadata["model_recovery"]
-            runner = PiRunner(**runner_options)
+            runner = PiRunner(review=metadata.get("report_inspection", False), **runner_options)
             if metadata.get("visual_enhancement", False):
                 update("VISUAL_ANALYSIS")
                 initialize_pi_config(PI_AGENT_DIR)
@@ -588,7 +594,24 @@ def generate(run: Path, *, database_path=None, execution_id=None) -> dict:
                 input={"artifact": "transcript.md"},
             ) as detail:
                 asyncio.run(runner.run(run))
-                detail.update(output={"artifact": "report.html"})
+                style_started = time.monotonic()
+                try:
+                    style = (edit_report(run, runner) if metadata.get("style_edit", True)
+                             else {"status": "skipped"})
+                except Exception as exc:
+                    recover_interrupted_style(run)
+                    style = {"status": "fallback", "reason": "style_runtime_error",
+                             "error_type": type(exc).__name__}
+                status["style_edit"] = {
+                    key: style[key] for key in ("status", "reason") if key in style
+                }
+                store.capture(run, execution_id, names=STYLE_DOCUMENTS)
+                detail.update(output={"artifact": "report.html"},
+                              style_edit=status["style_edit"],
+                              style_model={key: style[key] for key in
+                                           ("provider", "model", "thinking") if key in style},
+                              style_elapsed_ms=round(
+                                  (time.monotonic() - style_started) * 1000, 3))
             store.save_report(run, execution_id, (run / "report.html").read_text())
             for asset in (run / "assets").rglob("*"):
                 if asset.is_file() and not asset.is_symlink():
