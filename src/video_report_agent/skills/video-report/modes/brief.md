@@ -45,7 +45,9 @@
 | 同章子话题 `.brief-topic`、`.brief-topic-title` | 标明归属范围，两个短方面可用 `.brief-topic-pair`，长解释单列 |
 | 同主题并列维度 `.brief-dimension-group`、`.brief-dimension-tree`、`.brief-dimensions > .brief-dimension` | 共用标题统领，正文白底，分支无箭头，组内结论留在本组；模板按实际项数布局，不设置 `data-columns` 或为列数增删内容 |
 
-`.brief-feature`、`.brief-pair > .brief-card` 可作简单强调与对照，短项 `.brief-list`，复杂关系用现有对照或表格，操作 `.brief-flow`，跨行比较 `.brief-table`；辅助 condition、note、caption 按需使用，必要文字同样保持完整与 18px。
+`.brief-feature`、`.brief-pair > .brief-card` 可作简单强调与对照，短项 `.brief-list`，复杂关系用现有对照或表格，操作 `.brief-flow`，短步骤 `.brief-flow` 的序号与标题同行，说明对齐标题，长标题自然换行。少量阶段安排可用 `.brief-stage-rows` 的阶段名与说明双区行；少量产品各有长说明时可用 `.brief-reading-list`，名称与定位先呈现，必要字段在下方分区。两者主要用于逐项阅读，跨行比较 `.brief-table`；辅助 condition、note、caption 按需使用，必要文字同样保持完整与 18px。
+
+阅读行保留原字段、文字与必要条件，18px 正文不变；不强凑定位标签或第二说明区，也不套用 Standard 的展开深度。沿用现行白底与浅亮重点组件。
 
 时间轴只保留改变判断的转折，顺序真实，不能因先后补因果；只复用现有时间轴组件，不另绘曲线路径，不装入全部会议经过。观察、展望与建议按话题分组，不以长段、长列表或单一巨卡收尾。
 

@@ -42,6 +42,9 @@ code{font-family:ui-monospace,monospace;font-size:.9em}pre{white-space:pre-wrap;
 /* Four or more dimensions use two readable columns, without disconnected branches. */
 .brief-dimension-group:has(>.brief-dimensions>.brief-dimension:nth-child(n+4)){--dimension-count:2}.brief-dimension-group:has(>.brief-dimensions>.brief-dimension:nth-child(n+4))>.brief-dimension-tree{display:none}.brief-dimension-group:has(>.brief-dimensions>.brief-dimension:nth-child(n+4))>.brief-dimensions{margin-top:20px;row-gap:24px}.brief-dimension-group:has(>.brief-dimensions>.brief-dimension:nth-child(n+4))>.brief-dimensions>.brief-dimension{padding-top:0}.brief-dimension-group:has(>.brief-dimensions>.brief-dimension:nth-child(n+4))>.brief-dimensions>.brief-dimension::before{display:none}.brief-dimension-group:has(>.brief-dimensions>.brief-dimension:nth-child(n+4)) .brief-dimension h4{text-align:left}
 
+.brief-flow>.brief-step{display:grid;grid-template-columns:24px minmax(0,1fr);column-gap:12px;row-gap:6px;align-items:baseline}.brief-flow>.brief-step::before{grid-column:1;grid-row:1;margin-bottom:0}.brief-flow>.brief-step>h3{grid-column:2;margin:0}.brief-flow>.brief-step>p{grid-column:2}
+.brief-stage-rows{list-style:none;margin:20px 0;padding:0;border-top:1px solid var(--brief-line)}.brief-stage-rows>li{display:grid;grid-template-columns:170px minmax(0,1fr);gap:24px;padding:15px 14px;border-bottom:1px solid var(--brief-line)}.brief-stage-rows p{margin:0}
+.brief-reading-list{margin:18px 0;border-top:2px solid #a9c9e8}.brief-reading-row{padding:21px 0 24px;border-bottom:1px solid var(--brief-line)}.brief-reading-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:11px}.brief-reading-index{color:#526f85;font-size:18px;font-weight:700}.brief-reading-head h3{margin:0;font-size:22px}.brief-reading-role{margin-left:auto;background:#edf4fb;border-radius:999px;padding:3px 12px;color:#3f5e77;font-size:18px;font-weight:650}.brief-reading-body{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:26px;padding-left:34px}.brief-reading-body>div+div{border-left:1px solid var(--brief-line);padding-left:22px}.brief-reading-body>div>strong{display:block;color:#536b81;font-size:18px;margin-bottom:4px}.brief-reading-body p{font-size:18px;line-height:1.6}
 </style>
 </head>
 <body><main class="brief-paper">
@@ -114,3 +117,8 @@ code{font-family:ui-monospace,monospace;font-size:.9em}pre{white-space:pre-wrap;
 </table></div>
 </section>
 BRIEF_EXAMPLES_END -->
+
+<!-- 已采纳的 Brief 阅读行合成示例：只在逐项阅读更合适时使用，跨项比较共同字段仍用 brief-table。保留全部必要字段、限定与来源绑定。
+<section class="brief-section"><h2>按阶段安排</h2><ol class="brief-stage-rows"><li data-source-units="example-001"><strong>准备阶段</strong><p>核对所需材料，按来源保留安排与条件。</p></li><li data-source-units="example-002"><strong>执行阶段</strong><p>按原顺序操作，保留实际产出与限制。</p></li></ol></section>
+<section class="brief-section"><h2>各方案怎样分工</h2><div class="brief-reading-list"><article class="brief-reading-row" data-source-units="example-003"><div class="brief-reading-head"><span class="brief-reading-index">01</span><h3>方案甲</h3><span class="brief-reading-role">材料检索</span></div><div class="brief-reading-body"><div><strong>工作方式</strong><p>从指定资料中定位相关内容。</p></div><div><strong>使用条件</strong><p>须有对应资料的读取权限。</p></div></div></article></div></section>
+-->
