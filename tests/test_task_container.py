@@ -143,6 +143,7 @@ def assert_removed(command):
 @docker_test
 def test_public_task_cannot_access_business_database_or_side_files(inputs, tmp_path, monkeypatch):
     import sqlite3
+
     from video_report_agent.storage import Store
 
     run, config = inputs
@@ -357,7 +358,8 @@ def test_isolated_pi_rpc_and_start_failure_never_falls_back(inputs, monkeypatch)
         )
 
     monkeypatch.setattr(pi, "launch_command", fixture_launch)
-    runner = PiRunner(provider="primary", model="fixture", skill_dir=skill, timeout=30)
+    runner = PiRunner(provider="primary", model="fixture", skill_dir=skill, timeout=30,
+                      isolation="docker")
     assert asyncio.run(runner.run(run)) == run / "report.html"
     assert (run / ".generation/modes/brief.md").is_file()
     assert not (run / ".generation/modes/standard.md").exists()
@@ -367,6 +369,7 @@ def test_isolated_pi_rpc_and_start_failure_never_falls_back(inputs, monkeypatch)
     failed = run.parent / "failed"
     failed.mkdir()
     (failed / "transcript.md").write_text("fixture")
+    (failed / "input.json").write_text('{}')
     monkeypatch.setenv("PI_TASK_IMAGE", "does-not-exist:task-isolation-fixture")
     with pytest.raises(PiError):
         asyncio.run(runner.run(failed))
@@ -466,7 +469,8 @@ def launch(stage, config, command, deadline):
     (run / 'task-name.txt').write_text(cmd[cmd.index('--name')+1])
     return cmd
 pi.launch_command = launch
-asyncio.run(pi.PiRunner(provider='primary', model='fixture', timeout=30, isolation='docker').run(run))
+runner = pi.PiRunner(provider='primary', model='fixture', timeout=30, isolation='docker')
+asyncio.run(runner.run(run))
 '''
     names = []
 
@@ -584,6 +588,7 @@ from pathlib import Path
 from video_report_agent.task_container import launch_command
 run=Path('/app/runs/probe'); run.mkdir()
 stage=run/'.generation'; stage.mkdir()
+(stage/'input.json').write_text('{}')
 config=run/'.generation-config'; config.mkdir()
 command=launch_command(stage,config,['python','-c','import time; time.sleep(120)'],
                        time.monotonic()+8)
@@ -765,7 +770,9 @@ def test_visual_caption_is_staged_without_raw_images(tmp_path):
     assert not (stage / "visual/frames").exists()
 
 
-@pytest.mark.parametrize("inspection,style", [(False, False), (False, True), (True, False), (True, True)])
+@pytest.mark.parametrize(
+    "inspection,style", [(False, False), (False, True), (True, False), (True, True)],
+)
 def test_stage_inputs_keeps_finishing_options(tmp_path, inspection, style):
     (tmp_path / "transcript.md").write_text("synthetic")
     (tmp_path / "input.json").write_text(json.dumps({
@@ -774,3 +781,19 @@ def test_stage_inputs_keeps_finishing_options(tmp_path, inspection, style):
     saved = json.loads((stage / "input.json").read_text())
     assert saved["report_inspection"] is inspection
     assert saved["style_edit"] is style
+
+
+@docker_test
+@pytest.mark.parametrize("has_routing", [False, True])
+def test_real_docker_style_source_lookup_edit_and_usage(inputs, tmp_path, monkeypatch, has_routing):
+    from test_style_edit import test_real_pi_edit_session_with_source_lookup_and_usage
+
+    test_real_pi_edit_session_with_source_lookup_and_usage(
+        tmp_path, monkeypatch, has_routing, isolation="docker",
+    )
+    assert not (tmp_path / "run/.style-config").exists()
+    scope_filter = f"label=video-report.scope={os.environ['PI_TASK_SCOPE']}"
+    for command in (["docker", "ps", "-aq"], ["docker", "network", "ls", "-q"]):
+        assert not subprocess.check_output(
+            [*command, "--filter", scope_filter], text=True,
+        ).strip()

@@ -156,6 +156,7 @@ def test_pipeline_reuses_inputs_and_generates_new_report(
         previous.parent,
         URL + "?p=1&share_source=copy",
         report_mode=target_mode or "standard",
+        style_edit=False,
     )
     original_input = json.loads((run / "input.json").read_text())
     if target_mode is None:
@@ -182,7 +183,7 @@ def test_pipeline_reuses_inputs_and_generates_new_report(
     monkeypatch.setattr(
         pipeline,
         "PiRunner",
-        lambda: SimpleNamespace(run=generate_report, provider="test", model="test"),
+        lambda *, review: SimpleNamespace(run=generate_report, provider="test", model="test"),
     )
     status = pipeline.generate(run)
     assert status["state"] == "RENDERED"
@@ -236,7 +237,7 @@ def test_style_runs_once_before_report_persistence_and_records_fallback(complete
             revised if outcome == "applied" else original)
         (current / "report.png").write_bytes(b"fixture")
 
-    monkeypatch.setattr(pipeline, "PiRunner", lambda: SimpleNamespace(
+    monkeypatch.setattr(pipeline, "PiRunner", lambda *, review: SimpleNamespace(
         run=generate_report, provider="fixture", model="fixture"))
     monkeypatch.setattr(pipeline, "edit_report", style)
     monkeypatch.setattr(pipeline, "render_report_image", render)
@@ -344,7 +345,8 @@ def test_completed_asr_is_reused_when_transcript_is_incomplete(
     metadata.update(transcript_mode="fused", download_audio_only=False)
     pipeline.write_json(previous / "input.json", metadata)
     (previous / "canonical-transcript.jsonl").unlink()
-    run = pipeline.create_run(previous.parent, URL, visual_enhancement=visual_enabled)
+    run = pipeline.create_run(previous.parent, URL, visual_enhancement=visual_enabled,
+                              style_edit=False)
     calls = []
 
     def extract(media, output):
@@ -388,7 +390,7 @@ def test_completed_asr_is_reused_when_transcript_is_incomplete(
     monkeypatch.setattr(
         pipeline,
         "PiRunner",
-        lambda: SimpleNamespace(run=report, provider="test", model="test",
+        lambda *, review: SimpleNamespace(run=report, provider="test", model="test",
                                 thinking="low", api_key="fixture-key"),
     )
     status = pipeline.generate(run)
@@ -405,7 +407,7 @@ def test_invalid_asr_is_not_reused(completed, monkeypatch):
     previous, _ = completed
     (previous / "canonical-transcript.jsonl").unlink()
     (previous / "asr.json").write_text("{}")
-    run = pipeline.create_run(previous.parent, URL)
+    run = pipeline.create_run(previous.parent, URL, style_edit=False)
     called = []
 
     def extract(media, output):
@@ -434,7 +436,7 @@ def test_invalid_asr_is_not_reused(completed, monkeypatch):
     monkeypatch.setattr(
         pipeline,
         "PiRunner",
-        lambda: SimpleNamespace(run=report, provider="test", model="test",
+        lambda *, review: SimpleNamespace(run=report, provider="test", model="test",
                                 thinking="low", api_key="fixture-key"),
     )
     assert pipeline.generate(run)["state"] == "RENDERED"
@@ -513,7 +515,7 @@ def test_visual_preparation_runs_after_transcript_reuse(
         (previous / "download/source.mp4").unlink()
     selection = {"provider": "fixture", "model": "fixture", "thinking": "low"}
     run = pipeline.create_run(previous.parent, URL, visual_enhancement=enabled,
-                              model_selection=selection)
+                              model_selection=selection, style_edit=False)
     calls = []
 
     def sample(video, current, units):
@@ -550,7 +552,7 @@ def test_visual_preparation_runs_after_transcript_reuse(
     monkeypatch.setattr(pipeline, "describe_frames", describe)
     monkeypatch.setattr(pipeline, "fetch_video", download)
     def runner(**options):
-        assert options == selection
+        assert options == {**selection, "review": False}
         return SimpleNamespace(run=report, **selection, api_key="fixture-key")
 
     monkeypatch.setattr(pipeline, "PiRunner", runner)

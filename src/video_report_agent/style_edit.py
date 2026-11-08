@@ -45,11 +45,17 @@ _VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "me
 _PROTECTED = {"head", "style", "script", "figure", "figcaption", "svg", "math", "code", "pre",
               "a", "h1", "h2", "h3", "h4", "h5", "h6", "textarea", "footer", "details", "nav"}
 _BLOCK = {"section", "div", "p", "li", "td", "th", "dd", "dt", "blockquote"}
+# Plain-text formulas also use Greek symbols, function calls and Unicode exponents.
+_MATH_SCRIPTS = r"²³¹\u1d2c-\u1d6a\u1d9b-\u1dbf\u2070-\u209f"
+_MATH_ATOM = (
+    r"(?:[A-Za-z\u0370-\u03ff][A-Za-z0-9_\u0370-\u03ff]*|\d+(?:\.\d+)?)"
+    rf"(?:\([A-Za-z0-9_\u0370-\u03ff{_MATH_SCRIPTS}() .,+*/^=≈≠≤≥×÷−-]*\))?"
+    rf"[{_MATH_SCRIPTS}]*"
+)
 _FORMULA = re.compile(
     r"\\\(.*?\\\)|\\\[.*?\\\]|\$\$.*?\$\$|\$[^$\n]+\$"
-    r"|(?<!\w)(?:[A-Za-z][A-Za-z0-9_]*|\d+(?:\.\d+)?)"
-    r"(?:\s*(?:=|≈|≤|≥|×|÷|\+|−|\*|/|\^)\s*"
-    r"(?:[A-Za-z][A-Za-z0-9_]*|\d+(?:\.\d+)?))+",
+    r"|(?<![A-Za-z0-9_\u0370-\u03ff])" + _MATH_ATOM
+    + r"(?:\s*(?:=|≈|≠|≤|≥|×|÷|\+|−|\*|/|\^)\s*" + _MATH_ATOM + r")+",
     re.S,
 )
 

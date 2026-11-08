@@ -200,7 +200,8 @@ These switches apply to the complete Core pipeline. The standalone Skill ZIP use
 |---|---|---|
 | Term correction | Off | Add `--term-correction` to enable; omit to disable. Python: `create_run(..., term_correction=True/False)` |
 | Visual enhancement | Off | Add `--visual-enhancement` to enable; omit to disable. Python: `visual_enhancement=True/False` |
-| Report inspection (`inspect_report`) | Dedicated tool off | Set `REPORT_REVIEW=1` in `.env` to enable, `0` to disable. Python: `PiRunner(review=True/False)` |
+| Report inspection (`report_inspection`) | Off | Add `--report-inspection` to enable. Python: `create_run(..., report_inspection=True/False)` |
+| Independent style editing (`style_edit`) | On | Use `--no-style-edit` to disable, `--style-edit` to enable. Python: `create_run(..., style_edit=True/False)` |
 | Independent diagrams (`generate_diagram`) | On as needed for Standard; off for Brief | Python: `create_run(..., diagrams=False)` disables it for Standard. Brief does not currently offer it; no CLI switch |
 | OCR (legacy fusion workflow) | Off | Use `--transcript-mode fused --ocr-mode auto` to enable, `--ocr-mode off` to disable. Requires the `enhancement` extra |
 
@@ -208,7 +209,7 @@ Visual enhancement obtains a video track, samples nine frames and uses the task'
 
 Standard allows at most one independent drawing tool call; the Agent can decide no diagram is needed. The drawing model can be configured separately as described below. Transient request failures receive at most one retry within the 180-second limit; if the diagram still cannot be embedded, its placeholder is removed and the otherwise complete report is delivered.
 
-Report inspection gives the same Agent programmatic findings and available screenshots, allowing at most two inspections and one consolidated revision. `REPORT_REVIEW=0` disables the dedicated tool; the Skill still asks for consolidated checks and can invoke the inspector through Bash. Basic file/shell tools, HTML delivery checks and final PNG export are part of the regular workflow, with no corresponding CLI disable switches. Run `uv run video-report generate --help` for all options.
+Report inspection gives the same Agent programmatic findings and available screenshots, allowing at most two inspections and one consolidated revision. When task inspection is disabled, the Agent finishes after the complete draft without running checks through Bash. Independent style editing runs before rendering and adds model usage; it does not invoke the inspector afterward. `REPORT_REVIEW` only supplies the default for a standalone `PiRunner`; complete tasks use their task parameters. Basic file/shell tools, HTML delivery checks and final PNG export are part of the regular workflow, with no corresponding CLI disable switches. Run `uv run video-report generate --help` for all options.
 
 ### Configure search for term correction
 

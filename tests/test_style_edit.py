@@ -122,6 +122,36 @@ def test_component_text_can_change_without_modifying_markup():
     assert style_edit.merge_style_change(original, candidate)[0] == candidate
 
 
+@pytest.mark.parametrize("before,after", [
+    ("E=mc²", "E=mc³"),
+    ("λ = v/f", "ν = v/f"),
+    ("f(x) = sin(x)", "f(x) = cos(x)"),
+    ("f(x)=sin(g(x))", "f(x)=sin(h(x))"),
+    ("E=mcⁿ", "E=mcᵐ"),
+    ("f(x)=sin(x²)", "f(x)=sin(x³)"),
+    ("f(x)=sin(g(x²))", "f(x)=sin(g(x³))"),
+])
+@pytest.mark.parametrize("inline_change", [False, True])
+def test_plain_formulas_are_preserved_in_both_merge_paths(before, after, inline_change):
+    original = f"<p>公式{before}。</p><p>讲者说，另一段。</p><p>原句。</p>"
+    candidate = original.replace(before, after).replace("讲者说，", "")
+    if inline_change:
+        candidate = candidate.replace("原句", "<em>原句</em>")
+    result, checks = style_edit.merge_style_change(original, candidate)
+    assert f"<p>公式{before}。</p>" in result
+    assert "<p>另一段。</p>" in result
+    assert checks["numeric_or_formula_blocks_restored"] == 1
+
+
+@pytest.mark.parametrize("before,after", [
+    ("讲者说，公式E=mc²，关系保持不变。", "公式E=mc²，关系保持不变。"),
+    ("This is a cost-effective choice.", "This is a cost efficient choice."),
+])
+def test_unchanged_formula_and_ordinary_prose_allow_style_edits(before, after):
+    original, candidate = f"<p>{before}</p>", f"<p>{after}</p>"
+    assert style_edit.merge_style_change(original, candidate)[0] == candidate
+
+
 def test_natural_rephrasing_not_rejected_as_changed_number_or_condition():
     before = "<p>一个人讲述一个假设，这两种含义由一套系统解释。</p>"
     after = "<p>假设两种含义由系统解释。</p>"
@@ -189,7 +219,9 @@ def test_interrupted_inspection_does_not_replace_original_candidate(tmp_path):
 
 @pytest.mark.skipif(shutil.which("pi") is None, reason="Pi is not installed")
 @pytest.mark.parametrize("has_routing", [False, True])
-def test_real_pi_edit_session_with_source_lookup_and_usage(tmp_path, monkeypatch, has_routing):
+def test_real_pi_edit_session_with_source_lookup_and_usage(
+    tmp_path, monkeypatch, has_routing, *, isolation="local",
+):
     class Handler(BaseHTTPRequestHandler):
         calls = 0
 
@@ -226,13 +258,14 @@ def test_real_pi_edit_session_with_source_lookup_and_usage(tmp_path, monkeypatch
             self.wfile.write(b"data: [DONE]\n\n")
             self.wfile.flush()
 
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server = ThreadingHTTPServer(("0.0.0.0" if isolation == "docker" else "127.0.0.1", 0), Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     config = tmp_path / "config"
     config.mkdir()
+    host = "host.docker.internal" if isolation == "docker" else "127.0.0.1"
     (config / "models.json").write_text(json.dumps({"providers": {"style-local": {
-        "baseUrl": f"http://127.0.0.1:{server.server_port}/v1", "api": "openai-completions",
+        "baseUrl": f"http://{host}:{server.server_port}/v1", "api": "openai-completions",
         "apiKey": "local-only", "models": [{"id": "style-stub", "name": "Style stub",
         "reasoning": False, "input": ["text"], "contextWindow": 128000, "maxTokens": 4096,
         "cost": {"input": 1, "output": 1, "cacheRead": 0, "cacheWrite": 0}}]}}}))
@@ -246,12 +279,15 @@ def test_real_pi_edit_session_with_source_lookup_and_usage(tmp_path, monkeypatch
     monkeypatch.setattr(style_edit, "PI_AGENT_DIR", config)
     try:
         runner = PiRunner(provider="style-local", model="style-stub", api_key="local-only",
-                          thinking="off", timeout=30, isolation="local")
+                          thinking="off", timeout=30, isolation=isolation)
         result = style_edit.edit_report(run, runner)
         assert result["status"] == "applied", result
         assert "讲述者强调" not in (run / "report.html").read_text()
         events = [json.loads(line) for line in (run / "pi.events.jsonl").read_text().splitlines()]
-        assert any(e.get("toolName") == "read_source_units" for e in events)
+        lookup = next(e for e in events if e.get("type") == "tool_execution_end"
+                      and e.get("toolName") == "read_source_units")
+        assert not lookup.get("isError"), lookup
+        assert "先检查两次" in json.dumps(lookup["result"], ensure_ascii=False)
         assert all(e.get("_agent_role") == "style" for e in events)
         assert call_costs(run, {"transcript_reused_from": "fixture"}, None)["llm_calls"] == 3
         attempts = run / "model-attempts.jsonl"
