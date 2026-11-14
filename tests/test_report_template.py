@@ -48,6 +48,30 @@ def test_template_keeps_paper_white_and_canvas_light_gray():
     assert "--paper:#fff;--canvas:#f2f5f7;" in template
 
 
+def test_standard_theme_follows_system_until_reader_selects(tmp_path):
+    report = tmp_path / "report.html"
+    report.write_text(TEMPLATE.read_text())
+    with sync_playwright() as playwright, playwright.chromium.launch() as browser:
+        page = browser.new_page(color_scheme="light")
+        page.goto(report.as_uri())
+        toggle = page.get_by_role("button", name="深色模式")
+        assert page.locator(".paper .report-theme-toggle").count() == 0
+        assert toggle.evaluate("element => getComputedStyle(element).position") == "fixed"
+        assert toggle.get_attribute("aria-pressed") == "false"
+        page.emulate_media(color_scheme="dark")
+        page.wait_for_function("document.documentElement.dataset.reportTheme === 'dark'")
+        assert toggle.get_attribute("aria-pressed") == "true"
+        toggle.press("Enter")
+        assert toggle.get_attribute("aria-pressed") == "false"
+        page.reload()
+        assert toggle.get_attribute("aria-pressed") == "false"
+        assert page.locator(".paper").evaluate("element => getComputedStyle(element).backgroundColor") == "rgb(255, 255, 255)"
+        toggle.click()
+        page.emulate_media(media="print")
+        assert not toggle.is_visible()
+        assert page.locator(".paper").evaluate("element => getComputedStyle(element).backgroundColor") == "rgb(255, 255, 255)"
+
+
 def test_standard_navigation_lives_outside_paper_and_hides_for_long_image():
     template = TEMPLATE.read_text()
 

@@ -59,6 +59,8 @@ def test_long_image_hides_standard_desktop_navigation(tmp_path):
     observed = {}
 
     def check(page, _loading_errors):
+        assert page.locator(".report-theme-toggle").evaluate("el => !el.hidden")
+        assert not page.locator(".report-theme-toggle").is_visible()
         observed["display"] = page.locator(".report-nav").evaluate(
             "el => getComputedStyle(el).display"
         )

@@ -4,6 +4,71 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=900">
 <title>{{TITLE}}</title>
+<meta name="video-report-theme" content="local">
+<script>
+(() => {
+  const setting = document.querySelector('meta[name="video-report-theme"]').content;
+  const restorePrefix = '#report-theme-restore=';
+  const storageKey = 'video-report-theme';
+  const system = window.matchMedia('(prefers-color-scheme: dark)');
+  const root = document.documentElement;
+  let choice = setting;
+  let button;
+
+  if (setting === 'local') {
+    try {
+      choice = localStorage.getItem(storageKey);
+    } catch {
+      // Some browsers disable storage for standalone files.
+    }
+  }
+
+  function applyTheme() {
+    const dark = choice === 'dark' || (choice !== 'light' && system.matches);
+    root.dataset.reportTheme = dark ? 'dark' : 'light';
+    if (button) button.setAttribute('aria-pressed', String(dark));
+  }
+
+  applyTheme();
+  system.addEventListener('change', applyTheme);
+  document.addEventListener('DOMContentLoaded', () => {
+    button = document.querySelector('.report-theme-toggle');
+    if (!button) return;
+    applyTheme();
+    button.hidden = false;
+    if (setting !== 'local' && location.hash.startsWith(restorePrefix)) {
+      const state = new URLSearchParams(location.hash.slice(restorePrefix.length));
+      window.addEventListener('load', () => {
+        const url = new URL(window.location.href);
+        url.hash = state.get('hash') || '';
+        history.replaceState(history.state, '', url.href);
+        window.scrollTo({ top: Number(state.get('top')), behavior: 'instant' });
+        if (state.get('focus') === 'true') button.focus({ preventScroll: true });
+      }, { once: true });
+    }
+    button.addEventListener('click', (event) => {
+      choice = root.dataset.reportTheme === 'dark' ? 'light' : 'dark';
+      if (setting !== 'local') {
+        // The hosted report is sandboxed. Its own URL saves the preference.
+        const url = new URL(window.location.href);
+        const state = new URLSearchParams({
+          hash: url.hash, top: String(window.scrollY), focus: String(event.detail === 0),
+        });
+        url.searchParams.set('report_theme', choice);
+        url.hash = restorePrefix + state;
+        window.location.replace(url.href);
+        return;
+      }
+      try {
+        localStorage.setItem(storageKey, choice);
+      } catch {
+        // The current page can still switch when storage is unavailable.
+      }
+      applyTheme();
+    });
+  });
+})();
+</script>
 <style>
 html{scroll-behavior:smooth;scroll-padding-top:24px}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
@@ -52,9 +117,139 @@ table>caption.caption{display:table-caption;caption-side:top;text-align:left;mar
 .metric-rows{margin:24px 0 8px}.metric-row{padding:12px 0}.metric-head{display:grid;grid-template-columns:150px minmax(0,1fr);gap:20px;align-items:baseline}.metric-head h3{margin:0;font-size:18px}.metric-head h3:before{display:none}.metric-value{margin:0;color:var(--blue);font-weight:650;line-height:1.65}.metric-detail{margin:8px 0 0 170px;display:grid;gap:6px;font-size:15px;line-height:1.75}.metric-detail p{margin:0}.metric-detail strong{color:var(--muted);font-size:14px}
 .phase-list{border-top:1px solid #d7e5ec;margin:24px 0}.phase-row{display:grid;grid-template-columns:220px minmax(0,1fr);gap:22px;padding:18px 10px;border-bottom:1px solid #d7e5ec}.phase-id{display:flex;flex-direction:column;gap:4px;color:#2b4e63}.phase-id strong{font-size:17px;line-height:1.55}.phase-id span{font-size:15px;color:var(--muted)}.phase-main p{margin:0;line-height:1.65}.phase-main p:first-child{font-weight:650;color:var(--heading)}.phase-main p+p{margin-top:5px}
 .reading-items{margin:24px 0}.reading-item{padding:14px 0 19px;margin-bottom:8px;border-bottom:1px solid var(--line)}.reading-item>h3{font-size:18px;margin:0 0 7px}.reading-item>h3:before{display:none}.reading-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;padding-top:10px}.reading-fields strong{font-size:14px;color:var(--blue)}.reading-fields p{font-size:15px;line-height:1.7;margin:2px 0 0}
+
+.report-theme-toggle {
+  position: fixed;
+  z-index: 4;
+  top: 16px;
+  right: 12px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--paper);
+  color: var(--heading);
+  cursor: pointer;
+}
+.report-theme-toggle:not([hidden]) { display: grid; place-items: center; }
+.report-theme-toggle:hover { background: var(--blue-wash); }
+.report-theme-toggle::before {
+  content: "";
+  width: 20px;
+  height: 20px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  background: linear-gradient(90deg, currentColor 50%, transparent 50%);
+}
+@media (pointer: coarse) {
+  .report-theme-toggle { right: 4px; width: 60px; height: 60px; }
+  .report-theme-toggle::before { transform: scale(1.3); }
+}
+@media (forced-colors: active) {
+  .report-theme-toggle::before { forced-color-adjust: none; color: ButtonText; }
+}
+@media print { .report-theme-toggle:not([hidden]) { display: none; } }
+
+@media screen {
+  :root[data-report-theme="dark"] {
+    color-scheme: dark;
+    --canvas: #15181c;
+    --paper: #20242a;
+    --surface: #292f36;
+    --ink: #d6dbe1;
+    --heading: #f0f2f5;
+    --muted: #aab4bf;
+    --accent: #ffae82;
+    --orange: #ec986a;
+    --line: #404953;
+    --blue: #99c9f2;
+    --blue-wash: #233746;
+    --wash: #3a3021;
+    --warm-text: #e6cc9a;
+    --rule-blue: #465b6c;
+    --diagram-ink: #b0cddd;
+    --diagram-edge: #82a9be;
+  }
+
+  [data-report-theme="dark"] ::selection { background: #684631; }
+  [data-report-theme="dark"] .paper {
+    box-shadow: 0 8px 30px #080a0d66;
+  }
+  [data-report-theme="dark"] .paper::before,
+  [data-report-theme="dark"] .paper::after {
+    background: linear-gradient(90deg, #e7a078, #8e849e);
+  }
+  [data-report-theme="dark"] .subtitle,
+  [data-report-theme="dark"] .section-time { color: var(--muted); }
+
+  [data-report-theme="dark"] .report-nav > a {
+    background: var(--paper);
+    color: var(--muted);
+    border-color: #343c45;
+    border-left-color: transparent;
+  }
+  [data-report-theme="dark"] .report-nav > a::before { color: #9ba9b6; }
+  [data-report-theme="dark"] .report-nav > a:hover {
+    background: var(--blue-wash);
+    color: var(--blue);
+  }
+  [data-report-theme="dark"] .report-nav > a[aria-current="location"] {
+    background: #302c2b;
+    border-left-color: var(--accent);
+    box-shadow: 0 6px 18px #090a0d55;
+    color: var(--heading);
+  }
+
+  [data-report-theme="dark"] .num { background: #43505d; }
+  [data-report-theme="dark"] .steps > li::before {
+    background: var(--accent);
+    color: var(--paper);
+  }
+  [data-report-theme="dark"] .keyline { color: var(--warm-text); }
+  [data-report-theme="dark"] .keyline strong { color: #f3deb8; }
+
+  [data-report-theme="dark"] .card,
+  [data-report-theme="dark"] .comparison > div,
+  [data-report-theme="dark"] .category,
+  [data-report-theme="dark"] .tile {
+    background: var(--surface);
+    box-shadow: 0 2px 10px #090a0d44, inset 0 0 0 1px #37404a;
+  }
+  [data-report-theme="dark"] .categories-detailed > .category { --category-tone: #8bbacb; }
+  [data-report-theme="dark"] .categories-detailed > .category[data-tone="rust"] { --category-tone: #eaa389; }
+  [data-report-theme="dark"] .categories-detailed > .category[data-tone="ochre"] { --category-tone: #d8be7b; }
+  [data-report-theme="dark"] .categories-detailed > .category[data-tone="plum"] { --category-tone: #c6a8da; }
+  [data-report-theme="dark"] .categories-detailed > .category[data-tone="sage"] { --category-tone: #9dc9aa; }
+  [data-report-theme="dark"] .categories-detailed > .category[data-tone="rose"] { --category-tone: #dfa2bb; }
+  [data-report-theme="dark"] .categories-detailed li::marker { color: var(--muted); }
+
+  [data-report-theme="dark"] table { border-color: var(--rule-blue); }
+  [data-report-theme="dark"] tbody th { border-right-color: var(--rule-blue); }
+  [data-report-theme="dark"] .table-group > th { background: #2b343e; }
+  [data-report-theme="dark"] .phase-list,
+  [data-report-theme="dark"] .phase-row { border-color: var(--line); }
+  [data-report-theme="dark"] .phase-id { color: var(--diagram-ink); }
+  [data-report-theme="dark"] .branches > ul,
+  [data-report-theme="dark"] .branches > ul > li::before { border-color: var(--diagram-edge); }
+  [data-report-theme="dark"] pre { background: #191d22; }
+
+  [data-report-theme="dark"] .bar-track { background: #383f47; }
+  [data-report-theme="dark"] .bar-fill { background: var(--bar-color, #82bbdf); }
+  [data-report-theme="dark"] .bar-highlight { --bar-color: #f4a87e; }
+  [data-report-theme="dark"] .cycle-node { fill: var(--blue-wash); stroke: #62869b; }
+  [data-report-theme="dark"] .cycle-edge { stroke: var(--diagram-edge); }
+  [data-report-theme="dark"] .cycle-note,
+  [data-report-theme="dark"] .cycle-label { fill: var(--diagram-ink); }
+
+  /* Independent diagrams use their own palette, including dark labels. */
+  [data-report-theme="dark"] figure[data-report-diagram] > svg { background: #fff; }
+}
 </style>
 </head>
-<body><main class="paper">
+<body>
+<button class="report-theme-toggle" type="button" aria-label="深色模式" aria-pressed="false" title="切换浅色或深色" hidden></button>
+<main class="paper">
 <header class="intro">
 <h1>{{TITLE}}</h1>
 <!-- 副标题无新增角度时可删除；导语固定保留，用一段话交代对象、核心问题与阅读起点，不重复副标题。题头不要放组件配额、虚构指标或装饰标签。ATTRIBUTION 固定按“平台；UP 主；《原视频完整标题》；可点击的原视频裸 URL”依次完整展示，已有哪项就展示哪项，不重列推广标签。 -->

@@ -36,7 +36,7 @@ def render_report_image(
         browser = playwright.chromium.launch()
         try:
             page = browser.new_page(viewport={"width": REPORT_IMAGE_WIDTH, "height": 900},
-                                    device_scale_factor=1, service_workers="block")
+                                    device_scale_factor=1, service_workers="block", color_scheme="light")
             loading_errors = []
             page.on("requestfailed", lambda request: loading_errors.append(request.url))
             page.on("pageerror", lambda error: loading_errors.append(str(error)))
@@ -55,6 +55,7 @@ def render_report_image(
 
             page.route("**/*", serve)
             page.goto("http://report.local/report.html", wait_until="load")
+            page.add_style_tag(content=".report-theme-toggle { visibility: hidden }")
             page.evaluate("""async () => {
                 await document.fonts.ready;
                 await Promise.all([...document.images].map(image => {
