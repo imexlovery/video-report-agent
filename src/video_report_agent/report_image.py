@@ -35,8 +35,10 @@ def render_report_image(
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         try:
-            page = browser.new_page(viewport={"width": REPORT_IMAGE_WIDTH, "height": 900},
-                                    device_scale_factor=1, service_workers="block", color_scheme="light")
+            page = browser.new_page(
+                viewport={"width": REPORT_IMAGE_WIDTH, "height": 900},
+                device_scale_factor=1, service_workers="block", color_scheme="light",
+            )
             loading_errors = []
             page.on("requestfailed", lambda request: loading_errors.append(request.url))
             page.on("pageerror", lambda error: loading_errors.append(str(error)))

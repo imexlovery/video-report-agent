@@ -74,7 +74,9 @@ def test_fenced_svg_embeds_and_retains_validation(tmp_path, fence, language, cap
     assert 'data-report-diagram="true"' in report.read_text()
 
     report.write_text(f"<html><body>{PLACEHOLDER}</body></html>")
-    (diagram / "diagram.svg").write_text(f"{fence}{language}\n{SVG.replace('</svg>', '<script/></svg>')}\n{fence}")
+    (diagram / "diagram.svg").write_text(
+        f"{fence}{language}\n{SVG.replace('</svg>', '<script/></svg>')}\n{fence}"
+    )
     embed_diagram(report, tmp_path)
     assert report.read_text() == "<html><body></body></html>"
     assert "Unsupported diagram element" in caplog.text
@@ -289,7 +291,8 @@ def test_real_pi_isolated_diagram_and_default_interface(
                           "function": {"name": name, "arguments": json.dumps(args)}}]}
                 if parallel_inspection:
                     delta["tool_calls"].append({"index": 1, "id": "inspect", "type": "function",
-                                                "function": {"name": "inspect_report", "arguments": "{}"}})
+                                                "function": {"name": "inspect_report",
+                                                             "arguments": "{}"}})
                 reason = "tool_calls"
             elif invalid_first and sum(
                 call.get("function", {}).get("name") == "generate_diagram"
@@ -456,7 +459,9 @@ def test_real_pi_isolated_diagram_and_default_interface(
         events = [json.loads(line) for line in (run / "pi.events.jsonl").read_text().splitlines()]
         drawing = [e for e in events if e.get("_agent_role") == "diagram"]
         if not child_failure and not transient_failure:
-            assert call_costs(run, {}, None)["llm_calls"] == ((6 if invalid_first else 5) if enabled else 2)
+            assert call_costs(run, {}, None)["llm_calls"] == (
+                (6 if invalid_first else 5) if enabled else 2
+            )
         assert authorizations == [f"Bearer {drawing_key if not body.get('tools') else key}"
                                   for body in requests]
         assert json.loads((config / "auth.json").read_text()) == credentials
