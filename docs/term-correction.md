@@ -50,7 +50,7 @@ staging 保存任务开关、搜索供应商/模型和辨名所需的标题、�
 
 同日以相同短句和查询将搜索模型切换为 `gpt-6-luna`，真实搜索与纠正工具链通过，原始转写保持不变；纠正条目由测试脚本给定，未测试主 Agent 的自主纠正判断。环境变量示例使用 Luna 覆盖代码默认搜索模型；未设置 `OPENAI_SEARCH_MODEL` 时仍按上述默认值运行。记录在 `.local/evals/openai-search-luna-20261029/`。
 
-随后完成本机 Local Web → Linux amd64 Docker → Sol 主 Agent / Luna 搜索 → HTML 与 PNG 交付验证。Sol 自主调用搜索、引用官方来源并纠正合成字幕中的名称；任务达到 `RENDERED`，最终 `stopReason=stop` 和 `agent_settled` 均已确认，临时容器与网络正常清理。当前 Docker Desktop 配置代理，结果仅证明该网络配置可用。输入为 75 秒合成字幕，未验证真实视频 ASR、普遍纠正质量或 Windows/公网部署；记录见 `.local/evals/openai-docker-e2e-20261029/validation.md`。
+随后完成本机 Local Web → Linux amd64 Docker → Sol 主 Agent / Luna 搜索 → HTML 与 PNG 交付验证。Sol 自主调用搜索、引用官方来源并纠正合成字幕中的名称；任务达到 `RENDERED`，最终 `stopReason=stop` 和 `agent_settled` 均已确认，临时容器与网络正常清理。当次 Docker Desktop 配置代理，结果仅证明该网络配置可用。输入为 75 秒合成字幕，该样本未覆盖真实视频 ASR 或普遍纠正质量；记录见 `.local/evals/openai-docker-e2e-20261029/validation.md`。
 
 接口依据：[OpenAI Web Search](https://developers.openai.com/api/docs/guides/tools-web-search)、[GPT-6.1 Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol)（2026-10-29 核对）。
 

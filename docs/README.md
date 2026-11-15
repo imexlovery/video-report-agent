@@ -6,7 +6,7 @@
 - [可选文字稿来源、B站 AI 字幕与 ASR 对照](subtitle-sources.md)
 - [按需术语修正、联网取证与任务容器](term-correction.md)
 - [PLAN：候选方向与待办](PLAN.md)
-- [稀疏画面辅助理解：候选方案与实验设计](sparse-visual-understanding.md)
+- [稀疏画面辅助理解：当前能力与实验候选](sparse-visual-understanding.md)
 - [DECISIONS：重要选择、原因与代价](DECISIONS.md)
 - [报告与评测口径](PROJECT.md#评测口径)
 - [报告设计偏好](report-design-preferences.md)
@@ -15,4 +15,4 @@
 - [示例 HTML](examples/report.html) / [完整长图](examples/report.png)
 - [合成 smoke 与可选评测](../evals/report-review/README.md)
 
-维护规则见 [AGENTS.md](../AGENTS.md)。文档描述源码能力，具体本地验证、真实模型结果与部署状态分别说明。
+维护规则见 [AGENTS.md](../AGENTS.md)。这些文档供 Agent 接续工作、用户按需查阅；描述源码能力和真实剩余工作，不维护调用方的部署进度。
