@@ -190,7 +190,7 @@ uv run video-report transcribe 'https://www.bilibili.com/video/BV...' --sources 
 
 Manual selection collects only the selected sources; the AI-only example fails if its subtitles are unavailable. Selecting both AI subtitles and ASR collects both. Subtitle-only runs require no media download or ASR credentials unless visual enhancement is enabled.
 
-If subtitles require authentication, set `BILIBILI_SUBTITLE_BROWSER=chrome` (or another browser supported by yt-dlp) in `.env` to use its existing Bilibili login, or supply `BILIBILI_SESSDATA` through the process environment. Browsers are not read by default. Keep credentials out of Git. Importing subtitle files requires `uv sync --extra enhancement`. See the [source selection guide](docs/subtitle-sources.md).
+If subtitles require authentication, set `BILIBILI_SUBTITLE_BROWSER=chrome` (or another browser supported by yt-dlp) in `.env` to use its existing Bilibili login, or supply `BILIBILI_SESSDATA` through the process environment. Browsers are not read by default. Keep credentials out of Git. For public YouTube videos, `transcribe` anonymously tries creator subtitles, original-language automatic captions, and Chinese ASR in that order. See the [source selection guide](docs/subtitle-sources.md).
 
 The Protobuf field parsing for Bilibili's newer AI subtitle endpoint references [ccBilly-aipm/bilibili-ai-subtitle](https://github.com/ccBilly-aipm/bilibili-ai-subtitle) (MIT). Thank you to its author for publishing the extraction workflow and protocol implementation that informed this support.
 

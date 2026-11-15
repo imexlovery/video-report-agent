@@ -10,7 +10,7 @@
 |---|---|
 | [cli.py](../src/video_report_agent/cli.py)、[execution.py](../src/video_report_agent/execution.py) | CLI 参数、Worker 进程组、期限与取消监督 |
 | [pipeline.py](../src/video_report_agent/pipeline.py) | 创建输入和状态，顺序组织下载、转写、生成、截图与错误落盘 |
-| [ingest.py](../src/video_report_agent/ingest.py)、[audio.py](../src/video_report_agent/audio.py) | Bilibili 来源验证、所选分 P 元数据预查询、下载、16 kHz 单声道音频、时长与静音检测 |
+| [ingest.py](../src/video_report_agent/ingest.py)、[audio.py](../src/video_report_agent/audio.py) | 来源验证、Bilibili 分 P 元数据预查询、视频或音轨下载、16 kHz 单声道音频、时长与静音检测 |
 | [asr.py](../src/video_report_agent/asr.py)、[paraformer.py](../src/video_report_agent/paraformer.py) | 本地/云端 ASR、云任务轮询、两段结果与时间戳合并 |
 | [transcript.py](../src/video_report_agent/transcript.py)、[transcript_foundation.py](../src/video_report_agent/transcript_foundation.py) | 来源事件、规范单元、可选字幕/OCR 融合 |
 | [visual.py](../src/video_report_agent/visual.py) | 视觉专用视频轨、抽帧、带时间戳的画面描述及报告读取约定；实验脚本复用此模块 |
@@ -28,6 +28,8 @@
 下载由 `ingest.py` 监督 `download_worker.py` 中的 yt-dlp，最多两次尝试、合计 120 秒运行预算，随后做有限进程清理。每 30 秒检查进度：最近 10 秒无进展，或未到 90% 且 ETA 不在 30 秒以内时，首轮中断并重新解析，优先选择平台返回的不同备用 URL；无备用则使用新解析的主 URL。第二轮不再增加重试。保持断点续传和外层 Worker 进程组，关闭 yt-dlp 内部额外重试，网络等待上限 10 秒。`download.log` 持续保留进度与切换原因，不打印签名媒体 URL。120 秒是体验预算，不是所有视频都能在此范围内完成的保证。
 
 ## 任务数据与接口
+
+YouTube 单视频走自动选源的仅转写路径，由 [youtube_subtitles.py](../src/video_report_agent/youtube_subtitles.py) 读取作者字幕或原语言自动字幕，必要时下载音轨转写中文语音。复用规范转写、缓存和 `TRANSCRIPT_READY` 终态。见 [文字稿来源](subtitle-sources.md#youtube-单视频)。
 
 默认 Web/CLI 用 `auto` 依次尝试作者字幕轨、`ai-zh`、ASR，任一字幕正文可用即结束采集。Local 可主动使用自选来源。自选文字稿入口接收有序的 `transcript_sources`：ASR、非 AI 字幕轨、B站 `ai-zh`。第一路可用来源提供时间轴，其余已选来源参与局部校对；未选 ASR 时跳过媒体下载、音频提取与 ASR。字幕获取、来源状态、缓存及对照命令见 [可选文字稿来源](subtitle-sources.md)。`transcribe` 在 `TRANSCRIPT_READY` 结束，不启动后续 Agent/报告阶段；旧显式 ASR-only/fused 调用保持兼容。
 

@@ -1,6 +1,6 @@
 # 可选文字稿来源与 B站字幕对照
 
-Web 与 CLI 默认使用 `auto`：作者字幕轨 → B站 `ai-zh` → ASR。作者字幕指平台返回的非 AI 字幕轨；取得可用正文后直接形成 Transcript，不继续下载下一路正文，不进行多路融合，也不运行 OCR。作者轨不存在或不可用时尝试 `ai-zh`；AI 字幕需要登录或获取失败时才进入 ASR，并在此时检查 ASR 凭证。
+Web 与 CLI 的 Bilibili 链接默认使用 `auto`：作者字幕轨 → B站 `ai-zh` → ASR。作者字幕指平台返回的非 AI 字幕轨；取得可用正文后直接形成 Transcript，不继续下载下一路正文，不进行多路融合，也不运行 OCR。作者轨不存在或不可用时尝试 `ai-zh`；AI 字幕需要登录或获取失败时才进入 ASR，并在此时检查 ASR 凭证。
 
 嵌入调用用 `transcript_mode="auto"` 启用同一策略。既有显式 ASR-only 与旧版 Fusion 调用保持兼容。Local 高级设置或 CLI 的 `--sources` 可主动选择单一路径或多路对照／融合：
 
@@ -37,6 +37,10 @@ BILIBILI_SUBTITLE_BROWSER=edge uv run video-report \
 `transcribe` 复用受监督 Worker、存储和缓存，完成状态为 `TRANSCRIPT_READY`，不启动 Pi、报告或截图。`generate` 也接受 `--sources`，但会继续生成报告。
 
 字幕正文存于 `bilibili-subtitles.json`，与来源事件、规范单元、manifest 和 `transcript.md` 一起入库。新缓存身份包括路由模式、实际采用的来源、字幕正文及导入内容；自动路由、手动多路与旧 ASR-only 缓存各自独立。无 ASR 的转写不再要求 `asr.json` 才能验证和复用。
+
+### YouTube 单视频
+
+`video-report transcribe 'https://www.youtube.com/watch?v=VIDEO_ID'` 也接受 `youtu.be` 与 Shorts 链接。使用自动选源，最长 5 小时。yt-dlp 匿名读取视频，优先采用作者字幕，其次原语言自动字幕；每种轨道先尝试原生 SRT，再尝试 VTT。可用字幕直接写入 `youtube-subtitles.json`，记录轨道类型、语言和时间戳。无可用字幕时下载音轨，使用配置的现有 ASR 识别中文语音。播放列表、直播和需要登录才能访问的内容无法走这条路径。ASR 输出可出现识别错误，无对白的音轨也可能产生虚假文字。
 
 ## 与已有 ASR 对照
 

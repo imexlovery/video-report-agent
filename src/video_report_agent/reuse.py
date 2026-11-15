@@ -7,7 +7,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from .ingest import DownloadResult, UrlIngestError, _metadata
+from .ingest import DownloadResult, UrlIngestError, _metadata, subtitle_snapshot_name
 from .schemas import AsrSegment
 from .storage import CacheProductionFailed, Store, encode
 from .transcript_foundation import FUSION_VERSION, NORMALIZER_VERSION
@@ -52,7 +52,9 @@ def cache_key(kind, metadata, documents=None):
         selected = metadata.get("resolved_transcript_sources") or metadata.get("transcript_sources")
         if selected:
             identity["selected_sources"] = selected
-            identity["subtitle_snapshot"] = (documents or {}).get("bilibili-subtitles.json")
+            identity["subtitle_snapshot"] = (documents or {}).get(
+                subtitle_snapshot_name(metadata["video_id"])
+            )
         identity.update(
             {
                 key: metadata.get(key, default)
@@ -193,7 +195,7 @@ def validated_transcript(candidate: Path, metadata: dict):
         if metadata.get("transcript_mode") == "auto" or (
             selected and any(s != "asr" for s in selected)
         ):
-            names.append("bilibili-subtitles.json")
+            names.append(subtitle_snapshot_name(metadata["video_id"]))
         if any(Path(name).name != name or not (candidate / name).is_file() for name in names):
             return None
         units = [

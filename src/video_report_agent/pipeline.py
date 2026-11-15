@@ -16,7 +16,14 @@ from .audio import AudioExtractionError, extract_audio
 from .bilibili_subtitles import SubtitleError, fetch_subtitles, validate_sources
 from .diagram import diagram_model_config
 from .failures import asr_failure
-from .ingest import UrlIngestError, download_bilibili_video, validate_bilibili_url
+from .ingest import (
+    UrlIngestError,
+    YouTubeSource,
+    download_bilibili_video,
+    download_youtube_audio,
+    subtitle_snapshot_name,
+    validate_source_url,
+)
 from .media_config import resolve_media_config
 from .paraformer import CloudAsrError
 from .pi import PI_AGENT_DIR, PiError, PiRunner, initialize_pi_config
@@ -38,6 +45,7 @@ from .trace import RunTrace
 from .transcript import build_transcript
 from .transcript_foundation import parse_roi
 from .visual import VISUAL_DOCUMENTS, describe_frames, fetch_video, sample_frames
+from .youtube_subtitles import fetch_youtube_subtitles
 
 
 def write_json(path: Path, data: dict) -> None:
@@ -109,7 +117,9 @@ def create_run(
         if transcript_sources is None or "asr" in transcript_sources
         else {}
     )
-    source = validate_bilibili_url(url)
+    source = validate_source_url(url, allow_youtube=transcript_only)
+    if isinstance(source, YouTubeSource) and (transcript_mode != "auto" or visual_enhancement):
+        raise ValueError("YouTube 仅支持自动选源的文字稿任务。")
     diagrams = diagrams and report_mode != "brief"
     drawing = diagram_model_config(diagram_model_selection) if diagrams else None
     run = root.resolve() / uuid.uuid4().hex
@@ -213,11 +223,13 @@ def generate(
             }
             return True
 
-        source = validate_bilibili_url(metadata["url"])
+        source = validate_source_url(metadata["url"], allow_youtube=metadata.get("transcript_only"))
+        youtube = isinstance(source, YouTubeSource)
+        auto_tracks = ["subtitle_track"] if youtube else ["subtitle_track", "bilibili_ai"]
         if automatic or (selected and (not needs_asr or any(s != "asr" for s in selected))):
             update("TRANSCRIBING")
             requested = (
-                ["subtitle_track", "bilibili_ai"]
+                auto_tracks
                 if automatic
                 else [
                     s
@@ -227,11 +239,14 @@ def generate(
             )
             with trace.span("subtitles", input={"sources": requested}) as detail:
                 try:
-                    subtitle_snapshot = (
-                        fetch_subtitles(source, requested, first_available=True)
-                        if automatic
-                        else fetch_subtitles(source, requested)
-                    )
+                    if youtube:
+                        subtitle_snapshot = fetch_youtube_subtitles(source)
+                    else:
+                        subtitle_snapshot = (
+                            fetch_subtitles(source, requested, first_available=True)
+                            if automatic
+                            else fetch_subtitles(source, requested)
+                        )
                 except SubtitleError as exc:
                     if not needs_asr:
                         raise
@@ -246,9 +261,10 @@ def generate(
                             for s in requested
                         }
                     }
-                write_json(run / "bilibili-subtitles.json", subtitle_snapshot)
-                store.document(run.name, "bilibili-subtitles.json", json.dumps(subtitle_snapshot))
-                documents["bilibili-subtitles.json"] = json.dumps(subtitle_snapshot)
+                name = subtitle_snapshot_name(metadata["video_id"])
+                write_json(run / name, subtitle_snapshot)
+                documents[name] = json.dumps(subtitle_snapshot)
+                store.document(run.name, name, documents[name])
                 metadata.update(
                     {
                         key: subtitle_snapshot[key]
@@ -267,7 +283,7 @@ def generate(
             chosen = next(
                 (
                     kind
-                    for kind in ("subtitle_track", "bilibili_ai")
+                    for kind in auto_tracks
                     if subtitle_snapshot["sources"].get(kind, {}).get("status") == "READY"
                 ),
                 "asr",
@@ -311,7 +327,6 @@ def generate(
             if transcript_source is None and needs_asr:
                 update("DOWNLOADING")
                 with trace.span("download", input={"video_id": metadata["video_id"]}) as detail:
-                    source = validate_bilibili_url(metadata["url"])
                     request_subtitles = metadata.get("transcript_mode") == "fused"
                     audio_only = (
                         bool(selected) or metadata.get("transcript_mode", "asr-only") == "asr-only"
@@ -335,11 +350,12 @@ def generate(
                         if downloaded is not None:
                             break
                         if download_claim == "PRODUCE":
-                            downloaded = download_bilibili_video(
-                                source,
-                                run,
-                                request_subtitles=request_subtitles,
-                                audio_only=audio_only,
+                            downloaded = (
+                                download_youtube_audio(source, run, metadata) if youtube
+                                else download_bilibili_video(
+                                    source, run, request_subtitles=request_subtitles,
+                                    audio_only=audio_only,
+                                )
                             )
                             break
                         store.invalidate_media(

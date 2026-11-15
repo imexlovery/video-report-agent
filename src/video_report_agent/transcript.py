@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 from typing import Any
 
+from .ingest import subtitle_snapshot_name
 from .transcript_foundation import (
     OcrError,
     RapidOcrBackend,
@@ -170,7 +171,7 @@ def _build_selected(args, root, asr_path, duration_ms, metadata):
     from .bilibili_subtitles import SOURCE_NAMES, SubtitleError
 
     selected = args.transcript_sources
-    snapshot_path = root / "bilibili-subtitles.json"
+    snapshot_path = root / subtitle_snapshot_name(metadata["video_id"])
     snapshot = read_json_object(snapshot_path) if snapshot_path.exists() else {"sources": {}}
     groups = {}
     statuses = {
@@ -212,11 +213,10 @@ def _build_selected(args, root, asr_path, duration_ms, metadata):
                     text=cue["content"],
                     normalized_text=normalize_text(cue["content"]),
                     provenance={
-                        "path": "bilibili-subtitles.json",
+                        "path": snapshot_path.name,
                         "cue_index": cue.get("cue_index", index - 1),
-                        "bvid": snapshot["bvid"],
-                        "cid": snapshot["cid"],
-                        "track_id": item.get("track_id"),
+                        **{key: snapshot[key] for key in ("bvid", "cid") if key in snapshot},
+                        **{key: item[key] for key in ("track_id", "track_kind") if key in item},
                         "language": item.get("language"),
                     },
                 )
