@@ -45,10 +45,8 @@ def render_report_image(
                 url = urlsplit(route.request.url)
                 target = (run / unquote(url.path).lstrip("/")).resolve()
                 allowed = target == run / "report.html" or target.is_relative_to(run / "assets")
-                if url.netloc == "report.local" and allowed and target.is_file():
-                    served = target
-                    if target == run / "report.html" and report_file:
-                        served = report_file
+                served = report_file if target == run / "report.html" and report_file else target
+                if url.netloc == "report.local" and allowed and served.is_file():
                     route.fulfill(path=str(served), headers={"Content-Security-Policy": REPORT_CSP})
                 else:
                     route.abort()

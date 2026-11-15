@@ -160,7 +160,9 @@ def create_run(
     return run
 
 
-def generate(run: Path, *, database_path=None, execution_id=None) -> dict:
+def generate(
+    run: Path, *, database_path=None, execution_id=None, render_image: bool = True,
+) -> dict:
     store = Store(database_path or run.parent / "state.sqlite3", initialize=False)
     standalone = execution_id is None
     if standalone:
@@ -616,14 +618,15 @@ def generate(run: Path, *, database_path=None, execution_id=None) -> dict:
             for asset in (run / "assets").rglob("*"):
                 if asset.is_file() and not asset.is_symlink():
                     store.artifact(run.name, str(asset.relative_to(run)), asset, "resource")
-            update("GENERATING_IMAGE")
-            try:
-                with trace.span("render", input={"artifact": "report.html"}) as detail:
-                    render_report_image(run)
-                    store.artifact(run.name, "report.png", run / "report.png", "image")
-                    detail.update(output={"artifact": "report.png"})
-            except Exception as exc:
-                status["image_error"] = str(exc)
+            if render_image:
+                update("GENERATING_IMAGE")
+                try:
+                    with trace.span("render", input={"artifact": "report.html"}) as detail:
+                        render_report_image(run)
+                        store.artifact(run.name, "report.png", run / "report.png", "image")
+                        detail.update(output={"artifact": "report.png"})
+                except Exception as exc:
+                    status["image_error"] = str(exc)
             update("RENDERED")
     except Exception as exc:
         if isinstance(exc, CloudAsrError):

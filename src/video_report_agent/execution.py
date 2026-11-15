@@ -25,6 +25,7 @@ def generate(
     env: dict[str, str] | None = None,
     database_path=None,
     execution_id=None,
+    render_image: bool = True,
 ) -> dict:
     run = run.resolve()
     store = Store(database_path or run.parent / "state.sqlite3", initialize=False)
@@ -37,10 +38,12 @@ def generate(
         "-c",
         "from pathlib import Path; import sys; "
         "from video_report_agent.pipeline import generate; "
-        "generate(Path(sys.argv[1]), database_path=Path(sys.argv[2]), execution_id=sys.argv[3])",
+        "generate(Path(sys.argv[1]), database_path=Path(sys.argv[2]), "
+        "execution_id=sys.argv[3], render_image=sys.argv[4] == '1')",
         str(run),
         str(store.path),
         execution_id,
+        "1" if render_image else "0",
     ]
     deadline = time.monotonic() + timeout
     worker_env = {**os.environ, **env} if env is not None else os.environ.copy()
