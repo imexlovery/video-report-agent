@@ -9,7 +9,7 @@
 | 你想做什么 | 从这里开始 |
 |---|---|
 | 在线生成报告 | [打开 VReport](https://vreport.tri4t.xyz) |
-| 把已有转写交给自己的 Coding Agent | [下载 Skill ZIP v0.6.0](https://github.com/imexlovery/video-report-agent/releases/download/skill-zip-v0.6.0/video-report-skill-v0.6.0.zip) · [简短使用说明与示例](docs/skill-bundle/README.md) |
+| 把已有转写交给自己的 Coding Agent | [下载 Skill ZIP v0.7.0](https://github.com/imexlovery/video-report-agent/releases/download/skill-zip-v0.7.0/video-report-skill-v0.7.0.zip) · [简短使用说明与示例](docs/skill-bundle/README.md) |
 | 从视频链接运行完整流程 | [完整 CLI 安装说明](#方式二运行完整-cli-流水线) |
 
 ## 先看成品
@@ -21,6 +21,8 @@
 [示例 HTML](docs/examples/report.html) · [完整 PNG](docs/examples/report.png) · [在线使用](https://vreport.tri4t.xyz)
 
 GitHub 上的 HTML 链接会打开源码页，下载后用浏览器打开即可阅读。示例随仓库提供，无需启动服务。
+
+**Standard 报告支持深色模式。** 新生成的 Standard HTML 默认跟随系统配色，也可以点击右上角按钮切换浅色和深色。浏览器会记住你的选择。打印和 Core 导出的 PNG 长图使用浅色。
 
 ## 模板 Skill 如何工作
 
@@ -58,7 +60,7 @@ ASR 负责把语音变成文字，Coding Agent 的模型负责阅读和生成报
 
 ### 2. 获取完整 Skill 目录
 
-下载 [Skill ZIP v0.6.0](https://github.com/imexlovery/video-report-agent/releases/download/skill-zip-v0.6.0/video-report-skill-v0.6.0.zip) 并解压。包内有完整 Skill、简短说明，以及配套的转写和 HTML 示例；可以先按包内 `README.md` 试用。
+下载 [Skill ZIP v0.7.0](https://github.com/imexlovery/video-report-agent/releases/download/skill-zip-v0.7.0/video-report-skill-v0.7.0.zip) 并解压。包内有完整 Skill、简短说明，以及配套的转写和 HTML 示例；可以先按包内 `README.md` 试用。
 
 需要源码时，也可以克隆仓库：
 
@@ -206,7 +208,7 @@ B站 AI 自动字幕的新接口 Protobuf 字段解析参考了 [ccBilly-aipm/bi
 
 画面辅助会额外取得视频轨、抽取 9 帧，使用本次任务选定的主报告模型生成画面描述，再交给报告 Agent。它沿用主模型的 provider、model、思考档位与 Pi 认证（API Key 或 OAuth），无需单独的视觉模型或 Key。主模型须实际支持图片，并在 `config/pi/models.json` 对应模型中声明 `"input": ["text", "image"]`；未声明图片输入时会明确报错。开启后会增加一次图文模型请求的耗时与用量。
 
-Standard 的独立图示工具最多调用一次，可通过下方的独立绘图模型配置指定模型；开启时也可由 Agent 判断无需绘图。绘图遇到可恢复的请求错误时最多重试一次，共用 180 秒时限；仍无法嵌入时清除占位符，交付已正常完成的正文。
+Standard 的独立图示工具最多调用一次，可通过下方的独立绘图模型配置指定模型。Agent 按需发起绘图，图示在后台生成，正文可以继续撰写。绘图遇到可恢复的请求错误时最多重试一次，共用 180 秒时限；仍无法嵌入时清除占位符，交付已正常完成的正文。
 
 报告检查工具向同一 Agent 返回程序检查结果与可用截图，最多检查两次、集中修订一次。任务关闭报告检查时，写完初稿直接结束，不通过 Bash 运行检查器。文风校订独立可选，校订后不再运行检查器。`REPORT_REVIEW` 仅作为独立构造 `PiRunner` 时的默认值，完整任务以任务参数为准。基础读写／命令工具、HTML 交付检查和最终 PNG 导出属于常规流程，当前没有对应 CLI 关闭参数。完整参数见 `uv run video-report generate --help`。
 

@@ -9,7 +9,7 @@ Turn video transcripts into HTML reports you can skim, study and save. Use the [
 | What you want to do | Start here |
 |---|---|
 | Generate a report online | [Open VReport](https://vreport.tri4t.xyz) |
-| Give an existing transcript to your own Coding Agent | [Download Skill ZIP v0.6.0](https://github.com/imexlovery/video-report-agent/releases/download/skill-zip-v0.6.0/video-report-skill-v0.6.0.zip) · [Quick start and examples (Chinese)](docs/skill-bundle/README.md) |
+| Give an existing transcript to your own Coding Agent | [Download Skill ZIP v0.7.0](https://github.com/imexlovery/video-report-agent/releases/download/skill-zip-v0.7.0/video-report-skill-v0.7.0.zip) · [Quick start and examples (Chinese)](docs/skill-bundle/README.md) |
 | Run the complete workflow from a video URL | [CLI installation](#option-2-run-the-complete-cli-pipeline) |
 
 ## See the result
@@ -21,6 +21,8 @@ This preview shows the top of a sample report. Click it for the complete image.
 [Sample HTML](docs/examples/report.html) · [Full PNG](docs/examples/report.png) · [Use online](https://vreport.tri4t.xyz)
 
 On GitHub, the HTML link opens the source file. Download it and open it in a browser. These examples ship with the repository and require no running service.
+
+**Standard reports support dark mode.** New Standard HTML reports follow your system appearance by default. Use the button in the upper-right corner to switch between light and dark, and your browser will remember your choice. Printing and PNG exports from Core use the light theme.
 
 ## How the template Skill works
 
@@ -58,7 +60,7 @@ ASR converts speech into text; your Coding Agent's model reads it and generates 
 
 ### 2. Get the complete Skill directory
 
-Download and extract [Skill ZIP v0.6.0](https://github.com/imexlovery/video-report-agent/releases/download/skill-zip-v0.6.0/video-report-skill-v0.6.0.zip). It includes the complete Skill, a short Chinese guide, and a paired transcript and HTML example. Start with the bundled `README.md`.
+Download and extract [Skill ZIP v0.7.0](https://github.com/imexlovery/video-report-agent/releases/download/skill-zip-v0.7.0/video-report-skill-v0.7.0.zip). It includes the complete Skill, a short Chinese guide, and a paired transcript and HTML example. Start with the bundled `README.md`.
 
 To get the source code, clone the repository:
 
@@ -207,7 +209,7 @@ These switches apply to the complete Core pipeline. The standalone Skill ZIP use
 
 Visual enhancement obtains a video track, samples nine frames and uses the task's selected report model to describe them. It shares the report model's provider, model, thinking level and Pi authentication (API Key or OAuth), then passes the descriptions to the report Agent. No separate vision model or key is needed. The model must support images and declare `"input": ["text", "image"]` in its `config/pi/models.json` entry; missing image input produces an explicit error. Enabling this adds one multimodal request's latency and usage.
 
-Standard allows at most one independent drawing tool call; the Agent can decide no diagram is needed. The drawing model can be configured separately as described below. Transient request failures receive at most one retry within the 180-second limit; if the diagram still cannot be embedded, its placeholder is removed and the otherwise complete report is delivered.
+Standard allows at most one independent drawing tool call. The Agent requests a diagram when needed and can keep writing while it renders in the background. The drawing model can be configured separately as described below. Transient request failures receive at most one retry within the 180-second limit. If the diagram still cannot be embedded, its placeholder is removed and the otherwise complete report is delivered.
 
 Report inspection gives the same Agent programmatic findings and available screenshots, allowing at most two inspections and one consolidated revision. When task inspection is disabled, the Agent finishes after the complete draft without running checks through Bash. Independent style editing runs before rendering and adds model usage; it does not invoke the inspector afterward. `REPORT_REVIEW` only supplies the default for a standalone `PiRunner`; complete tasks use their task parameters. Basic file/shell tools, HTML delivery checks and final PNG export are part of the regular workflow, with no corresponding CLI disable switches. Run `uv run video-report generate --help` for all options.
 
