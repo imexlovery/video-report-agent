@@ -2,6 +2,7 @@
 
 import html
 import json
+import logging
 import math
 import os
 import re
@@ -11,6 +12,7 @@ from pathlib import Path
 
 PLACEHOLDER = "<!-- video-report-diagram -->"
 SVG_NS = "http://www.w3.org/2000/svg"
+logger = logging.getLogger(__name__)
 ET.register_namespace("", SVG_NS)
 
 
@@ -77,7 +79,14 @@ def embed_diagram(report: Path, run: Path) -> None:
             raise ValueError("Expected one diagram position")
         directory = run / "assets" / "diagram"
         request = json.loads((directory / "request.json").read_text())
-        svg = ET.fromstring((directory / "diagram.svg").read_text())
+        svg_text = (directory / "diagram.svg").read_text().strip()
+        fenced = re.fullmatch(
+            r"(?P<fence>`{3,}|~{3,})(?:svg)?[ \t]*\r?\n(.*?)\r?\n(?P=fence)[ \t]*",
+            svg_text, re.DOTALL | re.IGNORECASE,
+        )
+        if fenced:
+            svg_text = fenced.group(2)
+        svg = ET.fromstring(svg_text)
         if svg.tag != f"{{{SVG_NS}}}svg" or not svg.get("viewBox"):
             raise ValueError("Diagram must be SVG with a viewBox")
         viewbox = [float(value) for value in re.split(r"[\s,]+", svg.get("viewBox").strip())]
@@ -116,7 +125,7 @@ def embed_diagram(report: Path, run: Path) -> None:
         figure = (f'<figure data-report-diagram="true" data-source-units="{sources}">'
                   f'{ET.tostring(svg, encoding="unicode")}<figcaption>'
                   f'{html.escape(request["caption"])}</figcaption></figure>')
-    except (OSError, ValueError, ET.ParseError, KeyError, TypeError, AttributeError):
+    except (OSError, ValueError, ET.ParseError, KeyError, TypeError, AttributeError) as exc:
         # Diagram failure must not prevent delivery of an otherwise complete report.
-        pass
+        logger.warning("Failed to embed report diagram: %s", exc)
     report.write_text(content.replace(PLACEHOLDER, figure))

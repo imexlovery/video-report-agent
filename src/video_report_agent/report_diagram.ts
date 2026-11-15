@@ -21,7 +21,17 @@ function retryable(message) {
 
 export default function (pi) {
   let called = false;
+  let drawingTask: Promise<void> | undefined;
+  let drawingDone: (() => void) | undefined;
+  pi.on("agent_end", async () => {
+    if (!called) drawingDone?.();
+    await drawingTask;
+  });
   pi.on("tool_call", event => {
+    if (event.toolName === "generate_diagram" && !drawingTask) {
+      drawingTask = new Promise(resolve => { drawingDone = resolve; });
+      (globalThis as any).__videoReportDrawing = drawingTask;
+    }
     const target = event.toolName === "read" ? event.input.path
       : event.toolName === "bash" ? event.input.command : "";
     if (typeof target === "string" && /(?:diagram\.md|report_diagram\.ts|assets\/diagram|inspection\/[^\s;]*\.html)/.test(target)) {
@@ -31,7 +41,7 @@ export default function (pi) {
   pi.registerTool({
     name: "generate_diagram",
     label: "Generate diagram",
-    description: "把一个确需图示的解释目标交给独立 Pi 会话。每份报告最多一次；只返回插入标记，不把绘图代码或过程带入主上下文。",
+    description: "把一个确需图示的解释目标交给后台独立 Pi 会话。每份报告最多一次；立即返回插入标记，可继续撰写，程序会在检查或交付前等待图示完成。",
     parameters: Type.Object({
       goal: Type.String({ description: "只问一个问题，优先具体事件或例子中的局部关系；并列问题只选其一，其余留正文，不要求背景、证据分级或免责声明" }),
       context: Type.String({ description: "仅该点必需的对象、关系和数值，包含正文采用的实体称呼、角色及必要观点归属，区分视频作者与事件人物；原样保留条件、时态与判断强度：若A则B不改为可能B，原文可能不改确定；具体前提表达一次，不加推演或未证实等评价；来源定位用 source_units" }),
@@ -40,6 +50,8 @@ export default function (pi) {
     }),
     async execute(_id, params, signal, _update, ctx) {
       if (called) throw new Error("每份报告最多一个绘图任务，不再调用绘图。");
+      called = true;
+      try {
       if (!ctx.model) throw new Error("没有可用的绘图模型。");
       const input = await readFile(join(ctx.cwd, "input.json"), "utf8").catch(error => {
         if (error.code === "ENOENT") return "{}";
@@ -52,7 +64,6 @@ export default function (pi) {
       const lines = (await readFile(join(ctx.cwd, "transcript.md"), "utf8")).split("\n");
       const units = new Map(lines.map(line => [line.match(/^\[([^ |]+) \|/)?.[1], line]));
       if (params.source_units.some(id => !units.has(id))) throw new Error("图示来源 ID 不存在。");
-      called = true;
       const directory = join(ctx.cwd, "assets", "diagram");
       await mkdir(directory, { recursive: true });
       const request = { ...params, source: params.source_units.map(id => units.get(id)) };
@@ -61,7 +72,7 @@ export default function (pi) {
       const config = join(ctx.cwd, ".diagram-config");
       await mkdir(config);
       const agentDir = process.env.PI_CODING_AGENT_DIR;
-      try {
+      void (async () => { try {
         for (const name of ["models.json", "auth.json"]) {
           const source = join(agentDir, name);
           try { await access(source); } catch { continue; }
@@ -156,9 +167,20 @@ export default function (pi) {
         });
         const svg = lastAssistant.content.filter(part => part.type === "text").map(part => part.text).join("\n").trim();
         await writeFile(join(directory, "diagram.svg"), svg);
-        return { content: [{ type: "text", text: JSON.stringify({ placeholder,
-          caption: params.caption, source_units: params.source_units }) }] };
-      } finally { await rm(config, { recursive: true, force: true }); }
+      } finally { await rm(config, { recursive: true, force: true }); } })().catch(error => {
+        ctx.ui.notify("video-report-diagram:" + JSON.stringify({ type: "diagram_failure",
+          message: String(error?.message ?? error) }), "info");
+      }).finally(() => drawingDone?.());
+      return { content: [{ type: "text", text: JSON.stringify({ placeholder,
+        caption: params.caption, source_units: params.source_units }) }] };
+      } catch (error) {
+        drawingDone?.();
+        drawingTask = undefined;
+        drawingDone = undefined;
+        (globalThis as any).__videoReportDrawing = undefined;
+        called = false;
+        throw error;
+      }
     },
   });
 }

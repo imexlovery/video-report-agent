@@ -60,6 +60,26 @@ def test_failed_drawing_request_does_not_block_text_report(tmp_path):
     assert report.read_text() == "<html><body>completed report without a diagram</body></html>"
 
 
+@pytest.mark.parametrize(("fence", "language"), [
+    ("```", "svg"), ("```", "SVG"), ("```", ""), ("````", "svg"), ("~~~", "svg"),
+])
+def test_fenced_svg_embeds_and_retains_validation(tmp_path, fence, language, caplog):
+    diagram = tmp_path / "assets/diagram"
+    diagram.mkdir(parents=True)
+    (diagram / "request.json").write_text('{"source_units": ["u1"], "caption": "test"}')
+    report = tmp_path / "report.html"
+    report.write_text(f"<html><body>{PLACEHOLDER}</body></html>")
+    (diagram / "diagram.svg").write_text(f"{fence}{language}\n{SVG}\n{fence}")
+    embed_diagram(report, tmp_path)
+    assert 'data-report-diagram="true"' in report.read_text()
+
+    report.write_text(f"<html><body>{PLACEHOLDER}</body></html>")
+    (diagram / "diagram.svg").write_text(f"{fence}{language}\n{SVG.replace('</svg>', '<script/></svg>')}\n{fence}")
+    embed_diagram(report, tmp_path)
+    assert report.read_text() == "<html><body></body></html>"
+    assert "Unsupported diagram element" in caplog.text
+
+
 def test_valid_drawing_embeds_in_packaged_report_template(tmp_path):
     diagram = tmp_path / "assets/diagram"
     diagram.mkdir(parents=True)
@@ -212,6 +232,7 @@ def test_invalid_drawing_configuration_is_rejected(selection):
 def test_real_pi_isolated_diagram_and_default_interface(
     tmp_path, monkeypatch, enabled, cancel, auth, *, isolation="local", evidence=None,
     child_failure=False, transient_failure=None, failure_status=503, cancel_in_retry=False,
+    overlap=False, parallel_inspection=False, invalid_first=False,
 ):
     requests = []
     authorizations = []
@@ -252,20 +273,32 @@ def test_real_pi_isolated_diagram_and_default_interface(
                     self.end_headers()
                     self.wfile.write(payload)
                     return
-                if cancel:
+                if cancel or overlap or parallel_inspection:
                     release.wait(10)
                 delta, reason = {"content": SVG}, "stop"
             elif not any(m.get("role") == "tool" for m in body["messages"]):
                 if enabled:
                     name, args = "generate_diagram", {
                         "goal": "解释局部关系", "context": "两者的方向", "caption": "关系示意",
-                        "source_units": ["unit-000001"],
+                        "source_units": ["bad-id" if invalid_first else "unit-000001"],
                     }
                 else:
                     name, args = "write", {"path": "report.html",
                                           "content": "<html><body>text only</body></html>"}
                 delta = {"tool_calls": [{"index": 0, "id": "first", "type": "function",
                           "function": {"name": name, "arguments": json.dumps(args)}}]}
+                if parallel_inspection:
+                    delta["tool_calls"].append({"index": 1, "id": "inspect", "type": "function",
+                                                "function": {"name": "inspect_report", "arguments": "{}"}})
+                reason = "tool_calls"
+            elif invalid_first and sum(
+                call.get("function", {}).get("name") == "generate_diagram"
+                for message in body["messages"] for call in message.get("tool_calls", [])
+            ) == 1:
+                args = {"goal": "解释局部关系", "context": "两者的方向", "caption": "关系示意",
+                        "source_units": ["unit-000001"]}
+                delta = {"tool_calls": [{"index": 0, "id": "second", "type": "function",
+                          "function": {"name": "generate_diagram", "arguments": json.dumps(args)}}]}
                 reason = "tool_calls"
             elif enabled and not child_failure and not any(
                 call.get("function", {}).get("name") == "read"
@@ -359,12 +392,15 @@ def test_real_pi_isolated_diagram_and_default_interface(
     (run / "transcript.md").write_text(
         "[unit-000001 | 0–1s] 必要原文\n[unit-000002 | 1–2s] FULL_TRANSCRIPT_ONLY\n"
     )
+    if parallel_inspection:
+        (run / "report.html").write_text(f'<html><body>{PLACEHOLDER}</body></html>')
     if auth == "legacy_no_input":
         (run / "input.json").unlink()
     try:
         runner = PiRunner(provider=provider, model="diagram-stub",
                           api_key=key if provider not in credentials else None,
-                          thinking="off", timeout=90 if isolation == "docker" else 40,
+                          thinking="off", review=parallel_inspection,
+                          timeout=90 if isolation == "docker" else 40,
                           isolation=isolation)
         if cancel or cancel_in_retry:
             async def interrupt():
@@ -392,15 +428,35 @@ def test_real_pi_isolated_diagram_and_default_interface(
             processes = subprocess.check_output(["ps", "-axo", "command="], text=True)
             assert str(run / "assets/diagram/sessions") not in processes
             assert not (run / ".diagram-config").exists()
-            assert not (run / "report.html").exists()
             if cancel_in_retry:
                 assert sum(not body.get("tools") for body in requests) == 1
             return
-        report = asyncio.run(runner.run(run))
+        if overlap or parallel_inspection:
+            async def run_overlapping():
+                task = asyncio.create_task(runner.run(run))
+                try:
+                    async with asyncio.timeout(8):
+                        while not child_started.is_set() or not (run / "report.html").exists():
+                            await asyncio.sleep(0.05)
+                        if parallel_inspection:
+                            await asyncio.sleep(0.5)
+                            assert not (run / "inspection/review-1/report.html").exists()
+                    assert not task.done()
+                    assert not (run / "assets/diagram/diagram.svg").exists()
+                    release.set()
+                    return await task
+                finally:
+                    release.set()
+            report = asyncio.run(run_overlapping())
+            if parallel_inspection:
+                preview = run / "inspection/review-1/report.html"
+                assert 'data-report-diagram="true"' in preview.read_text()
+        else:
+            report = asyncio.run(runner.run(run))
         events = [json.loads(line) for line in (run / "pi.events.jsonl").read_text().splitlines()]
         drawing = [e for e in events if e.get("_agent_role") == "diagram"]
         if not child_failure and not transient_failure:
-            assert call_costs(run, {}, None)["llm_calls"] == (5 if enabled else 2)
+            assert call_costs(run, {}, None)["llm_calls"] == ((6 if invalid_first else 5) if enabled else 2)
         assert authorizations == [f"Bearer {drawing_key if not body.get('tools') else key}"
                                   for body in requests]
         assert json.loads((config / "auth.json").read_text()) == credentials
@@ -474,6 +530,34 @@ def test_real_pi_isolated_diagram_and_default_interface(
         server.shutdown()
         server.server_close()
         thread.join()
+
+
+@pytest.mark.skipif(shutil.which("pi") is None, reason="Pi is not installed")
+def test_report_continues_while_diagram_is_running(tmp_path, monkeypatch):
+    test_real_pi_isolated_diagram_and_default_interface(
+        tmp_path, monkeypatch, True, False, "runtime_key", overlap=True,
+    )
+
+
+@pytest.mark.skipif(shutil.which("pi") is None, reason="Pi is not installed")
+def test_same_turn_inspection_waits_for_drawing(tmp_path, monkeypatch):
+    test_real_pi_isolated_diagram_and_default_interface(
+        tmp_path, monkeypatch, True, False, "runtime_key", parallel_inspection=True,
+    )
+
+
+@pytest.mark.skipif(shutil.which("pi") is None, reason="Pi is not installed")
+def test_cancel_during_same_turn_drawing_and_inspection(tmp_path, monkeypatch):
+    test_real_pi_isolated_diagram_and_default_interface(
+        tmp_path, monkeypatch, True, True, "runtime_key", parallel_inspection=True,
+    )
+
+
+@pytest.mark.skipif(shutil.which("pi") is None, reason="Pi is not installed")
+def test_invalid_source_can_be_corrected_before_drawing(tmp_path, monkeypatch):
+    test_real_pi_isolated_diagram_and_default_interface(
+        tmp_path, monkeypatch, True, False, "runtime_key", invalid_first=True,
+    )
 
 
 @pytest.mark.skipif(shutil.which("pi") is None, reason="Pi is not installed")

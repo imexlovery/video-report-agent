@@ -10,6 +10,17 @@ export default function (pi) {
     description: "检查 report.html 的来源 ID、溢出、裁切和加载问题，并定位转述、元叙述、作者姓名及重复文本候选，保存草稿与截图。内容候选需结合原文判断，保留必要归属，不机械删词。最多两次；不验证语义真实性或归属正确性，不评分审美。",
     parameters: Type.Object({}),
     async execute(_id, _params, signal, _onUpdate, ctx) {
+      const drawing = (globalThis as any).__videoReportDrawing;
+      if (drawing) {
+        if (signal?.aborted) throw new Error("Inspection cancelled");
+        let abort;
+        try {
+          await Promise.race([drawing, new Promise((_, reject) => {
+            abort = () => reject(new Error("Inspection cancelled"));
+            signal?.addEventListener("abort", abort, { once: true });
+          })]);
+        } finally { signal?.removeEventListener("abort", abort); }
+      }
       if (calls >= 2) throw new Error("检查预算已用完。停止修订，诚实报告剩余问题。");
       const label = `review-${++calls}`;
       const result = await pi.exec(process.env.VIDEO_REPORT_PYTHON,
