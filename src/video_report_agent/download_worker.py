@@ -47,6 +47,13 @@ def main() -> None:
 
     BilibiliBaseIE.extract_formats = extract_formats
 
+    if any(arg.startswith("https://www.douyin.com/video/") for arg in sys.argv[2:]):
+        from yt_dlp.extractor.tiktok import DouyinIE
+
+        from .douyin import extract_douyin
+
+        DouyinIE._real_extract = extract_douyin
+
     # Keep the outer pipeline process group. On our own deadline, also stop any
     # FFmpeg process created by yt-dlp before exiting this worker.
     children = []

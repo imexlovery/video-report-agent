@@ -29,6 +29,8 @@
 
 ## 任务数据与接口
 
+抖音独立获取入口为 `fetch-douyin` → [douyin.py](../src/video_report_agent/douyin.py) → 受监督的 yt-dlp 下载 → FFmpeg 音频提取。仅使用抖音 Cookie，为作品详情补齐 UIFID 和请求签名，保留原有 yt-dlp 格式解析；Cookie 不发送到媒体 CDN。输出目录按视频 ID 分隔，保存媒体和公开元数据，临时凭据文件在下载完成或失败后删除。该入口不创建流水线任务，不执行 ASR、Pi 或报告。
+
 YouTube 单视频走自动选源的仅转写路径，由 [youtube_subtitles.py](../src/video_report_agent/youtube_subtitles.py) 读取作者字幕或原语言自动字幕，无可用字幕再下载音轨，由百炼 Qwen Audio 3.1 Filetrans 自动识别语言并保留方言表达。复用规范转写、缓存和 `TRANSCRIPT_READY` 终态。见 [文字稿来源](subtitle-sources.md#youtube-单视频)。
 
 默认 Web/CLI 的 Bilibili `auto` 依次尝试作者字幕轨、`ai-zh`、Qwen Audio 3.1 Filetrans。任一字幕正文可用即结束采集。Local 可主动使用自选来源。自选文字稿入口接收有序的 `transcript_sources`：ASR、非 AI 字幕轨、B站 `ai-zh`。第一路可用来源提供时间轴，其余已选来源参与局部校对；未选 ASR 时跳过媒体下载、音频提取与 ASR。字幕获取、来源状态、缓存及对照命令见 [可选文字稿来源](subtitle-sources.md)。`transcribe` 在 `TRANSCRIPT_READY` 结束，不启动后续 Agent/报告阶段；旧显式 ASR-only/fused 调用保持兼容。

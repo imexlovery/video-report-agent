@@ -193,6 +193,17 @@ uv run video-report transcribe 'https://www.bilibili.com/video/BV...' --sources 
 
 B站 AI 自动字幕的新接口 Protobuf 字段解析参考了 [ccBilly-aipm/bilibili-ai-subtitle](https://github.com/ccBilly-aipm/bilibili-ai-subtitle)（MIT）。感谢作者公开字幕提取流程与协议解析实现，为本项目的 AI 字幕支持提供了参考。
 
+### 抖音视频与音频获取
+
+```sh
+uv run video-report fetch-douyin 'https://www.douyin.com/video/VIDEO_ID' \
+  --browser edge --output .local/douyin
+```
+
+支持单视频完整链接、短链接和分享文字。命令保存视频、16 kHz 单声道 WAV 及作者／平台元数据，不运行 ASR 或报告；尚未接入网站和 `generate`。通过 `--browser` 明确选择已有抖音 Cookie 的浏览器，也可用环境变量 `DOUYIN_COOKIE` 提供 Cookie 请求头。浏览器默认不读取。Cookie 仅用于抖音域，下载期间使用临时凭据文件并在结束后删除，不写入产物或日志。
+
+抖音详情请求需要将 Cookie 中的 UIFID 加入参数，并计算 `x-secsdk-web-signature`；当前适配参考 [yt-dlp 上游修复讨论](https://github.com/yt-dlp/yt-dlp/pull/17826)，继续复用 yt-dlp 格式解析与下载，不依赖 F2。缺少 UIFID 时先在所选浏览器打开抖音视频；接口拒绝时不会笼统提示登录过期。平台接口变化可能需要更新适配。
+
 ### 报告流程中可选的工具与能力
 
 以下是完整 Core 流水线的开关。独立 Skill ZIP 使用你自己的 Agent 工具与配置。

@@ -194,6 +194,17 @@ If subtitles require authentication, set `BILIBILI_SUBTITLE_BROWSER=chrome` (or 
 
 The Protobuf field parsing for Bilibili's newer AI subtitle endpoint references [ccBilly-aipm/bilibili-ai-subtitle](https://github.com/ccBilly-aipm/bilibili-ai-subtitle) (MIT). Thank you to its author for publishing the extraction workflow and protocol implementation that informed this support.
 
+### Douyin video and audio acquisition
+
+```sh
+uv run video-report fetch-douyin 'https://www.douyin.com/video/VIDEO_ID' \
+  --browser edge --output .local/douyin
+```
+
+Accepts single-video URLs, short links, and share text. Saves video, mono 16 kHz WAV, and author/platform metadata without ASR or report generation. Web and `generate` integration are not enabled. Explicitly select a browser with `--browser`, or provide a Cookie header through `DOUYIN_COOKIE`. Cookies are scoped to Douyin and passed through a temporary file that is removed after downloading, never saved in artifacts or logs.
+
+The adapter supplies UIFID and `x-secsdk-web-signature` for the detail request, following the [upstream yt-dlp fix discussion](https://github.com/yt-dlp/yt-dlp/pull/17826). Format parsing and downloading still use yt-dlp; F2 is not required. Missing UIFID requires opening a Douyin video in the selected browser. Platform request failures are not reported as expired login sessions.
+
 ### Optional tools and capabilities
 
 These switches apply to the complete Core pipeline. The standalone Skill ZIP uses your own Agent's tools and configuration.

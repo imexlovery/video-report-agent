@@ -63,10 +63,21 @@ class YouTubeSource:
 
 
 @dataclass(frozen=True)
+class DouyinSource:
+    external_id: str
+    canonical_url: str
+    platform = "抖音"
+
+    @property
+    def video_id(self) -> str:
+        return "douyin-" + self.external_id
+
+
+@dataclass(frozen=True)
 class DownloadResult:
     """Verified yt-dlp output and public metadata."""
 
-    source: BilibiliSource | YouTubeSource
+    source: BilibiliSource | YouTubeSource | DouyinSource
     media_path: Path
     info_path: Path
     title: str
@@ -392,7 +403,9 @@ def _printed_media_path(stdout: object, download_dir: Path) -> Path:
     raise UrlIngestError("DOWNLOAD_ERROR", "yt-dlp did not report a media path")
 
 
-def _metadata(info_path: Path, source: BilibiliSource | YouTubeSource) -> tuple[str, str, str]:
+def _metadata(
+    info_path: Path, source: BilibiliSource | YouTubeSource | DouyinSource,
+) -> tuple[str, str, str]:
     try:
         payload = json.loads(info_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -433,12 +446,20 @@ def download_bilibili_video(
 
 
 def download_youtube_audio(source: YouTubeSource, run_dir: Path, metadata: dict) -> DownloadResult:
-    return _download_video(source, run_dir, audio_only=True, youtube_metadata=metadata)
+    return _download_video(source, run_dir, audio_only=True, media_metadata=metadata)
+
+
+def download_douyin_video(
+    source: DouyinSource, run_dir: Path, metadata: dict, cookie_file: Path,
+) -> DownloadResult:
+    return _download_video(source, run_dir, media_metadata=metadata, cookie_file=cookie_file)
 
 
 def _download_video(
-    source: BilibiliSource | YouTubeSource, run_dir: Path, *, runner: CommandRunner | None = None,
-    request_subtitles: bool = False, audio_only: bool = False, youtube_metadata: dict | None = None,
+    source: BilibiliSource | YouTubeSource | DouyinSource,
+    run_dir: Path, *, runner: CommandRunner | None = None,
+    request_subtitles: bool = False, audio_only: bool = False, media_metadata: dict | None = None,
+    cookie_file: Path | None = None,
 ) -> DownloadResult:
     """Run the yt-dlp command and verify its run-local output."""
 
@@ -473,10 +494,12 @@ def _download_video(
         "--socket-timeout", "10", "--retries", "0", "--fragment-retries", "0",
         "--extractor-retries", "0",
     ]
-    if youtube_metadata is None:
+    if media_metadata is None:
         command.append("--write-info-json")
     else:
         command.append("--no-cache-dir")
+    if cookie_file is not None:
+        command.extend(["--cookies", str(cookie_file)])
     if audio_only:
         command.extend(["-f", "bestaudio"])
     else:
@@ -512,11 +535,11 @@ def _download_video(
     if not media_path.is_file() or media_path.stat().st_size == 0:
         raise UrlIngestError("DOWNLOAD_ERROR", "downloaded media is missing")
     info_path = download_dir / "source.info.json"
-    if youtube_metadata is not None:
+    if media_metadata is not None:
         info_path.write_text(json.dumps({
-            "duration": youtube_metadata["duration_ms"] / 1000,
-            "title": youtube_metadata["title"],
-            "uploader": youtube_metadata["uploader"],
+            "duration": media_metadata["duration_ms"] / 1000,
+            "title": media_metadata["title"],
+            "uploader": media_metadata["uploader"],
         }, ensure_ascii=False), encoding="utf-8")
     if not info_path.is_file():
         raise UrlIngestError("DOWNLOAD_ERROR", "yt-dlp metadata file is missing")

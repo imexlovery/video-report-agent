@@ -48,7 +48,22 @@ def main():
     subtitles = sub.add_parser("audit-subtitles")
     subtitles.add_argument("--manifest", type=Path, required=True)
     subtitles.add_argument("--output", type=Path, required=True)
+    douyin = sub.add_parser("fetch-douyin", help="获取抖音单视频与音频，不运行转写或报告")
+    douyin.add_argument("url")
+    douyin.add_argument("--browser", help="读取指定浏览器的抖音 Cookie，如 edge")
+    douyin.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    if args.command == "fetch-douyin":
+        from .douyin import fetch_douyin_media
+        from .ingest import UrlIngestError
+
+        try:
+            result = fetch_douyin_media(args.url, args.output, browser=args.browser)
+        except UrlIngestError as exc:
+            print(json.dumps({"error": exc.category, "message": str(exc)}, ensure_ascii=False))
+            return 1
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
     if args.command == "audit-subtitles":
         from .compare_subtitles import audit_subtitles
 
