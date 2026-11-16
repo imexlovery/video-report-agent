@@ -205,7 +205,7 @@ uv run video-report transcribe '完整视频链接或分享文字' --browser edg
 
 `fetch-source` 在每个视频子目录保存 `source-material.json`，无字幕时下载媒体并提取音频。只有明确需要登录时读取所选浏览器或 `--cookies` 文件。`transcribe`／`generate` 的自动选源也接入同一取材入口；新增平台暂不支持手动多路选源与画面增强。嵌入调用可用 `create_run(..., transcript_mode="auto", source_access=True)`；账号登录须另显式启用 `source_login=True`，并通过执行环境传入 `VIDEO_SOURCE_BROWSER` 或 `VIDEO_SOURCE_COOKIE_FILE`，不把凭据值写入任务。
 
-网站确认弹窗仅做匿名检查，失败时提供本机脚本下载；普通网页不能读取其他网站的登录 Cookie。下载脚本需要在安装 Core 与 FFmpeg 的用户电脑运行，素材保存在电脑，Cookie 不上传网站；目前没有网页素材上传或自动续交功能。
+网站确认弹窗仅做匿名检查，成功时不显示额外提示，失败时只预留未启用的登录输入框和按钮；普通网页不能读取其他网站的登录 Cookie。独立取材脚本需要在安装 Core 与 FFmpeg 的用户电脑运行，素材保存在电脑，Cookie 不上传网站；目前没有网页素材上传或自动续交功能。
 
 B站充电内容需要账号具有对应视频权限。检测到试看时停止，不把片段当成完整视频；该路径尚无真实付费样本验证，不承诺所有充电视频都可获取。
 
