@@ -1,6 +1,7 @@
 .venv/
 .env
 .env.*
+*.cookies.txt
 !.env.example
 !.env.docker.example
 __pycache__/

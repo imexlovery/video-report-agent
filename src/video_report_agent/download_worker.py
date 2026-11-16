@@ -54,6 +54,13 @@ def main() -> None:
 
         DouyinIE._real_extract = extract_douyin
 
+    if any(arg.startswith("https://www.xiaohongshu.com/explore/") for arg in sys.argv[2:]):
+        from yt_dlp.extractor.xiaohongshu import XiaoHongShuIE
+
+        from .xiaohongshu import extract_xiaohongshu
+
+        XiaoHongShuIE._real_extract = extract_xiaohongshu
+
     # Keep the outer pipeline process group. On our own deadline, also stop any
     # FFmpeg process created by yt-dlp before exiting this worker.
     children = []

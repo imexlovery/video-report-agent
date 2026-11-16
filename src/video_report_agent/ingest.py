@@ -72,12 +72,31 @@ class DouyinSource:
     def video_id(self) -> str:
         return "douyin-" + self.external_id
 
+    @property
+    def public_url(self) -> str:
+        return self.canonical_url
+
+
+@dataclass(frozen=True)
+class XiaohongshuSource:
+    external_id: str
+    canonical_url: str
+    platform = "小红书"
+
+    @property
+    def video_id(self) -> str:
+        return "xiaohongshu-" + self.external_id
+
+    @property
+    def public_url(self) -> str:
+        return self.canonical_url
+
 
 @dataclass(frozen=True)
 class DownloadResult:
     """Verified yt-dlp output and public metadata."""
 
-    source: BilibiliSource | YouTubeSource | DouyinSource
+    source: BilibiliSource | YouTubeSource | DouyinSource | XiaohongshuSource
     media_path: Path
     info_path: Path
     title: str
@@ -404,7 +423,7 @@ def _printed_media_path(stdout: object, download_dir: Path) -> Path:
 
 
 def _metadata(
-    info_path: Path, source: BilibiliSource | YouTubeSource | DouyinSource,
+    info_path: Path, source: BilibiliSource | YouTubeSource | DouyinSource | XiaohongshuSource,
 ) -> tuple[str, str, str]:
     try:
         payload = json.loads(info_path.read_text(encoding="utf-8"))
@@ -428,7 +447,8 @@ def _metadata(
         raise UrlIngestError("DOWNLOAD_ERROR", "yt-dlp metadata has no uploader")
     title = title.strip()
     uploader = uploader.strip()
-    attribution = f"{source.platform}；{uploader}；《{title}》；{source.canonical_url}"
+    url = source.public_url if isinstance(source, XiaohongshuSource) else source.canonical_url
+    attribution = f"{source.platform}；{uploader}；《{title}》；{url}"
     return title, uploader, attribution
 
 
@@ -456,10 +476,11 @@ def download_douyin_video(
 
 
 def _download_video(
-    source: BilibiliSource | YouTubeSource | DouyinSource,
+    source: BilibiliSource | YouTubeSource | DouyinSource | XiaohongshuSource,
     run_dir: Path, *, runner: CommandRunner | None = None,
     request_subtitles: bool = False, audio_only: bool = False, media_metadata: dict | None = None,
     cookie_file: Path | None = None,
+    allow_muxed_audio: bool = False,
 ) -> DownloadResult:
     """Run the yt-dlp command and verify its run-local output."""
 
@@ -501,7 +522,7 @@ def _download_video(
     if cookie_file is not None:
         command.extend(["--cookies", str(cookie_file)])
     if audio_only:
-        command.extend(["-f", "bestaudio"])
+        command.extend(["-f", "bestaudio/best" if allow_muxed_audio else "bestaudio"])
     else:
         command.extend(["-S", "res:1080,vcodec:h264,acodec:aac", "--merge-output-format", "mp4"])
     if request_subtitles:

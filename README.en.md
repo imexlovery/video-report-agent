@@ -194,16 +194,20 @@ If subtitles require authentication, set `BILIBILI_SUBTITLE_BROWSER=chrome` (or 
 
 The Protobuf field parsing for Bilibili's newer AI subtitle endpoint references [ccBilly-aipm/bilibili-ai-subtitle](https://github.com/ccBilly-aipm/bilibili-ai-subtitle) (MIT). Thank you to its author for publishing the extraction workflow and protocol implementation that informed this support.
 
-### Douyin video and audio acquisition
+### Douyin and Xiaohongshu acquisition
 
 ```sh
-uv run video-report fetch-douyin 'https://www.douyin.com/video/VIDEO_ID' \
-  --browser edge --output .local/douyin
+uv run video-report fetch-douyin 'https://www.douyin.com/video/VIDEO_ID' --output .local/media
+uv run video-report fetch-xiaohongshu 'FULL_SHARE_URL' --output .local/media
 ```
 
-Accepts single-video URLs, short links, and share text. Saves video, mono 16 kHz WAV, and author/platform metadata without ASR or report generation. Web and `generate` integration are not enabled. Explicitly select a browser with `--browser`, or provide a Cookie header through `DOUYIN_COOKIE`. Cookies are scoped to Douyin and passed through a temporary file that is removed after downloading, never saved in artifacts or logs.
+Both commands try anonymous access first. Multiple subtitle languages without a known original language fall back to audio; translated Chinese is not preferred by default. Available native subtitles are saved to timestamped `subtitles.json` without downloading media. Otherwise, audio is downloaded (or muxed media when no audio-only format exists) and converted to mono 16 kHz WAV. `media.json` records platform, author, source, and authentication mode. ASR, report generation, and web integration are not invoked.
 
-The adapter supplies UIFID and `x-secsdk-web-signature` for the detail request, following the [upstream yt-dlp fix discussion](https://github.com/yt-dlp/yt-dlp/pull/17826). Format parsing and downloading still use yt-dlp; F2 is not required. Missing UIFID requires opening a Douyin video in the selected browser. Platform request failures are not reported as expired login sessions.
+Douyin initializes a visitor session and signs its detail request, following the [upstream fix discussion](https://github.com/yt-dlp/yt-dlp/pull/17826); no F2 dependency is needed. Xiaohongshu preserves share access parameters and reads subtitles from `mediaV2`. Expired links, signature failures, and absent subtitles do not trigger account login.
+
+Only an explicit login-required response enables `--browser edge`, `--cookies LOCAL_FILE`, or the platform-specific `DOUYIN_COOKIE` / `XIAOHONGSHU_COOKIE` environment fallback. Run authenticated acquisition on the user's own computer and transfer only subtitle/audio artifacts. No service-side credential upload or account pool is provided.
+
+When login is required, `uv run python scripts/export_platform_cookies.py xiaohongshu --browser edge` exports only that platform's cookies to `.local/platform-cookies/xiaohongshu.cookies.txt`. The script also supports `douyin`. Files use mode 0600, existing files are not overwritten, and cookie values are never printed. Keep these files local and delete them after use.
 
 ### Optional tools and capabilities
 

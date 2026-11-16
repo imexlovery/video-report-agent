@@ -8,7 +8,7 @@ import pytest
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError, ExtractorError
 
-from video_report_agent import cli, douyin
+from video_report_agent import cli, douyin, platform_media
 from video_report_agent.ingest import UrlIngestError
 
 VIDEO_ID = "7696604074514402587"
@@ -64,7 +64,8 @@ def test_browser_only_keeps_unexpired_douyin_cookies(monkeypatch):
         extractor._set_cookie("www.douyin.com", "sessionid", "session")
         extractor._set_cookie(".evil-douyin.com", "secret", "unrelated")
         extractor._set_cookie(".douyin.com", "expired", "old", expire_time=1)
-        monkeypatch.setattr(douyin, "extract_cookies_from_browser", lambda *a, **kw: ydl.cookiejar)
+        monkeypatch.setattr(platform_media, "extract_cookies_from_browser",
+                            lambda *a, **kw: ydl.cookiejar)
         cookies = douyin.read_douyin_cookies("edge")
     assert {(c.name, c.value) for c in cookies} == {("UIFID", "identity"), ("sessionid", "session")}
 
@@ -72,6 +73,7 @@ def test_browser_only_keeps_unexpired_douyin_cookies(monkeypatch):
 def test_signed_request_and_cdn_cookie_scope(monkeypatch):
     monkeypatch.setenv("DOUYIN_COOKIE", "UIFID=test-identity; sid_tt=test-session")
     monkeypatch.setattr(douyin.time, "time", lambda: 1800000000)
+    monkeypatch.setattr(douyin, "_ensure_visitor", lambda _: None)
     with YoutubeDL({"quiet": True}) as ydl:
         ydl.cookiejar = douyin.read_douyin_cookies()
         extractor = ydl.get_info_extractor("Douyin")
@@ -88,7 +90,9 @@ def test_signed_request_and_cdn_cookie_scope(monkeypatch):
             ).hexdigest()
             assert query["uifid"] == "test-identity"
             assert query["x-secsdk-web-signature"] == expected
-            return {"aweme_detail": {"aweme_id": VIDEO_ID, "video": {"duration": 12000}}}
+            return {"aweme_detail": {"aweme_id": VIDEO_ID, "video": {
+                "duration": 12000, "cla_info": {"original_language_info": {"lang": "en"}},
+            }}}
 
         def parse(_):
             extractor._set_cookie("media.example", "sid_tt", "test-session")
@@ -98,11 +102,13 @@ def test_signed_request_and_cdn_cookie_scope(monkeypatch):
         monkeypatch.setattr(extractor, "_parse_aweme_video_app", parse)
         result = douyin.extract_douyin(extractor, URL)
         assert result["http_headers"] == {"Referer": "https://www.douyin.com/"}
+        assert result["language"] == "en"
         assert {cookie.domain for cookie in ydl.cookiejar} == {".douyin.com"}
 
 
 def test_missing_identity_is_not_reported_as_expired_login(monkeypatch):
     monkeypatch.setenv("DOUYIN_COOKIE", "sessionid=valid-session")
+    monkeypatch.setattr(douyin, "_ensure_visitor", lambda _: None)
     with YoutubeDL({"quiet": True}) as ydl:
         ydl.cookiejar = douyin.read_douyin_cookies()
         with pytest.raises(ExtractorError, match="DOUYIN_IDENTITY_MISSING"):
@@ -120,7 +126,8 @@ def test_acquisition_cleans_credentials_and_saves_only_public_metadata(
     })
     files = []
 
-    def download(source, run, metadata, cookie_file):
+    def download(source, run, *, media_metadata, cookie_file, **kwargs):
+        metadata = media_metadata
         files.append(cookie_file)
         assert cookie_file.stat().st_mode & 0o777 == 0o600
         assert "private-identity" in cookie_file.read_text()
@@ -132,18 +139,29 @@ def test_acquisition_cleans_credentials_and_saves_only_public_metadata(
         media.write_bytes(b"video")
         return SimpleNamespace(media_path=media, attribution="抖音；Author")
 
-    monkeypatch.setattr(douyin, "download_douyin_video", download)
-    monkeypatch.setattr(douyin, "extract_audio", lambda media, path: SimpleNamespace(
+    monkeypatch.setattr(platform_media, "_download_video", download)
+    monkeypatch.setattr(platform_media, "extract_audio", lambda media, path: SimpleNamespace(
         path=path, probe=SimpleNamespace(duration_ms=12000),
     ))
+    source = douyin.validate_douyin_url(URL)
+    metadata = platform_media.metadata_for(source, {
+        "title": "Title", "channel": "Author", "duration": 12,
+    })
+
+    def finish():
+        return platform_media.finish_acquisition(
+            source, metadata, {"subtitle_status": "ABSENT"}, douyin.read_douyin_cookies(),
+            tmp_path, "cookie",
+        )
+
     if download_fails:
         with pytest.raises(UrlIngestError):
-            douyin.fetch_douyin_media(URL, tmp_path)
+            finish()
     else:
-        result = douyin.fetch_douyin_media(URL, tmp_path)
+        result = finish()
         assert result["platform"] == "抖音"
         assert result["uploader"] == "Author"
-        saved = (Path(result["video_path"]).parent / "media.json").read_text()
+        saved = (Path(result["media_path"]).parent / "media.json").read_text()
         assert all(secret not in saved for secret in (
             "private-identity", "private-session", "private-token", "Cookie",
         ))

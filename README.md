@@ -193,16 +193,29 @@ uv run video-report transcribe 'https://www.bilibili.com/video/BV...' --sources 
 
 B站 AI 自动字幕的新接口 Protobuf 字段解析参考了 [ccBilly-aipm/bilibili-ai-subtitle](https://github.com/ccBilly-aipm/bilibili-ai-subtitle)（MIT）。感谢作者公开字幕提取流程与协议解析实现，为本项目的 AI 字幕支持提供了参考。
 
-### 抖音视频与音频获取
+### 抖音与小红书取材
 
 ```sh
-uv run video-report fetch-douyin 'https://www.douyin.com/video/VIDEO_ID' \
-  --browser edge --output .local/douyin
+uv run video-report fetch-douyin 'https://www.douyin.com/video/VIDEO_ID' --output .local/media
+uv run video-report fetch-xiaohongshu '完整小红书分享链接' --output .local/media
 ```
 
-支持单视频完整链接、短链接和分享文字。命令保存视频、16 kHz 单声道 WAV 及作者／平台元数据，不运行 ASR 或报告；尚未接入网站和 `generate`。通过 `--browser` 明确选择已有抖音 Cookie 的浏览器，也可用环境变量 `DOUYIN_COOKIE` 提供 Cookie 请求头。浏览器默认不读取。Cookie 仅用于抖音域，下载期间使用临时凭据文件并在结束后删除，不写入产物或日志。
+两者默认匿名访问，优先取得平台返回的原语言字幕；多轨但无法确认原语言时改取音频，不默认选择中文译文。可用字幕保存为带时间戳的 `subtitles.json`，不再下载媒体。没有可用字幕时优先下载音轨；平台只提供音视频合流时下载合流，再提取 16 kHz 单声道 WAV。`media.json` 保存作者、实际平台、来源与匿名／登录模式。入口不运行 ASR、报告或网站任务。
 
-抖音详情请求需要将 Cookie 中的 UIFID 加入参数，并计算 `x-secsdk-web-signature`；当前适配参考 [yt-dlp 上游修复讨论](https://github.com/yt-dlp/yt-dlp/pull/17826)，继续复用 yt-dlp 格式解析与下载，不依赖 F2。缺少 UIFID 时先在所选浏览器打开抖音视频；接口拒绝时不会笼统提示登录过期。平台接口变化可能需要更新适配。
+抖音自动建立访客会话，补齐 UIFID 与 `x-secsdk-web-signature`，继续复用 yt-dlp 下载；协议参考 [上游修复讨论](https://github.com/yt-dlp/yt-dlp/pull/17826)，无需 F2。小红书接受分享文字与 `xhslink.com` 短链，保留必要的 `xsec_token`／`xsec_source` 分享参数，从页面 `mediaV2` 读取字幕。链接失效、签名拒绝或字幕不存在不会自动触发账号登录。
+
+只有平台明确返回登录要求时，才使用显式提供的 `--browser edge`、`--cookies 本机文件` 或对应平台环境变量 `DOUYIN_COOKIE`／`XIAOHONGSHU_COOKIE`。即使配置了它们，也先匿名尝试。浏览器与文件在运行命令的用户电脑读取，Cookie 不上传服务端、不写入取材产物或日志。建议需要登录的取材在用户本机完成，只交付字幕／音频。
+
+需要单独准备本机登录态时，可运行备用脚本；不要提前为公开内容导出 Cookie：
+
+```sh
+uv run python scripts/export_platform_cookies.py xiaohongshu --browser edge
+# 仅登录受限时读取；仍先匿名尝试
+uv run video-report fetch-xiaohongshu '完整分享链接' --output .local/media \
+  --cookies .local/platform-cookies/xiaohongshu.cookies.txt
+```
+
+脚本也支持 `douyin`，仅保留该平台未过期 Cookie，默认保存到已忽略的 `.local/platform-cookies/`，文件权限为 0600，不覆盖已有文件、不输出 Cookie 内容。文件应留在用户本机，用完后删除；本轮没有服务端 Cookie 上传或集中存储功能。平台接口变化可能需要更新适配。
 
 ### 报告流程中可选的工具与能力
 

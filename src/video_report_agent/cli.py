@@ -48,17 +48,23 @@ def main():
     subtitles = sub.add_parser("audit-subtitles")
     subtitles.add_argument("--manifest", type=Path, required=True)
     subtitles.add_argument("--output", type=Path, required=True)
-    douyin = sub.add_parser("fetch-douyin", help="获取抖音单视频与音频，不运行转写或报告")
-    douyin.add_argument("url")
-    douyin.add_argument("--browser", help="读取指定浏览器的抖音 Cookie，如 edge")
-    douyin.add_argument("--output", type=Path, required=True)
+    for name in ("fetch-douyin", "fetch-xiaohongshu"):
+        fetch = sub.add_parser(name, help="匿名优先取字幕，否则取音频；不运行 ASR 或报告")
+        fetch.add_argument("url")
+        login = fetch.add_mutually_exclusive_group()
+        login.add_argument("--browser", help="仅平台明确要求登录时读取本机浏览器 Cookie，如 edge")
+        login.add_argument("--cookies", type=Path, help="仅登录受限时读取本机导出的 Cookie 文件")
+        fetch.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    if args.command == "fetch-douyin":
+    if args.command in {"fetch-douyin", "fetch-xiaohongshu"}:
         from .douyin import fetch_douyin_media
         from .ingest import UrlIngestError
+        from .xiaohongshu import fetch_xiaohongshu_media
 
         try:
-            result = fetch_douyin_media(args.url, args.output, browser=args.browser)
+            acquire = (fetch_douyin_media if args.command == "fetch-douyin"
+                       else fetch_xiaohongshu_media)
+            result = acquire(args.url, args.output, browser=args.browser, cookie_file=args.cookies)
         except UrlIngestError as exc:
             print(json.dumps({"error": exc.category, "message": str(exc)}, ensure_ascii=False))
             return 1
