@@ -24,7 +24,7 @@ from .ingest import (
     subtitle_snapshot_name,
     validate_source_url,
 )
-from .media_config import resolve_media_config
+from .media_config import QWEN_FILETRANS_MODEL, resolve_media_config
 from .paraformer import CloudAsrError
 from .pi import PI_AGENT_DIR, PiError, PiRunner, initialize_pi_config
 from .report_image import render_report_image
@@ -107,6 +107,13 @@ def create_run(
         ocr_mode != "off" or subtitle_file or subtitle_content is not None
     ):
         raise ValueError("自动路由不接受 OCR 或导入字幕，请使用手动选源")
+    source = validate_source_url(url, allow_youtube=transcript_only)
+    if isinstance(source, YouTubeSource):
+        if transcript_mode != "auto" or visual_enhancement:
+            raise ValueError("YouTube 仅支持自动选源的文字稿任务。")
+        if asr_backend is None:
+            asr_backend = "paraformer"
+            asr_model = asr_model or QWEN_FILETRANS_MODEL
     media_config = (
         resolve_media_config(
             asr_backend,
@@ -117,9 +124,6 @@ def create_run(
         if transcript_sources is None or "asr" in transcript_sources
         else {}
     )
-    source = validate_source_url(url, allow_youtube=transcript_only)
-    if isinstance(source, YouTubeSource) and (transcript_mode != "auto" or visual_enhancement):
-        raise ValueError("YouTube 仅支持自动选源的文字稿任务。")
     diagrams = diagrams and report_mode != "brief"
     drawing = diagram_model_config(diagram_model_selection) if diagrams else None
     run = root.resolve() / uuid.uuid4().hex

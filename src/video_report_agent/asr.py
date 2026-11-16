@@ -1,4 +1,4 @@
-"""Chinese ASR integration that preserves raw timestamped output."""
+"""ASR integration that preserves raw timestamped output."""
 
 from __future__ import annotations
 

@@ -7,6 +7,7 @@ from .asr import MlxWhisperBackend
 
 DEFAULT_BASE_URL = "https://dashscope.aliyuncs.com/api/v1"
 OCR_MODEL = "PP-OCRv6-small-onnxruntime"
+QWEN_FILETRANS_MODEL = "qwen-audio-3.1-asr-flash-filetrans"
 PARAFORMER_PARAMETERS = {
     "channel_id": [0],
     "language_hints": ["zh", "en"],
@@ -25,13 +26,15 @@ FUN_ASR_MODELS = {
 
 
 def cloud_asr_parameters(model):
+    if model == QWEN_FILETRANS_MODEL:
+        return {"channel_id": [0], "keep_dialect": True}
     if model == "paraformer-v2":
         return dict(PARAFORMER_PARAMETERS)
     if model in FUN_ASR_MODELS:
         return {"channel_id": [0], "language_hints": ["zh"]}
     raise ValueError(
-        f"Unsupported file ASR model: {model}; use paraformer-v2 "
-        "or a supported Fun-ASR model (not realtime or Qwen-ASR)."
+        f"Unsupported file ASR model: {model}; use paraformer-v2, "
+        f"{QWEN_FILETRANS_MODEL}, or a supported Fun-ASR model."
     )
 
 
@@ -76,7 +79,7 @@ def resolve_media_config(
         "asr_backend": backend,
         "asr_provider": "local" if backend == "mlx" else "dashscope",
         "asr_model": model,
-        "asr_language": "zh",
+        "asr_language": "auto" if model == QWEN_FILETRANS_MODEL else "zh",
         "asr_parameters": {} if backend == "mlx" else cloud_asr_parameters(model),
         "asr_base_url": None if backend == "mlx" else base,
         "ocr_backend": ocr,

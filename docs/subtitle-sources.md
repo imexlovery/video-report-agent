@@ -40,7 +40,7 @@ BILIBILI_SUBTITLE_BROWSER=edge uv run video-report \
 
 ### YouTube 单视频
 
-`video-report transcribe 'https://www.youtube.com/watch?v=VIDEO_ID'` 也接受 `youtu.be` 与 Shorts 链接。使用自动选源，最长 5 小时。yt-dlp 匿名读取视频，优先采用作者字幕，其次原语言自动字幕；每种轨道先尝试原生 SRT，再尝试 VTT。可用字幕直接写入 `youtube-subtitles.json`，记录轨道类型、语言和时间戳。无可用字幕时下载音轨，使用配置的现有 ASR 识别中文语音。播放列表、直播和需要登录才能访问的内容无法走这条路径。ASR 输出可出现识别错误，无对白的音轨也可能产生虚假文字。
+`video-report transcribe 'https://www.youtube.com/watch?v=VIDEO_ID'` 也接受 `youtu.be` 与 Shorts 链接。使用自动选源，最长 5 小时。yt-dlp 匿名读取视频，优先采用作者字幕，其次原语言自动字幕；每种轨道先尝试原生 SRT，再尝试 VTT。可用字幕直接写入 `youtube-subtitles.json`，记录轨道类型、语言和时间戳。无可用字幕时下载音轨，默认使用百炼 `qwen-audio-3.1-asr-flash-filetrans` 自动识别原语种，开启 `keep_dialect` 保留方言表达。不传 `language_hints`，并在进入 ASR 时才检查 `DASHSCOPE_API_KEY`。显式 ASR 参数可用于对照，Bilibili 沿用自己的 ASR 配置。播放列表、直播和需要登录才能访问的内容无法走这条路径。ASR 输出可出现识别错误，无对白的音轨也可能产生虚假文字。
 
 ## 与已有 ASR 对照
 

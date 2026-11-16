@@ -9,6 +9,8 @@ from functools import lru_cache
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from .media_config import QWEN_FILETRANS_MODEL
+
 # Bump for schema OR counting/pricing semantics changes, even if fields stay identical.
 USAGE_CACHE_VERSION = 5
 
@@ -179,7 +181,12 @@ def _asr_costs(run, status, asr_rate, asr=None):
         asr_cost, asr_basis = 0, "not_used"
     elif asr.get("backend") == "mlx":
         asr_cost, asr_basis = 0, "local"
-    elif asr.get("backend") == "paraformer" and number(duration) and asr_rate is not None:
+    elif (
+        asr.get("backend") == "paraformer"
+        and asr.get("model") != QWEN_FILETRANS_MODEL
+        and number(duration)
+        and asr_rate is not None
+    ):
         asr_cost, asr_basis = duration / 1000 * asr_rate, "duration_estimate"
     else:
         asr_cost, asr_basis = None, "unknown"
@@ -279,6 +286,7 @@ def _cached_asr_metadata(path, signature):
     asr = read_object(path)
     return {
         "backend": asr.get("backend"),
+        "model": asr.get("model"),
         "usage": {"content_duration_ms": (asr.get("usage") or {}).get("content_duration_ms")},
     }
 

@@ -189,7 +189,7 @@ uv run video-report transcribe 'https://www.bilibili.com/video/BV...' --sources 
 
 手动选源只采集选中的来源；上例的 AI 字幕不可用时会报错。多路对照会同时采集 AI 字幕和 ASR。仅选字幕且未开启画面辅助时，不下载媒体，也不要求 ASR 凭证。
 
-字幕需要登录态时，在 `.env` 中设置 `BILIBILI_SUBTITLE_BROWSER=chrome`（或 yt-dlp 支持的其他浏览器），读取该浏览器已有的 B站登录态；也可通过进程环境提供 `BILIBILI_SESSDATA`。默认不读取浏览器，凭据不要提交到 Git。`transcribe` 也支持公开 YouTube 单视频，匿名按作者字幕、原语言自动字幕、中文 ASR 的顺序生成文字稿。详细规则见[选源说明](docs/subtitle-sources.md)。
+字幕需要登录态时，在 `.env` 中设置 `BILIBILI_SUBTITLE_BROWSER=chrome`（或 yt-dlp 支持的其他浏览器），读取该浏览器已有的 B站登录态；也可通过进程环境提供 `BILIBILI_SESSDATA`。默认不读取浏览器，凭据不要提交到 Git。`transcribe` 也支持公开 YouTube 单视频，匿名按作者字幕、原语言自动字幕、百炼 Qwen Audio 3.1 Filetrans 的顺序生成文字稿。详细规则见[选源说明](docs/subtitle-sources.md)。
 
 B站 AI 自动字幕的新接口 Protobuf 字段解析参考了 [ccBilly-aipm/bilibili-ai-subtitle](https://github.com/ccBilly-aipm/bilibili-ai-subtitle)（MIT）。感谢作者公开字幕提取流程与协议解析实现，为本项目的 AI 字幕支持提供了参考。
 

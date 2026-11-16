@@ -29,7 +29,7 @@
 
 ## 任务数据与接口
 
-YouTube 单视频走自动选源的仅转写路径，由 [youtube_subtitles.py](../src/video_report_agent/youtube_subtitles.py) 读取作者字幕或原语言自动字幕，必要时下载音轨转写中文语音。复用规范转写、缓存和 `TRANSCRIPT_READY` 终态。见 [文字稿来源](subtitle-sources.md#youtube-单视频)。
+YouTube 单视频走自动选源的仅转写路径，由 [youtube_subtitles.py](../src/video_report_agent/youtube_subtitles.py) 读取作者字幕或原语言自动字幕，无可用字幕再下载音轨，由百炼 Qwen Audio 3.1 Filetrans 自动识别语言并保留方言表达。复用规范转写、缓存和 `TRANSCRIPT_READY` 终态。见 [文字稿来源](subtitle-sources.md#youtube-单视频)。
 
 默认 Web/CLI 用 `auto` 依次尝试作者字幕轨、`ai-zh`、ASR，任一字幕正文可用即结束采集。Local 可主动使用自选来源。自选文字稿入口接收有序的 `transcript_sources`：ASR、非 AI 字幕轨、B站 `ai-zh`。第一路可用来源提供时间轴，其余已选来源参与局部校对；未选 ASR 时跳过媒体下载、音频提取与 ASR。字幕获取、来源状态、缓存及对照命令见 [可选文字稿来源](subtitle-sources.md)。`transcribe` 在 `TRANSCRIPT_READY` 结束，不启动后续 Agent/报告阶段；旧显式 ASR-only/fused 调用保持兼容。
 
@@ -107,7 +107,7 @@ Docker 调用方使用 `PI_TASK_RUNS_VOLUME` 和 `PI_TASK_RUNS_ROOT` 选择已�
 
 CLI 从当前运行目录加载 `.env`，进程环境优先；调用方可传模型选择，或通过 `PiRunner(skill_dir=...)` / `VIDEO_REPORT_SKILL_DIR` 指定完整 Skill。Pi 状态存于运行目录的 `config/pi/`（可由环境指定），初始化默认模型配置不覆盖已有设置。安装与依赖细节沿用 [README](../README.md)。
 
-`usage.json` 缓存 LLM 聚合，按日志文件元信息及语义版本失效。ASR backend/时长元数据有进程内有界缓存，费用每次按当前传入费率计算。DeepSeek V4.1 Flash 的 QwenAI 北京价格估算按北京时间 08:00–22:00 忙时、其余时间闲时计算；当前规则依照供应商价目表，不加入日历假日判断。其他可用 Pi 美元估算单列；均为估算，不是实时查询或供应商账单。缺失价格保持未知。
+`usage.json` 缓存 LLM 聚合，按日志文件元信息及语义版本失效。ASR 后端、模型和时长元数据有进程内有界缓存。按时长计费的模型使用当前传入费率计算。Qwen Audio 3.1 Filetrans 的供应商用量单独保存，费用保持未知。DeepSeek V4.1 Flash 的 QwenAI 北京价格估算按北京时间 08:00–22:00 忙时、其余时间闲时计算；当前规则依照供应商价目表，不加入日历假日判断。其他可用 Pi 美元估算单列；均为估算，不是实时查询或供应商账单。缺失价格保持未知。
 
 `ingest.probe_bilibili_video(source)` 通过现有 yt-dlp 只查询指定分 P 的标题与时长，不下载媒体、不创建任务文件；拒绝未知、非正时长和超过 5 小时的视频。返回规范 URL、BVID、分 P、video_id、title、duration。查询失败抛出 `UrlIngestError`，整体查询上限 45 秒。
 

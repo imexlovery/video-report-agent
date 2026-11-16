@@ -8,6 +8,7 @@ import pytest
 
 from video_report_agent.asr import AsrRun, normalize_asr_segments
 from video_report_agent.audio import midpoint_pause_ms, split_pcm_audio
+from video_report_agent.media_config import QWEN_FILETRANS_MODEL
 from video_report_agent.paraformer import CloudAsrError, ParaformerBackend
 from video_report_agent.pipeline import write_json
 
@@ -78,9 +79,13 @@ def test_threshold_no_hard_cut_and_no_recursive_split(configured, monkeypatch,
     assert not list(audio.parent.glob(".asr-parts-*"))
 
 
-@pytest.mark.parametrize("missing_usage,dropped", [(False, False), (True, True)])
+@pytest.mark.parametrize(
+    "model,missing_usage,dropped",
+    [("paraformer-v2", False, False), ("paraformer-v2", True, True),
+     (QWEN_FILETRANS_MODEL, False, False), (QWEN_FILETRANS_MODEL, True, False)],
+)
 def test_parallel_merge_offsets_usage_provenance_and_cleanup(
-    configured, monkeypatch, missing_usage, dropped,
+    configured, monkeypatch, model, missing_usage, dropped,
 ):
     audio, checkpoint = configured
     barrier = threading.Barrier(2)
@@ -89,10 +94,14 @@ def test_parallel_merge_offsets_usage_provenance_and_cleanup(
         assert json.loads(checkpoint.read_text())["chunks"]
         write_json(self.task_path, {"task_id": path.stem})
         barrier.wait(timeout=5)  # Sequential execution would fail.
-        return result(path.stem, missing_usage=missing_usage, dropped=dropped)
+        recognized = result(path.stem, missing_usage=missing_usage, dropped=dropped)
+        if model == QWEN_FILETRANS_MODEL and not missing_usage:
+            recognized.usage["service_usage"].update(input_tokens=20, output_tokens=4)
+        return recognized
 
     monkeypatch.setattr(ParaformerBackend, "_single_run", recognize)
-    merged = ParaformerBackend(task_path=checkpoint).transcribe(audio)
+    language = "auto" if model == QWEN_FILETRANS_MODEL else "zh"
+    merged = ParaformerBackend(model=model, task_path=checkpoint).transcribe(audio, language)
     assert [s.start_ms for s in merged.segments] == [100, 4100]
     assert [s.words[0]["start"] for s in merged.segments] == [.1, 4.1]
     assert [s.text for s in merged.segments] == ["part-0", "part-1"]
@@ -101,6 +110,9 @@ def test_parallel_merge_offsets_usage_provenance_and_cleanup(
     assert merged.to_dict()["raw_segment_count"] == (4 if dropped else 2)
     assert merged.usage["content_duration_ms"] == (None if missing_usage else 800)
     assert merged.usage["service_usage"]["duration"] == (None if missing_usage else 2)
+    if model == QWEN_FILETRANS_MODEL:
+        assert merged.usage["service_usage"]["input_tokens"] == (None if missing_usage else 40)
+        assert merged.usage["service_usage"]["output_tokens"] == (None if missing_usage else 8)
     assert [c["offset_ms"] for c in merged.raw_result["chunks"]] == [0, 4000]
     assert len(list(audio.parent.glob("asr-task.part-*.json"))) == 2
     assert not list(audio.parent.glob(".asr-parts-*"))
