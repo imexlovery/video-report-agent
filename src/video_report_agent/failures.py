@@ -3,6 +3,11 @@
 
 def asr_failure(error):
     code, http = error.provider_code, error.http_status
+    if code == "SUCCESS_WITH_NO_VALID_FRAGMENT":
+        return (
+            "ASR_NO_VALID_SPEECH",
+            "未检测到有效人声，无法生成报告。请更换包含清晰人声或可用字幕的视频。",
+        )
     if code in {"Arrearage", "isv.OUT_OF_SERVICE"}:
         return (
             "ASR_BILLING_UNAVAILABLE",
