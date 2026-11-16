@@ -16,7 +16,7 @@ OCR 在 Web 暂时关闭；Core 的旧 CLI 接口保留。以下规则仅描述�
 
 ## 登录与提取
 
-本地可通过 `BILIBILI_SUBTITLE_BROWSER=edge`（或 yt-dlp 支持的其他浏览器）读取已有 B站登录态，也可由环境提供 `BILIBILI_SESSDATA`。默认不读取浏览器。Cookie 只留在内存中，仅发送到 B站 API 域，不写入任务、缓存、日志或前端，也不发给字幕 CDN。
+手动字幕接口可通过 `BILIBILI_SUBTITLE_BROWSER=edge`（或 yt-dlp 支持的其他浏览器）读取已有 B站登录态，也可由环境提供 `BILIBILI_SESSDATA`。默认不读取浏览器。Cookie 只留在内存中，仅发送到 B站 API 域，不写入任务、缓存、日志或前端，也不发给字幕 CDN。
 
 先取得指定分 P 的 aid/cid/时长，再查询 WBI 签名播放器接口与新版 Protobuf 字幕接口。播放器响应必须与请求的 aid/cid 一致。两者返回同一轨道时保留签名播放器地址，避免新版不可直接下载的地址覆盖可用地址。下载签名 URL 不持久化。
 
@@ -40,7 +40,7 @@ BILIBILI_SUBTITLE_BROWSER=edge uv run video-report \
 
 ### YouTube 单视频
 
-`video-report transcribe 'https://www.youtube.com/watch?v=VIDEO_ID'` 也接受 `youtu.be` 与 Shorts 链接。使用自动选源，最长 5 小时。yt-dlp 匿名读取视频，优先采用作者字幕，其次原语言自动字幕；每种轨道先尝试原生 SRT，再尝试 VTT。可用字幕直接写入 `youtube-subtitles.json`，记录轨道类型、语言和时间戳。无可用字幕时下载音轨，默认使用百炼 `qwen-audio-3.1-asr-flash-filetrans` 自动识别原语种，开启 `keep_dialect` 保留方言表达。不传 `language_hints`，并在进入 ASR 时才检查 `DASHSCOPE_API_KEY`。显式 ASR 参数可用于对照。播放列表、直播和需要登录才能访问的内容无法走这条路径。ASR 输出可出现识别错误，无对白的音轨也可能产生虚假文字。
+`video-report transcribe 'https://www.youtube.com/watch?v=VIDEO_ID'` 也接受 `youtu.be` 与 Shorts 链接。使用自动选源，最长 5 小时。yt-dlp 匿名读取视频，优先采用作者字幕，其次原语言自动字幕；每种轨道先尝试原生 SRT，再尝试 VTT。可用字幕直接写入 `youtube-subtitles.json`，记录轨道类型、语言和时间戳。无可用字幕时下载音轨，默认使用百炼 `qwen-audio-3.1-asr-flash-filetrans` 自动识别原语种，开启 `keep_dialect` 保留方言表达。不传 `language_hints`，并在进入 ASR 时才检查 `DASHSCOPE_API_KEY`。显式 ASR 参数可用于对照。不支持播放列表和直播；需登录内容可由用户电脑上的统一取材入口显式提供浏览器或 Cookie 文件，仍先匿名尝试。ASR 输出可出现识别错误，无对白的音轨也可能产生虚假文字。
 
 ## 与已有 ASR 对照
 

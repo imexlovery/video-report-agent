@@ -20,6 +20,8 @@ TEXT_FILES = (
     "asr-task.json",
     "bilibili-subtitles.json",
     "youtube-subtitles.json",
+    "douyin-subtitles.json",
+    "xiaohongshu-subtitles.json",
     "source-text-events.jsonl",
     "canonical-transcript.jsonl",
     "transcript-manifest.json",
@@ -158,6 +160,9 @@ class Store:
                 platform, part = "bilibili", int(page[1:])
             elif identity and identity.startswith("youtube-"):
                 platform, external, part = "youtube", identity.removeprefix("youtube-"), 1
+            elif identity and identity.startswith(("douyin-", "xiaohongshu-")):
+                platform, external = identity.split("-", 1)
+                part = 1
             if identity:
                 db.execute(
                     "INSERT INTO videos VALUES (?,?,?,?,?) ON CONFLICT(id) DO NOTHING",

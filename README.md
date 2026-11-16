@@ -193,6 +193,22 @@ uv run video-report transcribe 'https://www.bilibili.com/video/BV...' --sources 
 
 B站 AI 自动字幕的新接口 Protobuf 字段解析参考了 [ccBilly-aipm/bilibili-ai-subtitle](https://github.com/ccBilly-aipm/bilibili-ai-subtitle)（MIT）。感谢作者公开字幕提取流程与协议解析实现，为本项目的 AI 字幕支持提供了参考。
 
+### 统一链接检查与用户电脑取材
+
+```sh
+uv run video-report preflight '完整视频链接或分享文字'
+uv run video-report fetch-source '完整视频链接或分享文字' --output .local/materials --browser edge
+uv run video-report transcribe '完整视频链接或分享文字' --browser edge
+```
+
+支持 B站 BV／分 P／短链／移动链接、YouTube watch／Shorts／youtu.be、抖音分享链接和小红书完整分享链接／短链。自动识别平台，只接受单视频；小红书保留访问所需分享参数。`preflight` 始终匿名，验证字幕正文或读取媒体地址的少量字节，返回 READY、LOGIN_REQUIRED 或 UNAVAILABLE；不会执行 ASR、报告或整段下载。
+
+`fetch-source` 在每个视频子目录保存 `source-material.json`，无字幕时下载媒体并提取音频。只有明确需要登录时读取所选浏览器或 `--cookies` 文件。`transcribe`／`generate` 的自动选源也接入同一取材入口；新增平台暂不支持手动多路选源与画面增强。嵌入调用可用 `create_run(..., transcript_mode="auto", source_access=True)`；账号登录须另显式启用 `source_login=True`，并通过执行环境传入 `VIDEO_SOURCE_BROWSER` 或 `VIDEO_SOURCE_COOKIE_FILE`，不把凭据值写入任务。
+
+网站确认弹窗仅做匿名检查，失败时提供本机脚本下载；普通网页不能读取其他网站的登录 Cookie。下载脚本需要在安装 Core 与 FFmpeg 的用户电脑运行，素材保存在电脑，Cookie 不上传网站；目前没有网页素材上传或自动续交功能。
+
+B站充电内容需要账号具有对应视频权限。检测到试看时停止，不把片段当成完整视频；该路径尚无真实付费样本验证，不承诺所有充电视频都可获取。
+
 ### 抖音与小红书取材
 
 ```sh

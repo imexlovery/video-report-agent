@@ -194,6 +194,12 @@ If subtitles require authentication, set `BILIBILI_SUBTITLE_BROWSER=chrome` (or 
 
 The Protobuf field parsing for Bilibili's newer AI subtitle endpoint references [ccBilly-aipm/bilibili-ai-subtitle](https://github.com/ccBilly-aipm/bilibili-ai-subtitle) (MIT). Thank you to its author for publishing the extraction workflow and protocol implementation that informed this support.
 
+### Unified source access
+
+`video-report preflight URL` anonymously validates subtitle text or reads a small media range. `fetch-source URL --output DIR --browser edge` acquires materials into per-video directories on the user's computer, using login only after an explicit access requirement. `transcribe` / `generate` accept the same four platforms in automatic mode and expose `--browser` / `--cookies`. Embedded callers enable `source_access=True`; login additionally requires `source_login=True` and execution-only `VIDEO_SOURCE_BROWSER` / `VIDEO_SOURCE_COOKIE_FILE` settings. Credentials are not persisted in run metadata.
+
+The website checks access before confirming a task and provides a local Python acquisition script when blocked. It does not read browser cookies or upload credentials; local material upload/resubmission is not implemented. The script requires an installed Core and FFmpeg. Bilibili supporter-only videos require the account's actual entitlement; preview-only media is rejected. No real paid-video sample has been validated.
+
 ### Douyin and Xiaohongshu acquisition
 
 ```sh

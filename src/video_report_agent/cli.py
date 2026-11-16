@@ -22,6 +22,9 @@ def main():
     for command in ("generate", "transcribe"):
         run = sub.add_parser(command)
         run.add_argument("url")
+        login = run.add_mutually_exclusive_group()
+        login.add_argument("--browser", help="仅需要登录时读取本机所选浏览器")
+        login.add_argument("--cookies", type=Path, help="仅需要登录时读取本机 Cookie 文件")
         run.add_argument("--report-mode", choices=["standard", "brief"], default="standard")
         run.add_argument("--report-inspection", action="store_true", help="初稿后运行报告检查")
         run.add_argument("--style-edit", action=argparse.BooleanOptionalAction, default=True,
@@ -55,7 +58,38 @@ def main():
         login.add_argument("--browser", help="仅平台明确要求登录时读取本机浏览器 Cookie，如 edge")
         login.add_argument("--cookies", type=Path, help="仅登录受限时读取本机导出的 Cookie 文件")
         fetch.add_argument("--output", type=Path, required=True)
+    preflight = sub.add_parser("preflight", help="匿名检查四个平台的字幕或音频是否可访问")
+    preflight.add_argument("url")
+    material = sub.add_parser("fetch-source", help="统一取材入口，支持用户电脑上的登录回退")
+    material.add_argument("url")
+    material.add_argument("--output", type=Path, required=True)
+    login = material.add_mutually_exclusive_group()
+    login.add_argument("--browser")
+    login.add_argument("--cookies", type=Path)
     args = parser.parse_args()
+    if args.command in {"preflight", "fetch-source"}:
+        from .audio import extract_audio
+        from .ingest import UrlIngestError
+        from .source_access import acquire_source, preflight_source
+
+        try:
+            if args.command == "preflight":
+                result = preflight_source(args.url)
+            else:
+                source, snapshot, downloaded = acquire_source(
+                    args.url, args.output, browser=args.browser, cookie_file=args.cookies,
+                )
+                material_root = args.output.resolve() / source.video_id
+                result = {"platform": source.platform, "title": snapshot["title"],
+                          "material_path": str(material_root / "source-material.json")}
+                if downloaded:
+                    audio = extract_audio(downloaded.media_path, material_root / "audio.wav")
+                    result["audio_path"] = str(audio.path.resolve())
+        except UrlIngestError as exc:
+            print(json.dumps({"error": exc.category, "message": str(exc)}, ensure_ascii=False))
+            return 1
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0 if result.get("available", True) else 1
     if args.command in {"fetch-douyin", "fetch-xiaohongshu"}:
         from .douyin import fetch_douyin_media
         from .ingest import UrlIngestError
@@ -97,12 +131,16 @@ def main():
                 ocr_mode=args.ocr_mode,
                 ocr_roi=args.ocr_roi,
                 subtitle_file=args.subtitle_file,
+                source_access=args.transcript_mode == "auto",
+                source_login=bool(args.browser or args.cookies),
                 asr_backend=args.asr_backend,
                 asr_model=args.asr_model,
                 ocr_backend=args.ocr_backend,
                 database_path=args.database,
             ),
             database_path=args.database,
+            env={"VIDEO_SOURCE_BROWSER": args.browser or "",
+                 "VIDEO_SOURCE_COOKIE_FILE": str(args.cookies.resolve()) if args.cookies else ""},
         )
         print(json.dumps(status, ensure_ascii=False, indent=2))
         return 0 if status["state"] in {"RENDERED", "TRANSCRIPT_READY"} else 1

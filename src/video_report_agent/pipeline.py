@@ -17,12 +17,12 @@ from .bilibili_subtitles import SubtitleError, fetch_subtitles, validate_sources
 from .diagram import diagram_model_config
 from .failures import asr_failure
 from .ingest import (
+    BilibiliSource,
     UrlIngestError,
     YouTubeSource,
     download_bilibili_video,
     download_youtube_audio,
     subtitle_snapshot_name,
-    validate_source_url,
 )
 from .media_config import QWEN_FILETRANS_MODEL, resolve_media_config
 from .paraformer import CloudAsrError
@@ -38,6 +38,7 @@ from .reuse import (
     valid_asr_payload,
     validated_transcript,
 )
+from .source_access import download_source_audio, prepare_source, resolve_source
 from .storage import CacheProductionFailed, Store
 from .style_edit import STYLE_DOCUMENTS, edit_report, recover_interrupted_style
 from .term_correction import TERM_DOCUMENTS, search_config
@@ -83,6 +84,8 @@ def create_run(
     export=True,
     subtitle_content=None,
     subtitle_name=None,
+    source_access=False,
+    source_login=False,
 ) -> Path:
     if report_mode not in ("standard", "brief"):
         raise ValueError("report_mode must be standard or brief")
@@ -107,11 +110,14 @@ def create_run(
         ocr_mode != "off" or subtitle_file or subtitle_content is not None
     ):
         raise ValueError("自动路由不接受 OCR 或导入字幕，请使用手动选源")
-    source = validate_source_url(url, allow_youtube=transcript_only)
+    if source_login and transcript_mode != "auto":
+        raise ValueError("--browser / --cookies 登录取材仅支持自动选源。")
+    source = resolve_source(url)
     youtube = isinstance(source, YouTubeSource)
-    if youtube and (transcript_mode != "auto" or visual_enhancement):
-        raise ValueError("YouTube 仅支持自动选源的文字稿任务。")
-    if transcript_mode == "auto" and asr_backend is None and (youtube or asr_model is None):
+    external = not isinstance(source, BilibiliSource)
+    if external and (transcript_mode != "auto" or visual_enhancement):
+        raise ValueError("此平台仅支持自动选源，暂不支持画面增强。")
+    if transcript_mode == "auto" and asr_backend is None and (external or asr_model is None):
         asr_backend = "paraformer"
         asr_model = asr_model or QWEN_FILETRANS_MODEL
     media_config = (
@@ -142,6 +148,8 @@ def create_run(
         "style_edit": style_edit,
         "visual_enhancement": visual_enhancement,
         "transcript_mode": transcript_mode,
+        **({"source_access": True} if source_access or (external and not youtube) else {}),
+        **({"source_login": True} if source_login else {}),
         **({"transcript_sources": transcript_sources} if transcript_sources is not None else {}),
         **({"transcript_only": True} if transcript_only else {}),
         "ocr_mode": ocr_mode,
@@ -227,9 +235,11 @@ def generate(
             }
             return True
 
-        source = validate_source_url(metadata["url"], allow_youtube=metadata.get("transcript_only"))
+        source = resolve_source(metadata["url"])
         youtube = isinstance(source, YouTubeSource)
-        auto_tracks = ["subtitle_track"] if youtube else ["subtitle_track", "bilibili_ai"]
+        auto_tracks = (["subtitle_track", "bilibili_ai"] if isinstance(source, BilibiliSource)
+                       else ["subtitle_track"])
+        source_cookies = None
         if automatic or (selected and (not needs_asr or any(s != "asr" for s in selected))):
             update("TRANSCRIBING")
             requested = (
@@ -243,7 +253,13 @@ def generate(
             )
             with trace.span("subtitles", input={"sources": requested}) as detail:
                 try:
-                    if youtube:
+                    if automatic and metadata.get("source_access"):
+                        _, subtitle_snapshot, source_cookies = prepare_source(
+                            metadata["url"], browser=os.getenv("VIDEO_SOURCE_BROWSER") or None,
+                            cookie_file=os.getenv("VIDEO_SOURCE_COOKIE_FILE") or None,
+                            allow_login=metadata.get("source_login", False),
+                        )
+                    elif youtube:
                         subtitle_snapshot = fetch_youtube_subtitles(source)
                     else:
                         subtitle_snapshot = (
@@ -355,6 +371,8 @@ def generate(
                             break
                         if download_claim == "PRODUCE":
                             downloaded = (
+                                download_source_audio(source, run, metadata, source_cookies)
+                                if source_cookies is not None else
                                 download_youtube_audio(source, run, metadata) if youtube
                                 else download_bilibili_video(
                                     source, run, request_subtitles=request_subtitles,

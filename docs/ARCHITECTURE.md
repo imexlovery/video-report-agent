@@ -29,9 +29,11 @@
 
 ## 任务数据与接口
 
+统一平台入口为 `source_access.py`：`resolve_source` 解析链接／分享文本，`preflight_source` 始终匿名验证字幕正文或媒体地址的少量字节，`prepare_source` 在明确权限限制后按授权使用用户电脑上的登录态。CLI 自动模式设置 `source_access=True`；浏览器名／Cookie 文件路径只通过 Worker 环境传递，任务仅记录是否允许登录。网站任务不启用登录回退。充电试看在检查与下载两个位置拒绝；账号实际付费权限由平台决定，尚无付费样本实测。
+
 抖音与小红书取材入口为 `fetch-douyin` / `fetch-xiaohongshu`。平台模块负责受限分享链接解析、匿名元数据与字幕发现；`platform_media.py` 保存规范字幕，缺少可用字幕时复用受监督 yt-dlp 下载和 FFmpeg 音频提取。抖音自动取得访客身份并补齐详情请求签名；小红书保留分享访问参数并解析 `mediaV2` 字幕。仅明确的登录要求触发用户本机浏览器或文件 Cookie 回退；链接无效、签名失败不触发登录。凭据按平台域筛选，不发送到媒体 CDN；下载临时文件在结束后删除。本机备用导出脚本仅保存 0600 文件，不上传凭据。输出按视频 ID 分隔，`media.json` 记录来源和 auth_mode；不创建流水线任务，不执行 ASR、Pi 或报告。
 
-YouTube 单视频走自动选源的仅转写路径，由 [youtube_subtitles.py](../src/video_report_agent/youtube_subtitles.py) 读取作者字幕或原语言自动字幕，无可用字幕再下载音轨，由百炼 Qwen Audio 3.1 Filetrans 自动识别语言并保留方言表达。复用规范转写、缓存和 `TRANSCRIPT_READY` 终态。见 [文字稿来源](subtitle-sources.md#youtube-单视频)。
+YouTube 单视频走自动选源路径，由 [youtube_subtitles.py](../src/video_report_agent/youtube_subtitles.py) 读取作者字幕或原语言自动字幕，无可用字幕再下载音轨，由百炼 Qwen Audio 3.1 Filetrans 自动识别语言并保留方言表达。复用规范转写、缓存和 `TRANSCRIPT_READY` 终态。见 [文字稿来源](subtitle-sources.md#youtube-单视频)。
 
 默认 Web/CLI 的 Bilibili `auto` 依次尝试作者字幕轨、`ai-zh`、Qwen Audio 3.1 Filetrans。任一字幕正文可用即结束采集。Local 可主动使用自选来源。自选文字稿入口接收有序的 `transcript_sources`：ASR、非 AI 字幕轨、B站 `ai-zh`。第一路可用来源提供时间轴，其余已选来源参与局部校对；未选 ASR 时跳过媒体下载、音频提取与 ASR。字幕获取、来源状态、缓存及对照命令见 [可选文字稿来源](subtitle-sources.md)。`transcribe` 在 `TRANSCRIPT_READY` 结束，不启动后续 Agent/报告阶段；旧显式 ASR-only/fused 调用保持兼容。
 

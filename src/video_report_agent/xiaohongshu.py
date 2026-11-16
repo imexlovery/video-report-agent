@@ -22,7 +22,8 @@ from .platform_media import (
 )
 
 _ORIGINAL_EXTRACT = XiaoHongShuIE._real_extract
-_HOSTS = {"xiaohongshu.com", "www.xiaohongshu.com", "xhslink.com", "www.xhslink.com"}
+_HOSTS = {"xiaohongshu.com", "www.xiaohongshu.com", "xhslink.com", "www.xhslink.com",
+          "xhslink.cn", "www.xhslink.cn"}
 
 
 def validate_xiaohongshu_url(value):

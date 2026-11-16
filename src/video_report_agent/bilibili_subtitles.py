@@ -418,6 +418,8 @@ class BilibiliSubtitles:
         return snapshot
 
 
-def fetch_subtitles(source, selected=SUBTITLE_SOURCES, *, browser=None, first_available=False):
-    with BilibiliSubtitles(browser=browser, authenticate=bool(selected)) as client:
+def fetch_subtitles(
+    source, selected=SUBTITLE_SOURCES, *, browser=None, first_available=False, authenticate=True,
+):
+    with BilibiliSubtitles(browser=browser, authenticate=authenticate and bool(selected)) as client:
         return client.fetch(source, selected, first_available=first_available)

@@ -2,13 +2,13 @@
 
 ## 目标与范围
 
-将公开 Bilibili 视频转成可独立阅读、回查来源的 HTML 报告。Core 维护下载、ASR、规范转写、Pi 集成、唯一产品 Skill、渲染、CLI 与评测工具。账户、网站路由、额度、调度与运营部署由调用方负责。
+将支持平台的视频转成可独立阅读、回查来源的 HTML 报告。Core 维护下载、ASR、规范转写、Pi 集成、唯一产品 Skill、渲染、CLI 与评测工具。账户、网站路由、额度、调度与运营部署由调用方负责。
 
 ## 当前能力
 
-- `fetch-douyin` / `fetch-xiaohongshu` 默认匿名取平台字幕，可用时省去媒体下载，否则获取音频并生成 16 kHz WAV；仅明确需要登录时读取用户本机提供的 Cookie。备用导出脚本仅写本机文件。入口止于取材，尚未接入 ASR、报告或网站。见 [使用说明](../README.md#抖音与小红书取材)。
+- `fetch-douyin` / `fetch-xiaohongshu` 默认匿名取平台字幕，可用时省去媒体下载，否则获取音频并生成 16 kHz WAV；仅明确需要登录时读取用户本机提供的 Cookie。备用导出脚本仅写本机文件。专用 fetch 入口止于取材；统一 preflight / fetch-source 与自动转写流水线已接入。见 [使用说明](../README.md#抖音与小红书取材)。
 - 两条使用路径：独立复制 Skill 与模板，用自己的 Coding Agent 阅读完整转写；或通过 `video-report generate` 执行下载到报告的完整流水线。
-- 流水线支持公开 Bilibili 视频及受限短链解析，最长 5 小时；CLI/Web 默认 `auto`，按作者字幕轨 → ai-zh → Qwen Audio 3.1 Filetrans 短路采用单路，Web OCR 关闭。主动选源可做多路对照／融合；Core 保留旧显式 ASR-only/fused 调用。
+- 自动流水线支持 Bilibili、YouTube、抖音、小红书的单视频及受限分享链接解析，最长 5 小时；CLI/Web 默认 `auto`，按作者字幕轨 → ai-zh → Qwen Audio 3.1 Filetrans 短路采用单路，Web OCR 关闭。主动选源可做多路对照／融合；Core 保留旧显式 ASR-only/fused 调用。
 - `transcribe` 支持公开 YouTube 单视频，匿名依次选择作者字幕、原语言自动字幕或百炼 Qwen Audio 3.1 Filetrans 音频转写，交付 `transcript.md` 与规范单元。最长 5 小时，访问能力受上游和本机网络影响。见[文字稿来源](subtitle-sources.md)。
 - 内置 ASR 为 Apple Silicon MLX Whisper 与百炼文件转写适配（支持 Qwen Audio 3.1 Filetrans 及代码列出的 Paraformer/Fun-ASR 模型）。满足时长与静音条件的云端长音频分两段并行识别，恢复原时间轴。
 - Standard 用于不观看完整视频时理解主要论证、方法步骤与必要细节，并供查阅；Brief 用于几分钟内掌握结论、依据和重要限制，判断是否深入阅读，省略支线时仍须保留会改变结论的条件。两个模式读完整转写，各有规则与模板，可以复用同一来源转写。

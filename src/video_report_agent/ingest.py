@@ -18,7 +18,7 @@ from urllib.parse import parse_qsl, urlsplit
 
 import httpx
 
-BILIBILI_HOSTS = frozenset({"bilibili.com", "www.bilibili.com"})
+BILIBILI_HOSTS = frozenset({"bilibili.com", "www.bilibili.com", "m.bilibili.com"})
 YOUTUBE_HOSTS = frozenset({"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"})
 _BVID_PATTERN = re.compile(r"BV[0-9A-Za-z]{10}")
 _PAGE_PATTERN = re.compile(r"[0-9]+")
@@ -207,8 +207,11 @@ def validate_source_url(
                 if len(ids) == 1:
                     video = ids[0]
             else:
-                prefix = "/" if host == "youtu.be" else "/shorts/"
-                if parsed.path.startswith(prefix):
+                prefix = ("/" if host == "youtu.be" else next(
+                    (part for part in ("/shorts/", "/embed/", "/live/")
+                     if parsed.path.startswith(part)), None,
+                ))
+                if prefix and parsed.path.startswith(prefix):
                     video = parsed.path[len(prefix):].removesuffix("/")
             if (
                 parsed.scheme != "https" or parsed.netloc.lower() != host
@@ -220,7 +223,7 @@ def validate_source_url(
 
 
 def subtitle_snapshot_name(video_id: str) -> str:
-    return ("youtube" if video_id.startswith("youtube-") else "bilibili") + "-subtitles.json"
+    return video_id.split("-", 1)[0] + "-subtitles.json"
 
 
 def probe_bilibili_video(

@@ -9,7 +9,7 @@ description: 将视频转写或长篇内容编辑为自包含 HTML 阅读报告�
 
 ## 输入与阅读顺序
 
-- 独立使用时读取用户提供的完整转写或字幕，支持文本、Markdown、SRT 等，不要求本项目后端或固定文件名。标题、作者、链接、简介、时间均可缺省，不编造；缺少必要正文时询问用户。
+- 独立使用时读取用户提供的完整转写或字幕，支持文本、Markdown、SRT 等，不要求本项目后端或固定文件名。标题、作者、链接、简介、时间均可缺省，不编造；缺少必要正文时询问用户。 若输入是视频链接且环境已安装 Core，先用 `video-report preflight '完整链接或分享文字'` 匿名检查；只取素材用 `fetch-source ... --output 工作目录`，需要规范转写用 `transcribe ...`。平台确实要求登录且用户授权时，在用户电脑添加 `--browser edge` 或 `--cookies 本机文件`；不要求用户在聊天或网站粘贴 Cookie。读取所得 `source-material.json` 中实际字幕正文或 `transcript.md`，音频尚未转写时不把标题／简介当成视频正文。没有 Core 时沿用完整转写输入。
 - 产品调用以 `input.json.report_mode` 为准，缺失时为 `standard`；独立使用以用户选择为准，未指定同样为 `standard`。先只读所选模式及其唯一模板：
   - `standard`：[标准阅读](modes/standard.md)。
   - `brief`：[精简速览](modes/brief.md)。

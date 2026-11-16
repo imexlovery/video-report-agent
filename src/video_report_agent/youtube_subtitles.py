@@ -73,12 +73,14 @@ def _read_track(ydl, entries, duration_ms, *, automatic):
     return []
 
 
-def fetch_youtube_subtitles(source: YouTubeSource) -> dict:
+def fetch_youtube_subtitles(source: YouTubeSource, *, cookies=None) -> dict:
     options = {
         "quiet": True, "no_warnings": True, "noplaylist": True, "cachedir": False,
         "socket_timeout": 10, "extractor_retries": 0, "ignore_no_formats_error": True,
     }
     with YoutubeDL(options) as ydl:
+        if cookies is not None:
+            ydl.cookiejar = cookies
         try:
             info = ydl.extract_info(source.canonical_url, download=False, ie_key="Youtube")
         except DownloadError:
