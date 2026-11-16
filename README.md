@@ -133,7 +133,7 @@ test -f .env || cp .env.example .env
 
 ### 配置模型与转写
 
-编辑仓库根目录的 `.env`，填写报告模型凭证。使用 ASR 时再配置相应后端；以下示例配置云端 ASR，供自动路由回退或手动选用：
+编辑仓库根目录的 `.env`，填写报告模型凭证。自动选源的默认回退使用百炼 Qwen Audio 3.1 Filetrans，进入 ASR 时读取 `DASHSCOPE_API_KEY`。以下示例的 `ASR_BACKEND` 和 `ASR_MODEL` 用于手动选源，也可通过 CLI 显式指定 ASR 后端和模型：
 
 ```dotenv
 PI_PROVIDER=deepseek
@@ -146,14 +146,14 @@ ASR_MODEL=paraformer-v2
 DASHSCOPE_API_KEY=your-dashscope-api-key
 ```
 
-Apple Silicon 本地转写替换为：
+Apple Silicon 手动使用本地转写时，可将上述 ASR 后端和模型替换为：
 
 ```dotenv
 ASR_BACKEND=mlx
 ASR_MODEL=mlx-community/whisper-large-v3-turbo
 ```
 
-流水线内置 `mlx` 与 `paraformer` 后端，云端还支持代码已适配的 Fun-ASR 文件转写模型。其他 ASR 可用于独立 Skill 流程；接入本流水线需要对应适配器。云端 ASR 会上传音频，报告模型会接收生成所需的转写内容。
+流水线内置 `mlx` 与百炼 `paraformer` 后端。百炼后端支持 Qwen Audio 3.1 Filetrans、Paraformer-v2 和代码列出的 Fun-ASR 文件转写模型。其他 ASR 可用于独立 Skill 流程。云端 ASR 会上传音频，报告模型会接收生成所需的转写内容。
 
 ### 生成与查看
 
@@ -169,7 +169,7 @@ uv run video-report generate 'https://www.bilibili.com/video/BV...' --report-mod
 
 ### 选择字幕与转写来源
 
-CLI 默认使用 `auto`，按“作者字幕轨 → B站 AI 自动字幕 `ai-zh` → ASR”依次尝试。取得可用字幕正文后就进入报告生成；只有前两路不可用时才运行 ASR。也可以通过 `--sources` 主动选择：
+CLI 默认使用 `auto`，按“作者字幕轨 → B站 AI 自动字幕 `ai-zh` → ASR”依次尝试。取得可用字幕正文后就进入报告生成；只有前两路不可用时才运行 ASR，默认使用百炼 Qwen Audio 3.1 Filetrans。也可以通过 `--sources` 主动选择：
 
 | 来源 | CLI 参数 | 说明 |
 |---|---|---|

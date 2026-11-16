@@ -134,7 +134,7 @@ These instructions use Pi 0.85.0, the project's adapter baseline. `uv sync` does
 
 ### Configure the model and ASR
 
-Edit the root `.env` and supply report-model credentials. Configure an ASR backend when you use it. This example sets up cloud ASR for automatic fallback or manual selection:
+Edit the root `.env` and supply report-model credentials. Automatic source selection falls back to DashScope Qwen Audio 3.1 Filetrans and reads `DASHSCOPE_API_KEY` when ASR is needed. The example `ASR_BACKEND` and `ASR_MODEL` configure manual source selection. The CLI also accepts explicit backend and model overrides:
 
 ```dotenv
 PI_PROVIDER=deepseek
@@ -147,14 +147,14 @@ ASR_MODEL=paraformer-v2
 DASHSCOPE_API_KEY=your-dashscope-api-key
 ```
 
-For local Apple Silicon transcription, replace the ASR settings with:
+For manual MLX transcription on Apple Silicon, replace the backend and model with:
 
 ```dotenv
 ASR_BACKEND=mlx
 ASR_MODEL=mlx-community/whisper-large-v3-turbo
 ```
 
-The pipeline includes `mlx` and `paraformer` backends, including the Fun-ASR file-transcription models adapted in the code. Other ASR tools work with the standalone Skill; integrating them into this pipeline requires an adapter. Cloud ASR uploads audio, and the report model receives the transcript content needed for generation.
+The pipeline includes `mlx` and DashScope's `paraformer` backend. The DashScope backend supports Qwen Audio 3.1 Filetrans, Paraformer-v2, and the Fun-ASR file models listed in the code. Other ASR tools work with the standalone Skill. Cloud ASR uploads audio, and the report model receives the transcript content needed for generation.
 
 ### Generate and read
 
@@ -170,7 +170,7 @@ Outputs live in `runs/<run-id>/`. Read `report.html` or `report.png`; use `trans
 
 ### Choose subtitle and transcript sources
 
-The CLI defaults to `auto`: creator-provided subtitles → Bilibili AI subtitles (`ai-zh`) → ASR. Once usable subtitle content is available, report generation starts. ASR runs only when both subtitle sources are unavailable. Use `--sources` to choose explicitly:
+The CLI defaults to `auto`: creator-provided subtitles → Bilibili AI subtitles (`ai-zh`) → ASR. Once usable subtitle content is available, report generation starts. When both subtitle sources are unavailable, the default fallback is DashScope Qwen Audio 3.1 Filetrans. Use `--sources` to choose explicitly:
 
 | Source | CLI arguments | Behavior |
 |---|---|---|

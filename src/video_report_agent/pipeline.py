@@ -108,12 +108,12 @@ def create_run(
     ):
         raise ValueError("自动路由不接受 OCR 或导入字幕，请使用手动选源")
     source = validate_source_url(url, allow_youtube=transcript_only)
-    if isinstance(source, YouTubeSource):
-        if transcript_mode != "auto" or visual_enhancement:
-            raise ValueError("YouTube 仅支持自动选源的文字稿任务。")
-        if asr_backend is None:
-            asr_backend = "paraformer"
-            asr_model = asr_model or QWEN_FILETRANS_MODEL
+    youtube = isinstance(source, YouTubeSource)
+    if youtube and (transcript_mode != "auto" or visual_enhancement):
+        raise ValueError("YouTube 仅支持自动选源的文字稿任务。")
+    if transcript_mode == "auto" and asr_backend is None and (youtube or asr_model is None):
+        asr_backend = "paraformer"
+        asr_model = asr_model or QWEN_FILETRANS_MODEL
     media_config = (
         resolve_media_config(
             asr_backend,

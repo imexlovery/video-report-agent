@@ -6,8 +6,10 @@ import httpx
 import pytest
 
 from video_report_agent import pipeline
+from video_report_agent.asr import DEFAULT_ASR_MODEL
 from video_report_agent.bilibili_subtitles import BilibiliSubtitles, SubtitleError
 from video_report_agent.ingest import validate_bilibili_url
+from video_report_agent.media_config import QWEN_FILETRANS_MODEL
 from video_report_agent.reuse import cache_key
 
 URL = "https://www.bilibili.com/video/BV1qxn16yEvP/"
@@ -81,7 +83,9 @@ def test_auto_captions_stop_without_asr_credentials_media_ocr_or_report(
 @pytest.mark.parametrize("source_error", [False, True, "invalid-nav"])
 def test_auto_reaches_asr_only_after_captions_unavailable(tmp_path, monkeypatch, source_error):
     calls = []
-    monkeypatch.setenv("ASR_BACKEND", "mlx")
+    monkeypatch.setenv("ASR_BACKEND", "paraformer")
+    monkeypatch.setenv("ASR_MODEL", "paraformer-v2")
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "test-key")
 
     def fetch(*a, **kw):
         calls.append("subtitles")
@@ -129,13 +133,17 @@ def test_auto_reaches_asr_only_after_captions_unavailable(tmp_path, monkeypatch,
 
     def asr(*a, **kw):
         calls.append("asr")
+        assert kw["backend"] == "paraformer" and kw["model"] == QWEN_FILETRANS_MODEL
+        assert kw["language"] == "auto"
+        assert kw["parameters"] == {"channel_id": [0], "keep_dialect": True}
         segments = [
             {"ordinal": 0, "start_ms": 0, "end_ms": 2000, "text": "合成语音文字稿", "words": []}
         ]
         return SimpleNamespace(
             segments=segments,
             to_dict=lambda: {
-                "backend": "mlx",
+                "backend": "paraformer",
+                "model": QWEN_FILETRANS_MODEL,
                 "segments": segments,
             },
         )
@@ -152,6 +160,16 @@ def test_auto_reaches_asr_only_after_captions_unavailable(tmp_path, monkeypatch,
     assert result["transcript_primary_source"] == "asr"
     assert result["asr_performed"] is True
     assert result["transcript_source_status"]["ocr"]["status"] == "OFF"
+
+
+def test_bilibili_auto_explicit_asr_model_preserves_backend_resolution(tmp_path, monkeypatch):
+    monkeypatch.setenv("ASR_BACKEND", "mlx")
+    run = pipeline.create_run(
+        tmp_path, URL, transcript_mode="auto", asr_model=DEFAULT_ASR_MODEL, transcript_only=True,
+    )
+    config = json.loads((run / "input.json").read_text())
+    assert config["asr_backend"] == "mlx"
+    assert config["asr_model"] == DEFAULT_ASR_MODEL
 
 
 @pytest.mark.parametrize("author_valid", [True, False])
