@@ -144,3 +144,42 @@ def test_no_usable_youtube_subtitle_uses_qwen_without_language_hints(tmp_path, m
     assert status["state"] == "TRANSCRIPT_READY" and status["transcript_primary_source"] == "asr"
     assert "Hola" in (run / "transcript.md").read_text()
     assert not (run / "report.html").exists()
+
+
+@pytest.mark.parametrize("language,manual,automatic,unusable,expected", [
+    ("en", ["zh-Hans"], ["en-orig"], [], ("automatic", "en")),
+    ("en", ["zh-Hans", "en"], ["en-orig"], ["en"], ("automatic", "en")),
+    ("en-US", ["zh-Hans", "en"], ["en-orig"], [], ("author", "en")),
+    ("en", ["en-GB", "EN"], ["en-orig"], [], ("author", "EN")),
+    (None, ["zh-Hans", "en"], ["en-orig"], [], ("author", "en")),
+    ("en", ["zh-Hans"], [], [], None),
+    ("en", ["zh-Hans"], ["es-orig"], [], None),
+    (None, ["zh-Hans"], [], [], None),
+])
+def test_youtube_never_chooses_translation_before_original_language(
+    monkeypatch, language, manual, automatic, unusable, expected,
+):
+    calls = []
+
+    def read(_ydl, entries, _duration, *, automatic):
+        tag = entries[0]["tag"]
+        calls.append(("automatic" if automatic else "author", tag))
+        return [] if not automatic and tag in unusable else [
+            {"from": 0, "to": 1, "content": "Original"},
+        ]
+
+    monkeypatch.setattr(youtube_subtitles, "_read_track", read)
+    info = {"id": ID, "duration": 10, "language": language,
+            "subtitles": {tag: [{"tag": tag}] for tag in manual},
+            "automatic_captions": {tag: [{"tag": tag.removesuffix("-orig")}]
+                                   for tag in automatic}}
+    result = youtube_subtitles.fetch_youtube_subtitles(
+        validate_source_url(WATCH, allow_youtube=True), info=info,
+    )["sources"]["subtitle_track"]
+    assert all(tag != "zh-Hans" for _, tag in calls)
+    if expected:
+        assert result["status"] == "READY"
+        assert (result["track_kind"], result["language"]) == expected
+        assert calls[-1] == expected
+    else:
+        assert result["status"] == "ABSENT" and not calls

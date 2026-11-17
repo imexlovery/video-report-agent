@@ -16,6 +16,10 @@ from .transcript_foundation import SubtitleParseError, parse_subtitle_file
 MAX_SUBTITLE_BYTES = 8 * 1024 * 1024
 
 
+def _same_language(tag, language):
+    return tag.lower().split("-")[0] == language.lower().split("-")[0]
+
+
 def _automatic_tracks(info):
     language = (info.get("language") or "").lower()
     tracks = {
@@ -40,6 +44,8 @@ def _automatic_tracks(info):
         for key, entries in tracks.items():
             if key.lower() == candidate:
                 return {key: entries}
+    if language:
+        return {key: entries for key, entries in tracks.items() if _same_language(key, language)}
     return tracks if len(tracks) == 1 else {}
 
 
@@ -101,10 +107,12 @@ def fetch_youtube_subtitles(
         if on_metadata:
             on_metadata({"title": title, "uploader": uploader, "duration_ms": duration_ms})
         item = {"status": "ABSENT", "count": 0}
-        manual = info.get("subtitles") or {}
-        language = info.get("language")
-        for kind, tracks in (("author", manual), ("automatic", _automatic_tracks(info))):
-            for key in sorted(tracks, key=lambda tag: (tag != language, not tag.startswith("zh"))):
+        automatic = _automatic_tracks(info)
+        language = (info.get("language") or next(iter(automatic), "")).lower()
+        manual = {key: entries for key, entries in (info.get("subtitles") or {}).items()
+                  if language and _same_language(key, language)}
+        for kind, tracks in (("author", manual), ("automatic", automatic)):
+            for key in sorted(tracks, key=lambda tag: tag.lower() != language):
                 body = _read_track(ydl, tracks[key], duration_ms, automatic=kind == "automatic")
                 if body:
                     item = {"status": "READY", "count": len(body), "body": body,
