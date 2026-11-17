@@ -5,7 +5,7 @@ import httpx
 import pytest
 
 from video_report_agent.asr import AsrError, normalize_asr_segments
-from video_report_agent.media_config import resolve_media_config
+from video_report_agent.media_config import QWEN_FILETRANS_MODEL, resolve_media_config
 from video_report_agent.paraformer import CloudAsrError, ParaformerBackend
 from video_report_agent.redaction import redact
 
@@ -92,7 +92,9 @@ def service(mode="ok", model="paraformer-v2"):
         if request.url.path.endswith("/transcription"):
             payload = json.loads(request.content)
             assert payload["model"] == model
-            if model.startswith("fun-asr"):
+            if model == QWEN_FILETRANS_MODEL:
+                assert payload["parameters"] == {"channel_id": [0], "keep_dialect": True}
+            elif model.startswith("fun-asr"):
                 assert payload["parameters"] == {"channel_id": [0], "language_hints": ["zh"]}
             else:
                 assert payload["parameters"]["timestamp_alignment_enabled"] is True
@@ -217,6 +219,7 @@ def test_diagnostic_redaction():
         "fun-asr-2025-11-07",
         "fun-asr-mtl",
         "fun-asr-mtl-2025-08-25",
+        QWEN_FILETRANS_MODEL,
     ],
 )
 def test_environment_model_switch_preserves_transcript_contract(audio, env, model):
@@ -226,8 +229,10 @@ def test_environment_model_switch_preserves_transcript_contract(audio, env, mode
     client, calls = service(model=model)
     backend = ParaformerBackend(model=config["asr_model"], client=client, poll_seconds=0)
     assert backend.parameters == config["asr_parameters"]
-    result = backend.transcribe(audio)
+    result = backend.transcribe(audio, language=config["asr_language"])
     assert result.model == model
+    if model == QWEN_FILETRANS_MODEL:
+        assert result.language == "auto" and result.engine == "qwen-audio"
     assert (result.segments[0].start_ms, result.segments[0].end_ms) == (100, 900)
     upload = next(r for r in calls if r.url.path.endswith("/uploads"))
     assert upload.url.params["model"] == model

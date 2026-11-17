@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 
 import yt_dlp
 from yt_dlp.extractor.bilibili import BilibiliBaseIE
-from yt_dlp.utils import Popen
+from yt_dlp.utils import ExtractorError, Popen
 
 
 def select_backup_urls(value: object, *, backup: bool) -> None:
@@ -41,11 +41,27 @@ def main() -> None:
     original = BilibiliBaseIE.extract_formats
 
     def extract_formats(self, play_info):
+        if any("试看" in str(label) for label in play_info.get("accept_description", [])):
+            raise ExtractorError("仅取得试看内容，请使用有该视频访问权限的账号。", expected=True)
         selected = copy.deepcopy(play_info)
         select_backup_urls(selected, backup=backup)
         return original(self, selected)
 
     BilibiliBaseIE.extract_formats = extract_formats
+
+    if any(arg.startswith("https://www.douyin.com/video/") for arg in sys.argv[2:]):
+        from yt_dlp.extractor.tiktok import DouyinIE
+
+        from .douyin import extract_douyin
+
+        DouyinIE._real_extract = extract_douyin
+
+    if any(arg.startswith("https://www.xiaohongshu.com/explore/") for arg in sys.argv[2:]):
+        from yt_dlp.extractor.xiaohongshu import XiaoHongShuIE
+
+        from .xiaohongshu import extract_xiaohongshu
+
+        XiaoHongShuIE._real_extract = extract_xiaohongshu
 
     # Keep the outer pipeline process group. On our own deadline, also stop any
     # FFmpeg process created by yt-dlp before exiting this worker.

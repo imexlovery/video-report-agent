@@ -66,3 +66,11 @@ def test_pipeline_persists_public_asr_error(tmp_path, monkeypatch):
     assert status['provider_code'] == 'Arrearage'
     assert '欠费' in status['error']
     assert json.loads((run / 'asr-error.json').read_text())['provider_code'] == 'Arrearage'
+
+
+def test_no_valid_speech_has_actionable_message():
+    error = CloudAsrError("result", "no fragment", provider_code="SUCCESS_WITH_NO_VALID_FRAGMENT")
+    code, message = asr_failure(error)
+    assert code == "ASR_NO_VALID_SPEECH"
+    assert "未检测到有效人声" in message
+    assert "重试" not in message

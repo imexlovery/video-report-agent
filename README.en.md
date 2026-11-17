@@ -134,7 +134,7 @@ These instructions use Pi 0.85.0, the project's adapter baseline. `uv sync` does
 
 ### Configure the model and ASR
 
-Edit the root `.env` and supply report-model credentials. Configure an ASR backend when you use it. This example sets up cloud ASR for automatic fallback or manual selection:
+Edit the root `.env` and supply report-model credentials. Automatic source selection falls back to DashScope Qwen Audio 3.1 Filetrans and reads `DASHSCOPE_API_KEY` when ASR is needed. The example `ASR_BACKEND` and `ASR_MODEL` configure manual source selection. The CLI also accepts explicit backend and model overrides:
 
 ```dotenv
 PI_PROVIDER=deepseek
@@ -147,14 +147,14 @@ ASR_MODEL=paraformer-v2
 DASHSCOPE_API_KEY=your-dashscope-api-key
 ```
 
-For local Apple Silicon transcription, replace the ASR settings with:
+For manual MLX transcription on Apple Silicon, replace the backend and model with:
 
 ```dotenv
 ASR_BACKEND=mlx
 ASR_MODEL=mlx-community/whisper-large-v3-turbo
 ```
 
-The pipeline includes `mlx` and `paraformer` backends, including the Fun-ASR file-transcription models adapted in the code. Other ASR tools work with the standalone Skill; integrating them into this pipeline requires an adapter. Cloud ASR uploads audio, and the report model receives the transcript content needed for generation.
+The pipeline includes `mlx` and DashScope's `paraformer` backend. The DashScope backend supports Qwen Audio 3.1 Filetrans, Paraformer-v2, and the Fun-ASR file models listed in the code. Other ASR tools work with the standalone Skill. Cloud ASR uploads audio, and the report model receives the transcript content needed for generation.
 
 ### Generate and read
 
@@ -170,7 +170,7 @@ Outputs live in `runs/<run-id>/`. Read `report.html` or `report.png`; use `trans
 
 ### Choose subtitle and transcript sources
 
-The CLI defaults to `auto`: creator-provided subtitles → Bilibili AI subtitles (`ai-zh`) → ASR. Once usable subtitle content is available, report generation starts. ASR runs only when both subtitle sources are unavailable. Use `--sources` to choose explicitly:
+The CLI defaults to `auto`: creator-provided subtitles → Bilibili AI subtitles (`ai-zh`) → ASR. Once usable subtitle content is available, report generation starts. When both subtitle sources are unavailable, the default fallback is DashScope Qwen Audio 3.1 Filetrans. Use `--sources` to choose explicitly:
 
 | Source | CLI arguments | Behavior |
 |---|---|---|
@@ -190,9 +190,30 @@ uv run video-report transcribe 'https://www.bilibili.com/video/BV...' --sources 
 
 Manual selection collects only the selected sources; the AI-only example fails if its subtitles are unavailable. Selecting both AI subtitles and ASR collects both. Subtitle-only runs require no media download or ASR credentials unless visual enhancement is enabled.
 
-If subtitles require authentication, set `BILIBILI_SUBTITLE_BROWSER=chrome` (or another browser supported by yt-dlp) in `.env` to use its existing Bilibili login, or supply `BILIBILI_SESSDATA` through the process environment. Browsers are not read by default. Keep credentials out of Git. Importing subtitle files requires `uv sync --extra enhancement`. See the [source selection guide](docs/subtitle-sources.md).
+If subtitles require authentication, set `BILIBILI_SUBTITLE_BROWSER=chrome` (or another browser supported by yt-dlp) in `.env` to use its existing Bilibili login, or supply `BILIBILI_SESSDATA` through the process environment. Browsers are not read by default. Keep credentials out of Git. For public YouTube videos, `transcribe` anonymously tries creator subtitles, original-language automatic captions, and DashScope Qwen Audio 3.1 Filetrans in that order. See the [source selection guide](docs/subtitle-sources.md).
 
 The Protobuf field parsing for Bilibili's newer AI subtitle endpoint references [ccBilly-aipm/bilibili-ai-subtitle](https://github.com/ccBilly-aipm/bilibili-ai-subtitle) (MIT). Thank you to its author for publishing the extraction workflow and protocol implementation that informed this support.
+
+### Unified source access
+
+`video-report preflight URL` anonymously validates subtitle text or reads a small media range. `fetch-source URL --output DIR --browser edge` acquires materials into per-video directories on the user's computer, using login only after an explicit access requirement. `transcribe` / `generate` accept the same four platforms in automatic mode and expose `--browser` / `--cookies`. Embedded callers enable `source_access=True`; login additionally requires `source_login=True` and execution-only `VIDEO_SOURCE_BROWSER` / `VIDEO_SOURCE_COOKIE_FILE` settings. Credentials are not persisted in run metadata.
+
+The website checks access before confirming a task. Successful checks do not add UI messages; blocked inputs show only an inactive resolution link beside the error, not a script workflow. It does not read browser cookies or upload credentials; local material upload/resubmission is not implemented. The standalone acquisition script requires an installed Core and FFmpeg. Bilibili supporter-only videos require the account's actual entitlement; preview-only media is rejected. No real paid-video sample has been validated.
+
+### Douyin and Xiaohongshu acquisition
+
+```sh
+uv run video-report fetch-douyin 'https://www.douyin.com/video/VIDEO_ID' --output .local/media
+uv run video-report fetch-xiaohongshu 'FULL_SHARE_URL' --output .local/media
+```
+
+Both commands try anonymous access first. Multiple subtitle languages without a known original language fall back to audio; translated Chinese is not preferred by default. Available native subtitles are saved to timestamped `subtitles.json` without downloading media. Otherwise, audio is downloaded (or muxed media when no audio-only format exists) and converted to mono 16 kHz WAV. `media.json` records platform, author, source, and authentication mode. ASR, report generation, and web integration are not invoked.
+
+Douyin initializes a visitor session and signs its detail request, following the [upstream fix discussion](https://github.com/yt-dlp/yt-dlp/pull/17826); no F2 dependency is needed. Xiaohongshu preserves share access parameters and reads subtitles from `mediaV2`. Expired links, signature failures, and absent subtitles do not trigger account login.
+
+Only an explicit login-required response enables `--browser edge`, `--cookies LOCAL_FILE`, or the platform-specific `DOUYIN_COOKIE` / `XIAOHONGSHU_COOKIE` environment fallback. Run authenticated acquisition on the user's own computer and transfer only subtitle/audio artifacts. No service-side credential upload or account pool is provided.
+
+When login is required, `uv run python scripts/export_platform_cookies.py xiaohongshu --browser edge` exports only that platform's cookies to `.local/platform-cookies/xiaohongshu.cookies.txt`. The script also supports `douyin`. Files use mode 0600, existing files are not overwritten, and cookie values are never printed. Keep these files local and delete them after use.
 
 ### Optional tools and capabilities
 

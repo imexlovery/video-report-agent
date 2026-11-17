@@ -1,4 +1,4 @@
-"""Bounded public Bilibili URL download and existing-ingest composition."""
+"""Validate video sources and supervise bounded media downloads."""
 
 from __future__ import annotations
 
@@ -13,12 +13,14 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any, Callable
 from urllib.parse import parse_qsl, urlsplit
 
 import httpx
 
-BILIBILI_HOSTS = frozenset({"bilibili.com", "www.bilibili.com"})
+BILIBILI_HOSTS = frozenset({"bilibili.com", "www.bilibili.com", "m.bilibili.com"})
+YOUTUBE_HOSTS = frozenset({"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"})
 _BVID_PATTERN = re.compile(r"BV[0-9A-Za-z]{10}")
 _PAGE_PATTERN = re.compile(r"[0-9]+")
 _SOURCE_NAME = "source"
@@ -39,6 +41,7 @@ class BilibiliSource:
     page_number: int
     submitted_url: str
     canonical_url: str
+    platform = "Bilibili"
 
     @property
     def video_id(self) -> str:
@@ -50,10 +53,51 @@ class BilibiliSource:
 
 
 @dataclass(frozen=True)
+class YouTubeSource:
+    external_id: str
+    canonical_url: str
+    platform = "YouTube"
+
+    @property
+    def video_id(self) -> str:
+        return "youtube-" + self.external_id
+
+
+@dataclass(frozen=True)
+class DouyinSource:
+    external_id: str
+    canonical_url: str
+    platform = "抖音"
+
+    @property
+    def video_id(self) -> str:
+        return "douyin-" + self.external_id
+
+    @property
+    def public_url(self) -> str:
+        return self.canonical_url
+
+
+@dataclass(frozen=True)
+class XiaohongshuSource:
+    external_id: str
+    canonical_url: str
+    platform = "小红书"
+
+    @property
+    def video_id(self) -> str:
+        return "xiaohongshu-" + self.external_id
+
+    @property
+    def public_url(self) -> str:
+        return self.canonical_url
+
+
+@dataclass(frozen=True)
 class DownloadResult:
     """Verified yt-dlp output and public metadata."""
 
-    source: BilibiliSource
+    source: BilibiliSource | YouTubeSource | DouyinSource | XiaohongshuSource
     media_path: Path
     info_path: Path
     title: str
@@ -146,6 +190,41 @@ def validate_bilibili_url(value: object) -> BilibiliSource:
         submitted_url=submitted_url,
         canonical_url=canonical_url,
     )
+
+
+def validate_source_url(
+    value: str, *, allow_youtube: bool = False,
+) -> BilibiliSource | YouTubeSource:
+    if allow_youtube:
+        try:
+            parsed = urlsplit(value.strip())
+            host = parsed.hostname
+        except ValueError as exc:
+            raise UrlIngestError("URL_INVALID", "请输入有效的视频链接。") from exc
+        if host in YOUTUBE_HOSTS:
+            video = None
+            if parsed.path == "/watch" and host != "youtu.be":
+                ids = [v for k, v in parse_qsl(parsed.query, keep_blank_values=True) if k == "v"]
+                if len(ids) == 1:
+                    video = ids[0]
+            else:
+                prefix = ("/" if host == "youtu.be" else next(
+                    (part for part in ("/shorts/", "/embed/", "/live/")
+                     if parsed.path.startswith(part)), None,
+                ))
+                if prefix and parsed.path.startswith(prefix):
+                    video = parsed.path[len(prefix):].removesuffix("/")
+            if (
+                parsed.scheme != "https" or parsed.netloc.lower() != host
+                or not re.fullmatch(r"[A-Za-z0-9_-]{11}", video or "")
+            ):
+                raise UrlIngestError("URL_INVALID", "请输入 YouTube 单视频的 HTTPS 链接。")
+            return YouTubeSource(video, "https://www.youtube.com/watch?v=" + video)
+    return validate_bilibili_url(value)
+
+
+def subtitle_snapshot_name(video_id: str) -> str:
+    return video_id.split("-", 1)[0] + "-subtitles.json"
 
 
 def probe_bilibili_video(
@@ -347,7 +426,9 @@ def _printed_media_path(stdout: object, download_dir: Path) -> Path:
     raise UrlIngestError("DOWNLOAD_ERROR", "yt-dlp did not report a media path")
 
 
-def _metadata(info_path: Path, source: BilibiliSource) -> tuple[str, str, str]:
+def _metadata(
+    info_path: Path, source: BilibiliSource | YouTubeSource | DouyinSource | XiaohongshuSource,
+) -> tuple[str, str, str]:
     try:
         payload = json.loads(info_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -370,7 +451,8 @@ def _metadata(info_path: Path, source: BilibiliSource) -> tuple[str, str, str]:
         raise UrlIngestError("DOWNLOAD_ERROR", "yt-dlp metadata has no uploader")
     title = title.strip()
     uploader = uploader.strip()
-    attribution = f"Bilibili；{uploader}；《{title}》；{source.canonical_url}"
+    url = source.public_url if isinstance(source, XiaohongshuSource) else source.canonical_url
+    attribution = f"{source.platform}；{uploader}；《{title}》；{url}"
     return title, uploader, attribution
 
 
@@ -381,6 +463,29 @@ def download_bilibili_video(
     runner: CommandRunner | None = None,
     request_subtitles: bool = False,
     audio_only: bool = False,
+) -> DownloadResult:
+    return _download_video(
+        source, run_dir, runner=runner, request_subtitles=request_subtitles, audio_only=audio_only,
+    )
+
+
+def download_youtube_audio(source: YouTubeSource, run_dir: Path, metadata: dict) -> DownloadResult:
+    return _download_video(source, run_dir, audio_only=True, media_metadata=metadata)
+
+
+def download_douyin_video(
+    source: DouyinSource, run_dir: Path, metadata: dict, cookie_file: Path,
+) -> DownloadResult:
+    return _download_video(source, run_dir, media_metadata=metadata, cookie_file=cookie_file)
+
+
+def _download_video(
+    source: BilibiliSource | YouTubeSource | DouyinSource | XiaohongshuSource,
+    run_dir: Path, *, runner: CommandRunner | None = None,
+    request_subtitles: bool = False, audio_only: bool = False, media_metadata: dict | None = None,
+    cookie_file: Path | None = None,
+    allow_muxed_audio: bool = False,
+    resolved_info: dict | None = None,
 ) -> DownloadResult:
     """Run the yt-dlp command and verify its run-local output."""
 
@@ -403,7 +508,6 @@ def download_bilibili_video(
         str(download_dir),
         "-o",
         "source.%(ext)s",
-        "--write-info-json",
         "--print",
         "after_move:filepath",
         "--progress", "--newline", "--progress-delta", "2",
@@ -416,14 +520,27 @@ def download_bilibili_video(
         "--socket-timeout", "10", "--retries", "0", "--fragment-retries", "0",
         "--extractor-retries", "0",
     ]
+    if media_metadata is None:
+        command.append("--write-info-json")
+    else:
+        command.append("--no-cache-dir")
+    if cookie_file is not None:
+        command.extend(["--cookies", str(cookie_file)])
     if audio_only:
-        command.extend(["-f", "bestaudio"])
+        command.extend(["-f", "bestaudio/best" if allow_muxed_audio else "bestaudio"])
     else:
         command.extend(["-S", "res:1080,vcodec:h264,acodec:aac", "--merge-output-format", "mp4"])
     if request_subtitles:
         command.extend(["--write-subs", "--sub-langs", "all", "--sub-format", "srt/vtt/ass/best"])
-    command.append(source.canonical_url)
-    completed = _run_download(command, run_dir, runner)
+    if resolved_info is not None:
+        with TemporaryDirectory(prefix="video-report-media-info-") as directory:
+            info_file = Path(directory) / "media.json"
+            info_file.write_text(json.dumps(resolved_info), encoding="utf-8")
+            command.extend(["--load-info-json", str(info_file)])
+            completed = _run_download(command, run_dir, runner)
+    else:
+        command.append(source.canonical_url)
+        completed = _run_download(command, run_dir, runner)
     if getattr(completed, "returncode", None) == 101 or (
         not str(getattr(completed, "stdout", "")).strip()
         and "does not pass filter" in str(getattr(completed, "stderr", ""))
@@ -451,6 +568,12 @@ def download_bilibili_video(
     if not media_path.is_file() or media_path.stat().st_size == 0:
         raise UrlIngestError("DOWNLOAD_ERROR", "downloaded media is missing")
     info_path = download_dir / "source.info.json"
+    if media_metadata is not None:
+        info_path.write_text(json.dumps({
+            "duration": media_metadata["duration_ms"] / 1000,
+            "title": media_metadata["title"],
+            "uploader": media_metadata["uploader"],
+        }, ensure_ascii=False), encoding="utf-8")
     if not info_path.is_file():
         raise UrlIngestError("DOWNLOAD_ERROR", "yt-dlp metadata file is missing")
     title, uploader, attribution = _metadata(info_path, source)

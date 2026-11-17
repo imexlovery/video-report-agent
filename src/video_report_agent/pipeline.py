@@ -11,13 +11,22 @@ import traceback
 import uuid
 from pathlib import Path
 
+from yt_dlp.cookies import YoutubeDLCookieJar
+
 from .asr import AsrError, transcribe_audio
 from .audio import AudioExtractionError, extract_audio
 from .bilibili_subtitles import SubtitleError, fetch_subtitles, validate_sources
 from .diagram import diagram_model_config
 from .failures import asr_failure
-from .ingest import UrlIngestError, download_bilibili_video, validate_bilibili_url
-from .media_config import resolve_media_config
+from .ingest import (
+    BilibiliSource,
+    UrlIngestError,
+    YouTubeSource,
+    download_bilibili_video,
+    download_youtube_audio,
+    subtitle_snapshot_name,
+)
+from .media_config import QWEN_FILETRANS_MODEL, resolve_media_config
 from .paraformer import CloudAsrError
 from .pi import PI_AGENT_DIR, PiError, PiRunner, initialize_pi_config
 from .report_image import render_report_image
@@ -31,6 +40,7 @@ from .reuse import (
     valid_asr_payload,
     validated_transcript,
 )
+from .source_access import download_source_audio, prepare_source, resolve_source
 from .storage import CacheProductionFailed, Store
 from .style_edit import STYLE_DOCUMENTS, edit_report, recover_interrupted_style
 from .term_correction import TERM_DOCUMENTS, search_config
@@ -38,6 +48,7 @@ from .trace import RunTrace
 from .transcript import build_transcript
 from .transcript_foundation import parse_roi
 from .visual import VISUAL_DOCUMENTS, describe_frames, fetch_video, sample_frames
+from .youtube_subtitles import fetch_youtube_subtitles
 
 
 def write_json(path: Path, data: dict) -> None:
@@ -75,6 +86,9 @@ def create_run(
     export=True,
     subtitle_content=None,
     subtitle_name=None,
+    source_access=False,
+    source_login=False,
+    prepared_source=None,
 ) -> Path:
     if report_mode not in ("standard", "brief"):
         raise ValueError("report_mode must be standard or brief")
@@ -99,6 +113,22 @@ def create_run(
         ocr_mode != "off" or subtitle_file or subtitle_content is not None
     ):
         raise ValueError("自动路由不接受 OCR 或导入字幕，请使用手动选源")
+    if source_login and transcript_mode != "auto":
+        raise ValueError("--browser / --cookies 登录取材仅支持自动选源。")
+    source = resolve_source(url)
+    if prepared_source is not None and (
+        prepared_source.get("version") != 1
+        or prepared_source.get("video_id") != source.video_id
+        or not isinstance(prepared_source.get("snapshot"), dict)
+    ):
+        raise ValueError("预检查素材与视频不匹配。")
+    youtube = isinstance(source, YouTubeSource)
+    external = not isinstance(source, BilibiliSource)
+    if external and (transcript_mode != "auto" or visual_enhancement):
+        raise ValueError("此平台仅支持自动选源，暂不支持画面增强。")
+    if transcript_mode == "auto" and asr_backend is None and (external or asr_model is None):
+        asr_backend = "paraformer"
+        asr_model = asr_model or QWEN_FILETRANS_MODEL
     media_config = (
         resolve_media_config(
             asr_backend,
@@ -109,7 +139,6 @@ def create_run(
         if transcript_sources is None or "asr" in transcript_sources
         else {}
     )
-    source = validate_bilibili_url(url)
     diagrams = diagrams and report_mode != "brief"
     drawing = diagram_model_config(diagram_model_selection) if diagrams else None
     run = root.resolve() / uuid.uuid4().hex
@@ -128,6 +157,8 @@ def create_run(
         "style_edit": style_edit,
         "visual_enhancement": visual_enhancement,
         "transcript_mode": transcript_mode,
+        **({"source_access": True} if source_access or (external and not youtube) else {}),
+        **({"source_login": True} if source_login else {}),
         **({"transcript_sources": transcript_sources} if transcript_sources is not None else {}),
         **({"transcript_only": True} if transcript_only else {}),
         "ocr_mode": ocr_mode,
@@ -143,6 +174,10 @@ def create_run(
             {"model_name": model_recovery.get("selected", {}).get("name")} if model_recovery else {}
         ),
     }
+    if prepared_source is not None:
+        metadata.update({key: prepared_source["snapshot"][key] for key in (
+            "title", "description", "uploader", "attribution", "duration_ms",
+        ) if key in prepared_source["snapshot"]})
     store = Store(database_path or root / "state.sqlite3", initialize=db is None)
     content = Path(subtitle_file).read_text() if subtitle_file else subtitle_content
     if content is not None:
@@ -151,6 +186,9 @@ def create_run(
         if db is None:
             store.mark_writes_open(db=connection)
         store.register(run, metadata, status, db=connection)
+        if prepared_source is not None:
+            store.document(run.name, "source-preparation.json",
+                           json.dumps(prepared_source, ensure_ascii=False), db=connection)
         if content is not None:
             store.document(run.name, metadata["subtitle_file"], content, db=connection)
     if export:
@@ -186,6 +224,13 @@ def generate(
     trace = RunTrace(run)
     try:
         documents = store.documents(run.name)
+        prepared = json.loads(documents["source-preparation.json"]) if (
+            documents.get("source-preparation.json")
+        ) else None
+        if prepared and prepared.get("download_info"):
+            store.document(run.name, "source-preparation.json", json.dumps(
+                {k: v for k, v in prepared.items() if k != "download_info"}, ensure_ascii=False,
+            ))
         automatic = metadata.get("transcript_mode") == "auto"
         selected = metadata.get("transcript_sources")
         needs_asr = selected is None or "asr" in selected
@@ -213,11 +258,15 @@ def generate(
             }
             return True
 
-        source = validate_bilibili_url(metadata["url"])
+        source = resolve_source(metadata["url"])
+        youtube = isinstance(source, YouTubeSource)
+        auto_tracks = (["subtitle_track", "bilibili_ai"] if isinstance(source, BilibiliSource)
+                       else ["subtitle_track"])
+        source_cookies = None
         if automatic or (selected and (not needs_asr or any(s != "asr" for s in selected))):
             update("TRANSCRIBING")
             requested = (
-                ["subtitle_track", "bilibili_ai"]
+                auto_tracks
                 if automatic
                 else [
                     s
@@ -227,11 +276,23 @@ def generate(
             )
             with trace.span("subtitles", input={"sources": requested}) as detail:
                 try:
-                    subtitle_snapshot = (
-                        fetch_subtitles(source, requested, first_available=True)
-                        if automatic
-                        else fetch_subtitles(source, requested)
-                    )
+                    if automatic and prepared and prepared.get("snapshot"):
+                        subtitle_snapshot = prepared["snapshot"]
+                        source_cookies = YoutubeDLCookieJar()
+                    elif automatic and metadata.get("source_access"):
+                        _, subtitle_snapshot, source_cookies = prepare_source(
+                            metadata["url"], browser=os.getenv("VIDEO_SOURCE_BROWSER") or None,
+                            cookie_file=os.getenv("VIDEO_SOURCE_COOKIE_FILE") or None,
+                            allow_login=metadata.get("source_login", False),
+                        )
+                    elif youtube:
+                        subtitle_snapshot = fetch_youtube_subtitles(source)
+                    else:
+                        subtitle_snapshot = (
+                            fetch_subtitles(source, requested, first_available=True)
+                            if automatic
+                            else fetch_subtitles(source, requested)
+                        )
                 except SubtitleError as exc:
                     if not needs_asr:
                         raise
@@ -246,9 +307,10 @@ def generate(
                             for s in requested
                         }
                     }
-                write_json(run / "bilibili-subtitles.json", subtitle_snapshot)
-                store.document(run.name, "bilibili-subtitles.json", json.dumps(subtitle_snapshot))
-                documents["bilibili-subtitles.json"] = json.dumps(subtitle_snapshot)
+                name = subtitle_snapshot_name(metadata["video_id"])
+                write_json(run / name, subtitle_snapshot)
+                documents[name] = json.dumps(subtitle_snapshot)
+                store.document(run.name, name, documents[name])
                 metadata.update(
                     {
                         key: subtitle_snapshot[key]
@@ -267,7 +329,7 @@ def generate(
             chosen = next(
                 (
                     kind
-                    for kind in ("subtitle_track", "bilibili_ai")
+                    for kind in auto_tracks
                     if subtitle_snapshot["sources"].get(kind, {}).get("status") == "READY"
                 ),
                 "asr",
@@ -311,7 +373,6 @@ def generate(
             if transcript_source is None and needs_asr:
                 update("DOWNLOADING")
                 with trace.span("download", input={"video_id": metadata["video_id"]}) as detail:
-                    source = validate_bilibili_url(metadata["url"])
                     request_subtitles = metadata.get("transcript_mode") == "fused"
                     audio_only = (
                         bool(selected) or metadata.get("transcript_mode", "asr-only") == "asr-only"
@@ -335,11 +396,15 @@ def generate(
                         if downloaded is not None:
                             break
                         if download_claim == "PRODUCE":
-                            downloaded = download_bilibili_video(
-                                source,
-                                run,
-                                request_subtitles=request_subtitles,
-                                audio_only=audio_only,
+                            downloaded = (
+                                download_source_audio(source, run, metadata, source_cookies,
+                                                      prepared=prepared)
+                                if source_cookies is not None else
+                                download_youtube_audio(source, run, metadata) if youtube
+                                else download_bilibili_video(
+                                    source, run, request_subtitles=request_subtitles,
+                                    audio_only=audio_only,
+                                )
                             )
                             break
                         store.invalidate_media(

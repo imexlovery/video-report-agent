@@ -133,7 +133,7 @@ test -f .env || cp .env.example .env
 
 ### 配置模型与转写
 
-编辑仓库根目录的 `.env`，填写报告模型凭证。使用 ASR 时再配置相应后端；以下示例配置云端 ASR，供自动路由回退或手动选用：
+编辑仓库根目录的 `.env`，填写报告模型凭证。自动选源的默认回退使用百炼 Qwen Audio 3.1 Filetrans，进入 ASR 时读取 `DASHSCOPE_API_KEY`。以下示例的 `ASR_BACKEND` 和 `ASR_MODEL` 用于手动选源，也可通过 CLI 显式指定 ASR 后端和模型：
 
 ```dotenv
 PI_PROVIDER=deepseek
@@ -146,14 +146,14 @@ ASR_MODEL=paraformer-v2
 DASHSCOPE_API_KEY=your-dashscope-api-key
 ```
 
-Apple Silicon 本地转写替换为：
+Apple Silicon 手动使用本地转写时，可将上述 ASR 后端和模型替换为：
 
 ```dotenv
 ASR_BACKEND=mlx
 ASR_MODEL=mlx-community/whisper-large-v3-turbo
 ```
 
-流水线内置 `mlx` 与 `paraformer` 后端，云端还支持代码已适配的 Fun-ASR 文件转写模型。其他 ASR 可用于独立 Skill 流程；接入本流水线需要对应适配器。云端 ASR 会上传音频，报告模型会接收生成所需的转写内容。
+流水线内置 `mlx` 与百炼 `paraformer` 后端。百炼后端支持 Qwen Audio 3.1 Filetrans、Paraformer-v2 和代码列出的 Fun-ASR 文件转写模型。其他 ASR 可用于独立 Skill 流程。云端 ASR 会上传音频，报告模型会接收生成所需的转写内容。
 
 ### 生成与查看
 
@@ -169,7 +169,7 @@ uv run video-report generate 'https://www.bilibili.com/video/BV...' --report-mod
 
 ### 选择字幕与转写来源
 
-CLI 默认使用 `auto`，按“作者字幕轨 → B站 AI 自动字幕 `ai-zh` → ASR”依次尝试。取得可用字幕正文后就进入报告生成；只有前两路不可用时才运行 ASR。也可以通过 `--sources` 主动选择：
+CLI 默认使用 `auto`，按“作者字幕轨 → B站 AI 自动字幕 `ai-zh` → ASR”依次尝试。取得可用字幕正文后就进入报告生成；只有前两路不可用时才运行 ASR，默认使用百炼 Qwen Audio 3.1 Filetrans。也可以通过 `--sources` 主动选择：
 
 | 来源 | CLI 参数 | 说明 |
 |---|---|---|
@@ -189,9 +189,49 @@ uv run video-report transcribe 'https://www.bilibili.com/video/BV...' --sources 
 
 手动选源只采集选中的来源；上例的 AI 字幕不可用时会报错。多路对照会同时采集 AI 字幕和 ASR。仅选字幕且未开启画面辅助时，不下载媒体，也不要求 ASR 凭证。
 
-字幕需要登录态时，在 `.env` 中设置 `BILIBILI_SUBTITLE_BROWSER=chrome`（或 yt-dlp 支持的其他浏览器），读取该浏览器已有的 B站登录态；也可通过进程环境提供 `BILIBILI_SESSDATA`。默认不读取浏览器，凭据不要提交到 Git。导入字幕需要 `uv sync --extra enhancement`。详细规则见[选源说明](docs/subtitle-sources.md)。
+字幕需要登录态时，在 `.env` 中设置 `BILIBILI_SUBTITLE_BROWSER=chrome`（或 yt-dlp 支持的其他浏览器），读取该浏览器已有的 B站登录态；也可通过进程环境提供 `BILIBILI_SESSDATA`。默认不读取浏览器，凭据不要提交到 Git。`transcribe` 也支持公开 YouTube 单视频，匿名按作者字幕、原语言自动字幕、百炼 Qwen Audio 3.1 Filetrans 的顺序生成文字稿。详细规则见[选源说明](docs/subtitle-sources.md)。
 
 B站 AI 自动字幕的新接口 Protobuf 字段解析参考了 [ccBilly-aipm/bilibili-ai-subtitle](https://github.com/ccBilly-aipm/bilibili-ai-subtitle)（MIT）。感谢作者公开字幕提取流程与协议解析实现，为本项目的 AI 字幕支持提供了参考。
+
+### 统一链接检查与用户电脑取材
+
+```sh
+uv run video-report preflight '完整视频链接或分享文字'
+uv run video-report fetch-source '完整视频链接或分享文字' --output .local/materials --browser edge
+uv run video-report transcribe '完整视频链接或分享文字' --browser edge
+```
+
+支持 B站 BV／分 P／短链／移动链接、YouTube watch／Shorts／youtu.be、抖音分享链接和小红书完整分享链接／短链。自动识别平台，只接受单视频；小红书保留访问所需分享参数。`preflight` 始终匿名，验证字幕正文或读取媒体地址的少量字节，返回 READY、LOGIN_REQUIRED 或 UNAVAILABLE；不会执行 ASR、报告或整段下载。
+
+`fetch-source` 在每个视频子目录保存 `source-material.json`，无字幕时下载媒体并提取音频。只有明确需要登录时读取所选浏览器或 `--cookies` 文件。`transcribe`／`generate` 的自动选源也接入同一取材入口；新增平台暂不支持手动多路选源与画面增强。嵌入调用可用 `create_run(..., transcript_mode="auto", source_access=True)`；账号登录须另显式启用 `source_login=True`，并通过执行环境传入 `VIDEO_SOURCE_BROWSER` 或 `VIDEO_SOURCE_COOKIE_FILE`，不把凭据值写入任务。
+
+网站确认弹窗立即打开，视频信息与分钟先显示，匿名素材检查独立继续；成功时不显示额外提示，失败时只在报错旁预留未启用的“去获取”链接；普通网页不能读取其他网站的登录 Cookie。独立取材脚本需要在安装 Core 与 FFmpeg 的用户电脑运行，素材保存在电脑，Cookie 不上传网站；目前没有网页素材上传或自动续交功能。
+
+B站充电内容需要账号具有对应视频权限。检测到试看时停止，不把片段当成完整视频；该路径尚无真实付费样本验证，不承诺所有充电视频都可获取。
+
+### 抖音与小红书取材
+
+```sh
+uv run video-report fetch-douyin 'https://www.douyin.com/video/VIDEO_ID' --output .local/media
+uv run video-report fetch-xiaohongshu '完整小红书分享链接' --output .local/media
+```
+
+两者默认匿名访问，优先取得平台返回的原语言字幕；多轨但无法确认原语言时改取音频，不默认选择中文译文。可用字幕保存为带时间戳的 `subtitles.json`，不再下载媒体。没有可用字幕时优先下载音轨；平台只提供音视频合流时下载合流，再提取 16 kHz 单声道 WAV。`media.json` 保存作者、实际平台、来源与匿名／登录模式。入口不运行 ASR、报告或网站任务。
+
+抖音自动建立访客会话，补齐 UIFID 与 `x-secsdk-web-signature`，继续复用 yt-dlp 下载；协议参考 [上游修复讨论](https://github.com/yt-dlp/yt-dlp/pull/17826)，无需 F2。小红书接受分享文字与 `xhslink.com` 短链，保留必要的 `xsec_token`／`xsec_source` 分享参数，从页面 `mediaV2` 读取字幕。链接失效、签名拒绝或字幕不存在不会自动触发账号登录。
+
+只有平台明确返回登录要求时，才使用显式提供的 `--browser edge`、`--cookies 本机文件` 或对应平台环境变量 `DOUYIN_COOKIE`／`XIAOHONGSHU_COOKIE`。即使配置了它们，也先匿名尝试。浏览器与文件在运行命令的用户电脑读取，Cookie 不上传服务端、不写入取材产物或日志。建议需要登录的取材在用户本机完成，只交付字幕／音频。
+
+需要单独准备本机登录态时，可运行备用脚本；不要提前为公开内容导出 Cookie：
+
+```sh
+uv run python scripts/export_platform_cookies.py xiaohongshu --browser edge
+# 仅登录受限时读取；仍先匿名尝试
+uv run video-report fetch-xiaohongshu '完整分享链接' --output .local/media \
+  --cookies .local/platform-cookies/xiaohongshu.cookies.txt
+```
+
+脚本也支持 `douyin`，仅保留该平台未过期 Cookie，默认保存到已忽略的 `.local/platform-cookies/`，文件权限为 0600，不覆盖已有文件、不输出 Cookie 内容。文件应留在用户本机，用完后删除；本轮没有服务端 Cookie 上传或集中存储功能。平台接口变化可能需要更新适配。
 
 ### 报告流程中可选的工具与能力
 

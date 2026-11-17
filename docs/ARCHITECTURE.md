@@ -10,7 +10,7 @@
 |---|---|
 | [cli.py](../src/video_report_agent/cli.py)、[execution.py](../src/video_report_agent/execution.py) | CLI 参数、Worker 进程组、期限与取消监督 |
 | [pipeline.py](../src/video_report_agent/pipeline.py) | 创建输入和状态，顺序组织下载、转写、生成、截图与错误落盘 |
-| [ingest.py](../src/video_report_agent/ingest.py)、[audio.py](../src/video_report_agent/audio.py) | Bilibili 来源验证、所选分 P 元数据预查询、下载、16 kHz 单声道音频、时长与静音检测 |
+| [ingest.py](../src/video_report_agent/ingest.py)、[audio.py](../src/video_report_agent/audio.py) | 来源验证、Bilibili 分 P 元数据预查询、视频或音轨下载、16 kHz 单声道音频、时长与静音检测 |
 | [asr.py](../src/video_report_agent/asr.py)、[paraformer.py](../src/video_report_agent/paraformer.py) | 本地/云端 ASR、云任务轮询、两段结果与时间戳合并 |
 | [transcript.py](../src/video_report_agent/transcript.py)、[transcript_foundation.py](../src/video_report_agent/transcript_foundation.py) | 来源事件、规范单元、可选字幕/OCR 融合 |
 | [visual.py](../src/video_report_agent/visual.py) | 视觉专用视频轨、抽帧、带时间戳的画面描述及报告读取约定；实验脚本复用此模块 |
@@ -29,7 +29,19 @@
 
 ## 任务数据与接口
 
-默认 Web/CLI 用 `auto` 依次尝试作者字幕轨、`ai-zh`、ASR，任一字幕正文可用即结束采集。Local 可主动使用自选来源。自选文字稿入口接收有序的 `transcript_sources`：ASR、非 AI 字幕轨、B站 `ai-zh`。第一路可用来源提供时间轴，其余已选来源参与局部校对；未选 ASR 时跳过媒体下载、音频提取与 ASR。字幕获取、来源状态、缓存及对照命令见 [可选文字稿来源](subtitle-sources.md)。`transcribe` 在 `TRANSCRIPT_READY` 结束，不启动后续 Agent/报告阶段；旧显式 ASR-only/fused 调用保持兼容。
+Standard 与 Brief 题头来源均按实际平台、作者、原视频完整标题和 URL 展示；共用 Skill 从来源元数据／链接确定平台，产品沿用 `input.json.attribution`，未知字段省略，不默认 Bilibili。此规则作用于后续生成，不重写已有报告。
+
+统一平台入口为 `source_access.py`：`resolve_source` 解析链接／分享文本，`preflight_source` 始终匿名验证字幕正文或媒体地址的少量字节，`prepare_source` 在明确权限限制后按授权使用用户电脑上的登录态。CLI 自动模式设置 `source_access=True`；浏览器名／Cookie 文件路径只通过 Worker 环境传递，任务仅记录是否允许登录。网站任务不启用登录回退。充电试看在检查与下载两个位置拒绝；账号实际付费权限由平台决定，B站充电内容尚无真实付费样本验证。YouTube 会员样本匿名检查的问题暂存于 [PLAN](PLAN.md)。
+
+`prepare_source_result` 在同一次匿名检查中通过 `on_metadata` 提前返回视频信息，最终分别提供公开检查结果与服务端素材快照；`preflight_source` 只取公开部分。YouTube 单次解析同时提供元数据、字幕轨和媒体格式，字幕正文优先获取；无字幕时只读取少量媒体字节验证可访问性，不提前下载完整音视频。调用方可以把可信素材传给 `create_run(prepared_source=...)`，任务复用已取得的元数据与字幕正文。无字幕时，10 分钟内的媒体格式通过临时 `--load-info-json` 文件交给 yt-dlp，避免再次解析视频页；过期或下载失败时重新解析。格式快照过滤 Cookie／Authorization 等凭据，临时文件在下载结束时删除。
+
+素材保存在 SQLite 的 `source-preparation.json` 文档中，不导出到报告或 Agent 工作目录；Worker 读取后移除数据库文档中的临时媒体地址，字幕正文仍可参与任务复用。取消确认不创建 Core 任务，预检查缓存生命周期由调用方管理。
+
+抖音与小红书取材入口为 `fetch-douyin` / `fetch-xiaohongshu`。平台模块负责受限分享链接解析、匿名元数据与字幕发现；`platform_media.py` 保存规范字幕，缺少可用字幕时复用受监督 yt-dlp 下载和 FFmpeg 音频提取。抖音自动取得访客身份并补齐详情请求签名；小红书保留分享访问参数并解析 `mediaV2` 字幕。仅明确的登录要求触发用户本机浏览器或文件 Cookie 回退；链接无效、签名失败不触发登录。凭据按平台域筛选，不发送到媒体 CDN；下载临时文件在结束后删除。本机备用导出脚本仅保存 0600 文件，不上传凭据。输出按视频 ID 分隔，`media.json` 记录来源和 auth_mode；不创建流水线任务，不执行 ASR、Pi 或报告。
+
+YouTube 单视频走自动选源路径，由 [youtube_subtitles.py](../src/video_report_agent/youtube_subtitles.py) 读取原语言作者字幕或原语言自动字幕，无可用字幕再下载音轨，由百炼 Qwen Audio 3.1 Filetrans 自动识别语言并保留方言表达。复用规范转写、缓存和 `TRANSCRIPT_READY` 终态。见 [文字稿来源](subtitle-sources.md#youtube-单视频)。
+
+默认 Web/CLI 的 Bilibili `auto` 依次尝试作者字幕轨、`ai-zh`、Qwen Audio 3.1 Filetrans。任一字幕正文可用即结束采集。Local 可主动使用自选来源。自选文字稿入口接收有序的 `transcript_sources`：ASR、非 AI 字幕轨、B站 `ai-zh`。第一路可用来源提供时间轴，其余已选来源参与局部校对；未选 ASR 时跳过媒体下载、音频提取与 ASR。字幕获取、来源状态、缓存及对照命令见 [可选文字稿来源](subtitle-sources.md)。`transcribe` 在 `TRANSCRIPT_READY` 结束，不启动后续 Agent/报告阶段；旧显式 ASR-only/fused 调用保持兼容。
 
 `create_run` 登记数据库中的输入与初始状态，再导出任务材料；独立运行默认 `runs/state.sqlite3`，嵌入调用显式传 `database_path`。受监督 execution 原子认领 run，并把数据库路径与执行 ID 传给可信 Python Worker。调用方持有业务事务时，Core 方法使用同一个 `db`，不另开连接或提交；提交后才导出与派发。详见 [SQLite 存储](sqlite-storage.md)。
 
@@ -105,7 +117,7 @@ Docker 调用方使用 `PI_TASK_RUNS_VOLUME` 和 `PI_TASK_RUNS_ROOT` 选择已�
 
 CLI 从当前运行目录加载 `.env`，进程环境优先；调用方可传模型选择，或通过 `PiRunner(skill_dir=...)` / `VIDEO_REPORT_SKILL_DIR` 指定完整 Skill。Pi 状态存于运行目录的 `config/pi/`（可由环境指定），初始化默认模型配置不覆盖已有设置。安装与依赖细节沿用 [README](../README.md)。
 
-`usage.json` 缓存 LLM 聚合，按日志文件元信息及语义版本失效。ASR backend/时长元数据有进程内有界缓存，费用每次按当前传入费率计算。DeepSeek V4.1 Flash 的 QwenAI 北京价格估算按北京时间 08:00–22:00 忙时、其余时间闲时计算；当前规则依照供应商价目表，不加入日历假日判断。其他可用 Pi 美元估算单列；均为估算，不是实时查询或供应商账单。缺失价格保持未知。
+`usage.json` 缓存 LLM 聚合，按日志文件元信息及语义版本失效。ASR 后端、模型和时长元数据有进程内有界缓存。按时长计费的模型使用当前传入费率计算。Qwen Audio 3.1 Filetrans 的供应商用量单独保存，费用保持未知。DeepSeek V4.1 Flash 的 QwenAI 北京价格估算按北京时间 08:00–22:00 忙时、其余时间闲时计算；当前规则依照供应商价目表，不加入日历假日判断。其他可用 Pi 美元估算单列；均为估算，不是实时查询或供应商账单。缺失价格保持未知。
 
 `ingest.probe_bilibili_video(source)` 通过现有 yt-dlp 只查询指定分 P 的标题与时长，不下载媒体、不创建任务文件；拒绝未知、非正时长和超过 5 小时的视频。返回规范 URL、BVID、分 P、video_id、title、duration。查询失败抛出 `UrlIngestError`，整体查询上限 45 秒。
 

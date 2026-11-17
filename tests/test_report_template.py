@@ -38,7 +38,7 @@ def test_header_contract_keeps_summary_and_full_source_metadata():
     assert '<p class="lead">{{LEAD}}</p>' in template
     assert '<p class="meta">{{ATTRIBUTION}}</p>' in template
     assert "导语固定保留" in template
-    assert "平台；UP 主；《原视频完整标题》；可点击的原视频裸 URL" in template
+    assert "实际平台；作者；《原视频完整标题》；可点击的原视频裸 URL" in template
     assert ".meta a{color:inherit;text-decoration:underline}" in template
 
 

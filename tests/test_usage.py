@@ -4,6 +4,18 @@ from pathlib import Path
 import pytest
 
 from video_report_agent import usage
+from video_report_agent.media_config import QWEN_FILETRANS_MODEL
+
+
+def test_qwen_filetrans_does_not_use_duration_rate(tmp_path):
+    (tmp_path / "asr.json").write_text(json.dumps({
+        "backend": "paraformer",
+        "model": QWEN_FILETRANS_MODEL,
+        "usage": {"content_duration_ms": 60000, "service_usage": {"duration": 60}},
+    }))
+    for costs in (usage.call_costs, usage.cached_call_costs):
+        result = costs(tmp_path, {}, 0.00008)
+        assert result["asr_cny_estimate"] is None and result["asr_basis"] == "unknown"
 
 
 def message(cost=0.12, tokens=120):

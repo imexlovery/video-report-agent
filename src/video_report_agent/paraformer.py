@@ -1,4 +1,4 @@
-"""Beijing Paraformer file recognition; one submission, no automatic resubmit."""
+"""DashScope file recognition; one submission, no automatic resubmit."""
 
 import json
 import os
@@ -12,7 +12,7 @@ import httpx
 
 from .asr import AsrError, AsrRun, normalize_asr_segments
 from .audio import midpoint_pause_ms, probe_audio, split_pcm_audio
-from .media_config import DEFAULT_BASE_URL, cloud_asr_parameters
+from .media_config import DEFAULT_BASE_URL, QWEN_FILETRANS_MODEL, cloud_asr_parameters
 from .redaction import redact
 
 
@@ -23,7 +23,7 @@ class CloudAsrError(AsrError):
         self.stage = stage
         self.task_id = task_id
         self.detail = redact(detail)
-        super().__init__(f"Paraformer {stage}: {self.detail}")
+        super().__init__(f"DashScope ASR {stage}: {self.detail}")
 
     def to_dict(self):
         return {"stage": self.stage, "task_id": self.task_id, "detail": self.detail,
@@ -58,6 +58,7 @@ class ParaformerBackend:
         defaults = cloud_asr_parameters(model)
         self.task_path = task_path
         self.model = model
+        self.engine = "qwen-audio" if model == QWEN_FILETRANS_MODEL else "paraformer"
         self.base_url = base_url or DEFAULT_BASE_URL
         self.api_key = os.getenv("DASHSCOPE_API_KEY", "").strip()
         if not self.api_key:
@@ -75,8 +76,9 @@ class ParaformerBackend:
                 raise CloudAsrError(
                     "existing_task", "已有云端任务；未重新提交", saved.get("task_id")
                 )
-        if language != "zh":
-            raise AsrError("ASR requires explicit Chinese language")
+        expected_language = "auto" if self.model == QWEN_FILETRANS_MODEL else "zh"
+        if language != expected_language:
+            raise AsrError(f"{self.model} ASR requires language mode {expected_language!r}")
         if not audio_path.is_file() or not audio_path.stat().st_size:
             raise AsrError("audio input is missing or empty")
         if audio_path.stat().st_size > 1_000_000_000:
@@ -158,14 +160,18 @@ class ParaformerBackend:
         def total(values):
             return sum(values) if all(value is not None for value in values) else None
 
+        usage_fields = ("duration",)
+        if self.model == QWEN_FILETRANS_MODEL:
+            usage_fields += ("input_tokens", "output_tokens", "total_tokens")
         usage = {
             "content_duration_ms": total([r.usage.get("content_duration_ms") for r in results]),
-            "service_usage": {"duration": total([
-                r.usage.get("service_usage", {}).get("duration") for r in results
-            ])},
+            "service_usage": {
+                key: total([r.usage.get("service_usage", {}).get(key) for r in results])
+                for key in usage_fields
+            },
         }
         return AsrRun(
-            engine="paraformer", backend="paraformer", provider="dashscope",
+            engine=self.engine, backend="paraformer", provider="dashscope",
             model=self.model, language=language,
             elapsed_ms=round((time.perf_counter() - started) * 1000),
             segments=tuple(segments), usage=usage,
@@ -295,7 +301,7 @@ class ParaformerBackend:
             ]
             normalized = normalize_asr_segments(rows)
             return AsrRun(
-                engine="paraformer",
+                engine=self.engine,
                 backend="paraformer",
                 provider="dashscope",
                 model=self.model,

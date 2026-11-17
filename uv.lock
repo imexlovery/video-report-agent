@@ -1141,6 +1141,7 @@ dependencies = [
     { name = "opencc-python-reimplemented" },
     { name = "playwright" },
     { name = "pydantic" },
+    { name = "pysubs2" },
     { name = "python-dotenv" },
     { name = "yt-dlp" },
 ]
@@ -1148,7 +1149,6 @@ dependencies = [
 [package.optional-dependencies]
 enhancement = [
     { name = "onnxruntime" },
-    { name = "pysubs2" },
     { name = "rapidocr" },
 ]
 mlx = [
@@ -1169,7 +1169,7 @@ requires-dist = [
     { name = "opencc-python-reimplemented", specifier = ">=0.1.7" },
     { name = "playwright", specifier = ">=1.62.0" },
     { name = "pydantic", specifier = ">=2.13.4" },
-    { name = "pysubs2", marker = "extra == 'enhancement'", specifier = ">=1.9.0" },
+    { name = "pysubs2", specifier = ">=1.9.0" },
     { name = "python-dotenv", specifier = ">=1.2.3" },
     { name = "rapidocr", marker = "extra == 'enhancement'", specifier = ">=3.9.0" },
     { name = "yt-dlp", specifier = ">=2026.8.19" },

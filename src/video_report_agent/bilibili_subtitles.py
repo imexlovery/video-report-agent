@@ -335,8 +335,10 @@ class BilibiliSubtitles:
                 unique.setdefault((str(track.get("id")), track.get("lan")), track)
         return list(unique.values()), logged_in, failures
 
-    def fetch(self, source, selected=SUBTITLE_SOURCES, *, first_available=False):
+    def fetch(self, source, selected=SUBTITLE_SOURCES, *, first_available=False, on_metadata=None):
         info = self.video_info(source)
+        if on_metadata:
+            on_metadata(info)
         if not selected:
             return {**info, "sources": {}, "authenticated": None, "warnings": []}
         tracks, logged_in, failures = self.tracks(info)
@@ -418,6 +420,8 @@ class BilibiliSubtitles:
         return snapshot
 
 
-def fetch_subtitles(source, selected=SUBTITLE_SOURCES, *, browser=None, first_available=False):
-    with BilibiliSubtitles(browser=browser, authenticate=bool(selected)) as client:
+def fetch_subtitles(
+    source, selected=SUBTITLE_SOURCES, *, browser=None, first_available=False, authenticate=True,
+):
+    with BilibiliSubtitles(browser=browser, authenticate=authenticate and bool(selected)) as client:
         return client.fetch(source, selected, first_available=first_available)
