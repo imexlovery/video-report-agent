@@ -10,7 +10,7 @@
 |---|---|
 | 在线生成报告 | [打开 VReport](https://vreport.tri4t.xyz) |
 | 把已有转写交给自己的 Coding Agent | [下载 Skill ZIP v0.7.0](https://github.com/imexlovery/video-report-agent/releases/download/skill-zip-v0.7.0/video-report-skill-v0.7.0.zip) · [简短使用说明与示例](docs/skill-bundle/README.md) |
-| 从视频链接运行完整流程 | [完整 CLI 安装说明](#方式二运行完整-cli-流水线) |
+| 从 B 站、YouTube、抖音或小红书链接获取转写或生成报告 | [完整 CLI 安装说明](#方式二运行完整-cli-流水线) |
 
 ## 先看成品
 
@@ -46,7 +46,7 @@ Skill 包含四部分，使用时需要保留整个目录：
 
 两种模式都先读完整来源，保留关键数字口径、条件、归属与不确定性。Skill 要求识别并排除商业推广，正常教程和实测中的有效内容仍需保留。报告使用隐藏的 `data-source-units` 绑定来源位置；这方便核对，但不能单凭绑定证明内容正确。
 
-最终交付是内联样式的自包含 `report.html`，可直接用浏览器打开。质量取决于转写、模型与实际检查；Skill 不包含 ASR 引擎，也不替用户配置模型。
+最终交付是内联样式的自包含 `report.html`，可直接用浏览器打开。质量取决于转写、模型与实际检查。独立 Skill ZIP 包含编辑规则、模板和示例；直接从视频链接获取字幕或转写需要安装下文的 Core CLI。
 
 ## 方式一：交给自己的 Coding Agent
 
@@ -102,12 +102,11 @@ my-report/
 
 ## 方式二：运行完整 CLI 流水线
 
-适合从 Bilibili 视频链接开始，自动获取文字稿并生成报告：
+支持 B 站、YouTube、抖音和小红书的单视频链接或含单个链接的分享文字。可以只生成转写，也可以生成 Standard 或 Brief 报告：
 
 ```text
-Bilibili URL
-  → 获取文字稿：作者字幕 → B站 AI 自动字幕 → ASR（默认依次尝试）
-      仅需 ASR 时：yt-dlp 下载 → FFmpeg 提取音频 → 语音识别
+视频链接或分享文字
+  → 自动识别平台，优先获取可用字幕；没有可用字幕时提取音频并转写
   → 规范转写（正文、来源 ID、时间）
   → Pi RPC + video-report Skill → HTML
   → Chromium 导出 PNG 长图
@@ -162,14 +161,17 @@ ASR_MODEL=mlx-community/whisper-large-v3-turbo
 uv run video-report generate 'https://www.bilibili.com/video/BV...'
 
 # 精简速览
-uv run video-report generate 'https://www.bilibili.com/video/BV...' --report-mode brief
+uv run video-report generate 'https://www.youtube.com/watch?v=VIDEO_ID' --report-mode brief
+
+# 只生成转写，不调用报告模型
+uv run video-report transcribe 'https://www.youtube.com/watch?v=VIDEO_ID'
 ```
 
-输出目录为 `runs/<run-id>/`，主要阅读产物是 `report.html` 和 `report.png`；`transcript.md` 可用于来源核对。截图失败时 HTML 仍可完成，查看 `status.json` 的 `image_error`，确认 PNG 是否生成。
+输出目录为 `runs/<run-id>/`。`transcribe` 交付 `transcript.md`；`generate` 继续生成 `report.html` 和 `report.png`。截图失败时 HTML 仍可完成，可查看 `status.json` 的 `image_error`。
 
 ### 选择字幕与转写来源
 
-CLI 默认使用 `auto`，按“作者字幕轨 → B站 AI 自动字幕 `ai-zh` → ASR”依次尝试。取得可用字幕正文后就进入报告生成；只有前两路不可用时才运行 ASR，默认使用百炼 Qwen Audio 3.1 Filetrans。也可以通过 `--sources` 主动选择：
+CLI 默认使用 `auto`。B 站依次尝试作者字幕、B 站 AI 自动字幕 `ai-zh`；YouTube 依次尝试原语言作者字幕、原语言自动字幕；抖音和小红书优先使用可用的原语言平台字幕。没有可用字幕时才提取音频，默认用百炼 Qwen Audio 3.1 Filetrans 转写。仅 B 站支持通过 `--sources` 手动选源：
 
 | 来源 | CLI 参数 | 说明 |
 |---|---|---|
@@ -189,7 +191,7 @@ uv run video-report transcribe 'https://www.bilibili.com/video/BV...' --sources 
 
 手动选源只采集选中的来源；上例的 AI 字幕不可用时会报错。多路对照会同时采集 AI 字幕和 ASR。仅选字幕且未开启画面辅助时，不下载媒体，也不要求 ASR 凭证。
 
-字幕需要登录态时，在 `.env` 中设置 `BILIBILI_SUBTITLE_BROWSER=chrome`（或 yt-dlp 支持的其他浏览器），读取该浏览器已有的 B站登录态；也可通过进程环境提供 `BILIBILI_SESSDATA`。默认不读取浏览器，凭据不要提交到 Git。`transcribe` 也支持公开 YouTube 单视频，匿名按作者字幕、原语言自动字幕、百炼 Qwen Audio 3.1 Filetrans 的顺序生成文字稿。详细规则见[选源说明](docs/subtitle-sources.md)。
+手动提取 B 站字幕需要登录态时，在 `.env` 中设置 `BILIBILI_SUBTITLE_BROWSER=chrome`（或 yt-dlp 支持的其他浏览器），读取该浏览器已有的 B 站登录态；也可通过进程环境提供 `BILIBILI_SESSDATA`。默认不读取浏览器，凭据不要提交到 Git。详细规则见[选源说明](docs/subtitle-sources.md)。
 
 B站 AI 自动字幕的新接口 Protobuf 字段解析参考了 [ccBilly-aipm/bilibili-ai-subtitle](https://github.com/ccBilly-aipm/bilibili-ai-subtitle)（MIT）。感谢作者公开字幕提取流程与协议解析实现，为本项目的 AI 字幕支持提供了参考。
 
@@ -197,13 +199,12 @@ B站 AI 自动字幕的新接口 Protobuf 字段解析参考了 [ccBilly-aipm/bi
 
 ```sh
 uv run video-report preflight '完整视频链接或分享文字'
-uv run video-report fetch-source '完整视频链接或分享文字' --output .local/materials --browser edge
-uv run video-report transcribe '完整视频链接或分享文字' --browser edge
+uv run video-report fetch-source '完整视频链接或分享文字' --output .local/materials
 ```
 
-支持 B站 BV／分 P／短链／移动链接、YouTube watch／Shorts／youtu.be、抖音分享链接和小红书完整分享链接／短链。自动识别平台，只接受单视频；小红书保留访问所需分享参数。`preflight` 始终匿名，验证字幕正文或读取媒体地址的少量字节，返回 READY、LOGIN_REQUIRED 或 UNAVAILABLE；不会执行 ASR、报告或整段下载。
+支持 B 站 BV／分 P／短链／移动链接、YouTube watch／Shorts／youtu.be、抖音分享链接和小红书完整分享链接／短链。自动识别平台，只接受单视频；小红书保留访问所需分享参数。`preflight` 始终匿名，验证字幕正文或读取媒体地址的少量字节，返回 `READY`、`LOGIN_REQUIRED` 或 `UNAVAILABLE`；不会执行 ASR、报告或整段下载。
 
-`fetch-source` 在每个视频子目录保存 `source-material.json`，无字幕时下载媒体并提取音频。只有明确需要登录时读取所选浏览器或 `--cookies` 文件。`transcribe`／`generate` 的自动选源也接入同一取材入口；新增平台暂不支持手动多路选源与画面增强。嵌入调用可用 `create_run(..., transcript_mode="auto", source_access=True)`；账号登录须另显式启用 `source_login=True`，并通过执行环境传入 `VIDEO_SOURCE_BROWSER` 或 `VIDEO_SOURCE_COOKIE_FILE`，不把凭据值写入任务。
+`fetch-source` 在每个视频子目录保存 `source-material.json`，无字幕时下载媒体并提取音频，止于取材。`transcribe`／`generate` 的自动选源使用同一入口。平台明确要求登录时，可在本机为这三个命令加 `--browser edge` 或 `--cookies 本机文件`。手动选源和画面增强仅支持 B 站。嵌入调用可用 `create_run(..., transcript_mode="auto", source_access=True)`；账号登录须另显式启用 `source_login=True`，并通过执行环境传入 `VIDEO_SOURCE_BROWSER` 或 `VIDEO_SOURCE_COOKIE_FILE`，不把凭据值写入任务。
 
 网站确认弹窗立即打开，视频信息与分钟先显示，匿名素材检查独立继续；成功时不显示额外提示，失败时只在报错旁预留未启用的“去获取”链接；普通网页不能读取其他网站的登录 Cookie。独立取材脚本需要在安装 Core 与 FFmpeg 的用户电脑运行，素材保存在电脑，Cookie 不上传网站；目前没有网页素材上传或自动续交功能。
 
@@ -280,7 +281,7 @@ DeepSeek 优先读取 `DEEPSEEK_SEARCH_API_KEY`，留空时使用 `DEEPSEEK_API_
 - **独立绘图模型**：可同时设置 `DIAGRAM_PROVIDER`、`DIAGRAM_MODEL`，可选 `DIAGRAM_THINKING`；在 Pi 中配置对应 provider 的 API Key 或 OAuth。留空时沿用主报告模型和认证，新配置只影响新任务。OAuth 需要无隔离 Local；Docker 绘图使用 API Key。见 [Core 架构](docs/ARCHITECTURE.md#完成与检查)。
 - **隔离**：示例使用 `PI_TASK_ISOLATION=local`，Pi 工具拥有本机用户权限。Docker 模式需要应用镜像、Docker daemon 与同一 scope 的健康 task cleaner；选用后失败不会退回本地执行。详见 [Core 架构](docs/ARCHITECTURE.md)。
 - **追踪**：`run.trace.jsonl` 记录流水线阶段，`pi.events.jsonl` 记录 Agent 模型与工具事件。完成需等待 `agent_settled`、最终 assistant `stopReason == "stop"`，并通过 HTML 交付检查。
-- **边界**：内置视频入口面向公开 Bilibili 视频；字幕提取可使用已有登录态，私有视频不在支持范围。视频上限 5 小时，执行期限 30 分钟；本地停止后已提交的云 ASR 仍可能继续计费。默认只理解转写，画面中的非语音信息可能缺失。完整流水线的原生 Windows 运行未在此作为已验证方案。
+- **边界**：内置入口只接受上述四个平台的单视频链接，优先匿名取材，能否访问受平台、链接和账号权限影响。视频上限 5 小时，执行期限 30 分钟；本地停止后已提交的云 ASR 仍可能继续计费。默认只理解转写，画面中的非语音信息可能缺失。完整流水线的原生 Windows 运行未在此作为已验证方案。
 
 ## 开发与进一步阅读
 

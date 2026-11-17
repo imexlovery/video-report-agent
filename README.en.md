@@ -10,7 +10,7 @@ Turn video transcripts into HTML reports you can skim, study and save. Use the [
 |---|---|
 | Generate a report online | [Open VReport](https://vreport.tri4t.xyz) |
 | Give an existing transcript to your own Coding Agent | [Download Skill ZIP v0.7.0](https://github.com/imexlovery/video-report-agent/releases/download/skill-zip-v0.7.0/video-report-skill-v0.7.0.zip) · [Quick start and examples (Chinese)](docs/skill-bundle/README.md) |
-| Run the complete workflow from a video URL | [CLI installation](#option-2-run-the-complete-cli-pipeline) |
+| Transcribe or generate a report from a Bilibili, YouTube, Douyin or Xiaohongshu link | [CLI installation](#option-2-run-the-complete-cli-pipeline) |
 
 ## See the result
 
@@ -46,7 +46,7 @@ The templates supply layout and expression tools; the source determines the sect
 
 Both modes read the full source and preserve number definitions, conditions, attribution and uncertainty. The Skill instructs the Agent to identify and exclude commercial promotion while retaining useful tutorial and test content. Hidden `data-source-units` attributes link claims to source locations; those links aid review but do not prove correctness.
 
-Delivery is a self-contained `report.html` with inline styles, ready to open in a browser. Quality depends on the transcript, model and actual checks. The Skill does not include an ASR engine or configure your model.
+Delivery is a self-contained `report.html` with inline styles, ready to open in a browser. Quality depends on the transcript, model and actual checks. The standalone Skill ZIP contains editing instructions, templates and examples. To fetch subtitles or transcribe directly from a video link, install the Core CLI below.
 
 ## Option 1: use your own Coding Agent
 
@@ -103,12 +103,11 @@ Replace `standard` with `brief` for an overview. Open `output/report.html` in a 
 
 ## Option 2: run the complete CLI pipeline
 
-Start with a Bilibili URL and automate transcript acquisition and report generation:
+Use a single-video URL or share text containing one link from Bilibili, YouTube, Douyin or Xiaohongshu. Export a transcript or continue to a Standard or Brief report:
 
 ```text
-Bilibili URL
-  → get text: creator subtitles → Bilibili AI subtitles → ASR (default order)
-      when ASR is needed: yt-dlp download → FFmpeg audio extraction → ASR
+Video URL or share text
+  → detect the platform and fetch usable subtitles, or extract and transcribe audio
   → canonical transcript (text, source IDs, times)
   → Pi RPC + video-report Skill → HTML
   → Chromium PNG export
@@ -163,14 +162,17 @@ The pipeline includes `mlx` and DashScope's `paraformer` backend. The DashScope 
 uv run video-report generate 'https://www.bilibili.com/video/BV...'
 
 # Concise overview
-uv run video-report generate 'https://www.bilibili.com/video/BV...' --report-mode brief
+uv run video-report generate 'https://www.youtube.com/watch?v=VIDEO_ID' --report-mode brief
+
+# Transcript only, without calling the report model
+uv run video-report transcribe 'https://www.youtube.com/watch?v=VIDEO_ID'
 ```
 
-Outputs live in `runs/<run-id>/`. Read `report.html` or `report.png`; use `transcript.md` for source review. HTML can complete even if image export fails, so check `image_error` in `status.json` before assuming the PNG exists.
+Outputs live in `runs/<run-id>/`. `transcribe` writes `transcript.md`; `generate` continues to `report.html` and `report.png`. If image export fails, the HTML remains available and `status.json` records `image_error`.
 
 ### Choose subtitle and transcript sources
 
-The CLI defaults to `auto`: creator-provided subtitles → Bilibili AI subtitles (`ai-zh`) → ASR. Once usable subtitle content is available, report generation starts. When both subtitle sources are unavailable, the default fallback is DashScope Qwen Audio 3.1 Filetrans. Use `--sources` to choose explicitly:
+The CLI defaults to `auto`. Bilibili tries creator subtitles, then Bilibili AI subtitles (`ai-zh`). YouTube tries original-language creator subtitles, then original-language automatic captions. Douyin and Xiaohongshu prefer usable original-language platform subtitles. When no usable subtitles are available, the CLI extracts audio and defaults to DashScope Qwen Audio 3.1 Filetrans. Manual selection with `--sources` is available for Bilibili:
 
 | Source | CLI arguments | Behavior |
 |---|---|---|
@@ -190,13 +192,20 @@ uv run video-report transcribe 'https://www.bilibili.com/video/BV...' --sources 
 
 Manual selection collects only the selected sources; the AI-only example fails if its subtitles are unavailable. Selecting both AI subtitles and ASR collects both. Subtitle-only runs require no media download or ASR credentials unless visual enhancement is enabled.
 
-If subtitles require authentication, set `BILIBILI_SUBTITLE_BROWSER=chrome` (or another browser supported by yt-dlp) in `.env` to use its existing Bilibili login, or supply `BILIBILI_SESSDATA` through the process environment. Browsers are not read by default. Keep credentials out of Git. For public YouTube videos, `transcribe` anonymously tries creator subtitles, original-language automatic captions, and DashScope Qwen Audio 3.1 Filetrans in that order. See the [source selection guide](docs/subtitle-sources.md).
+If manual Bilibili subtitle extraction requires authentication, set `BILIBILI_SUBTITLE_BROWSER=chrome` (or another browser supported by yt-dlp) in `.env` to use its existing Bilibili login, or supply `BILIBILI_SESSDATA` through the process environment. Browsers are not read by default. Keep credentials out of Git. See the [source selection guide](docs/subtitle-sources.md).
 
 The Protobuf field parsing for Bilibili's newer AI subtitle endpoint references [ccBilly-aipm/bilibili-ai-subtitle](https://github.com/ccBilly-aipm/bilibili-ai-subtitle) (MIT). Thank you to its author for publishing the extraction workflow and protocol implementation that informed this support.
 
 ### Unified source access
 
-`video-report preflight URL` anonymously validates subtitle text or reads a small media range. `fetch-source URL --output DIR --browser edge` acquires materials into per-video directories on the user's computer, using login only after an explicit access requirement. `transcribe` / `generate` accept the same four platforms in automatic mode and expose `--browser` / `--cookies`. Embedded callers enable `source_access=True`; login additionally requires `source_login=True` and execution-only `VIDEO_SOURCE_BROWSER` / `VIDEO_SOURCE_COOKIE_FILE` settings. Credentials are not persisted in run metadata.
+```sh
+uv run video-report preflight 'VIDEO_URL_OR_SHARE_TEXT'
+uv run video-report fetch-source 'VIDEO_URL_OR_SHARE_TEXT' --output .local/materials
+```
+
+`preflight` anonymously checks subtitle text or reads a small media range and returns `READY`, `LOGIN_REQUIRED` or `UNAVAILABLE`. `fetch-source` saves `source-material.json` in a per-video directory and extracts audio if no subtitles are available. It stops before ASR or report generation.
+
+`transcribe` and `generate` use the same acquisition path in automatic mode. If the platform explicitly requires login, run `fetch-source`, `transcribe` or `generate` on your computer with `--browser edge` or `--cookies LOCAL_FILE`. Manual source selection and visual enhancement are available only for Bilibili. Embedded callers enable `source_access=True`; login additionally requires `source_login=True` and execution-only `VIDEO_SOURCE_BROWSER` / `VIDEO_SOURCE_COOKIE_FILE` settings. Credentials are not persisted in run metadata.
 
 The website checks access before confirming a task. Successful checks do not add UI messages; blocked inputs show only an inactive resolution link beside the error, not a script workflow. It does not read browser cookies or upload credentials; local material upload/resubmission is not implemented. The standalone acquisition script requires an installed Core and FFmpeg. Bilibili supporter-only videos require the account's actual entitlement; preview-only media is rejected. No real paid-video sample has been validated.
 
@@ -262,7 +271,7 @@ After saving the configuration, add `--term-correction` to the generation comman
 - **Independent drawing model:** set both `DIAGRAM_PROVIDER` and `DIAGRAM_MODEL`, with optional `DIAGRAM_THINKING`, and configure that provider's API Key or OAuth in Pi. Leave them blank to inherit the report model and authentication. Changes apply to new tasks. OAuth requires Local execution; Docker drawing uses API Keys. See [Core architecture](docs/ARCHITECTURE.md).
 - **Isolation:** the example uses `PI_TASK_ISOLATION=local`; Pi tools have your local user permissions. Docker mode requires an application image, Docker daemon and healthy task cleaner with the same scope. It does not fall back to local execution on failure. See [Core architecture](docs/ARCHITECTURE.md).
 - **Traces:** `run.trace.jsonl` records pipeline stages; `pi.events.jsonl` records model and tool events. Completion requires `agent_settled`, final assistant `stopReason == "stop"`, and HTML delivery checks.
-- **Limits:** built-in ingestion targets public Bilibili videos; subtitle extraction can use an existing login, while private videos are outside the supported scope. Videos are limited to five hours, execution to 30 minutes. Submitted cloud ASR may continue charging after a local stop. Default understanding comes from the transcript, so visual-only information may be missing. Native Windows execution of the full pipeline is not presented as verified here.
+- **Limits:** built-in ingestion accepts single videos from the four supported platforms and tries anonymous access first. Availability depends on the platform, link and account permissions. Videos are limited to five hours, execution to 30 minutes. Submitted cloud ASR may continue charging after a local stop. Default understanding comes from the transcript, so visual-only information may be missing. Native Windows execution of the full pipeline is not presented as verified here.
 
 ## Development and further reading
 
