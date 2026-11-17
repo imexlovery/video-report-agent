@@ -29,6 +29,8 @@
 
 ## 任务数据与接口
 
+Standard 与 Brief 题头来源均按实际平台、作者、原视频完整标题和 URL 展示；共用 Skill 从来源元数据／链接确定平台，产品沿用 `input.json.attribution`，未知字段省略，不默认 Bilibili。此规则作用于后续生成，不重写已有报告。
+
 统一平台入口为 `source_access.py`：`resolve_source` 解析链接／分享文本，`preflight_source` 始终匿名验证字幕正文或媒体地址的少量字节，`prepare_source` 在明确权限限制后按授权使用用户电脑上的登录态。CLI 自动模式设置 `source_access=True`；浏览器名／Cookie 文件路径只通过 Worker 环境传递，任务仅记录是否允许登录。网站任务不启用登录回退。充电试看在检查与下载两个位置拒绝；账号实际付费权限由平台决定，尚无付费样本实测。
 
 `prepare_source_result` 在同一次匿名检查中通过 `on_metadata` 提前返回视频信息，最终分别提供公开检查结果与服务端素材快照；`preflight_source` 只取公开部分。YouTube 单次解析同时提供元数据、字幕轨和媒体格式，字幕正文优先获取；无字幕时只读取少量媒体字节验证可访问性，不提前下载完整音视频。调用方可以把可信素材传给 `create_run(prepared_source=...)`，任务复用已取得的元数据与字幕正文。无字幕时，10 分钟内的媒体格式通过临时 `--load-info-json` 文件交给 yt-dlp，避免再次解析视频页；过期或下载失败时重新解析。格式快照过滤 Cookie／Authorization 等凭据，临时文件在下载结束时删除。
