@@ -88,11 +88,14 @@ def test_youtube_login_retry_passes_cookie_to_subtitle_reader(monkeypatch):
     jar = YoutubeDLCookieJar()
     captured = []
 
-    def captions(source, *, cookies):
+    def captions(source, *, cookies, info, on_metadata):
         captured.append(cookies)
         return {"sources": {"subtitle_track": {"status": "READY", "count": 1}}}
 
     monkeypatch.setattr(source_access, "fetch_youtube_subtitles", captions)
+    monkeypatch.setattr(source_access.YoutubeDL, "extract_info", lambda *a, **kw: {
+        "id": "vid_0000001", "title": "Fixture", "duration": 10,
+    })
     source = source_access.resolve_source("https://youtu.be/vid_0000001")
     snapshot, result_jar, access, audio = source_access.inspect_source(source, cookies=jar)
     assert captured == [jar] and result_jar is jar

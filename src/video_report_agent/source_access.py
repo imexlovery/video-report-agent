@@ -3,6 +3,7 @@
 import json
 import re
 import tempfile
+import time
 from pathlib import Path
 from types import MethodType
 from urllib.parse import urlsplit
@@ -75,7 +76,7 @@ class AccessLogger(QuietLogger):
             self.preview = True
 
 
-def _subtitle_snapshot(source, cookies):
+def _subtitle_snapshot(source, cookies, on_metadata=None):
     if isinstance(source, BilibiliSource):
         with httpx.Client(timeout=15, follow_redirects=False, headers={
             "User-Agent": "Mozilla/5.0", "Referer": "https://www.bilibili.com/",
@@ -84,7 +85,7 @@ def _subtitle_snapshot(source, cookies):
                 if cookie.name == "SESSDATA":
                     client.cookies.set("SESSDATA", cookie.value, domain="api.bilibili.com")
             with BilibiliSubtitles(client=client, authenticate=False) as subtitles:
-                return subtitles.fetch(source, first_available=True)
+                return subtitles.fetch(source, first_available=True, on_metadata=on_metadata)
     if isinstance(source, YouTubeSource):
         return fetch_youtube_subtitles(source, cookies=cookies)
     return None
@@ -110,13 +111,26 @@ def _open_media(ydl, formats):
     return False
 
 
-def inspect_source(source, *, cookies=None, check_audio=True):
+def inspect_source(source, *, cookies=None, check_audio=True, on_metadata=None, capture=None):
     """Return a public snapshot and ephemeral cookies; never load a browser implicitly."""
     jar = cookies if cookies is not None else YoutubeDLCookieJar()
     snapshot = {"sources": {"subtitle_track": {"status": "ABSENT", "count": 0}}}
     subtitle_login = False
+    metadata_sent = False
+
+    def notify(snapshot):
+        nonlocal metadata_sent
+        if on_metadata and not metadata_sent:
+            metadata_sent = True
+            on_metadata(_public_metadata(source, snapshot))
+
+    def notify_info(info):
+        notify({"title": info.get("title") or source.video_id,
+                "duration_ms": round((info.get("duration") or 0) * 1000)})
+
     try:
-        snapshot = _subtitle_snapshot(source, jar) or snapshot
+        snapshot = (_subtitle_snapshot(source, jar, notify)
+                    if isinstance(source, BilibiliSource) else None) or snapshot
         subtitle_login = any(x.get("status") == "LOGIN_REQUIRED"
                              for x in snapshot["sources"].values())
     except SubtitleError as exc:
@@ -124,10 +138,12 @@ def inspect_source(source, *, cookies=None, check_audio=True):
     except UrlIngestError:
         pass
     if any(x.get("status") == "READY" for x in snapshot["sources"].values()):
+        notify(snapshot)
         return snapshot, jar, "READY", "SKIPPED"
     logger = AccessLogger()
     options = {"quiet": True, "no_warnings": True, "logger": logger, "cachedir": False,
-               "noplaylist": True, "socket_timeout": 10, "extractor_retries": 0}
+               "noplaylist": True, "socket_timeout": 10, "extractor_retries": 0,
+               "ignore_no_formats_error": True, "video_report_metadata_callback": notify_info}
     with YoutubeDL(options) as ydl:
         ydl.cookiejar = jar
         key = None
@@ -151,6 +167,10 @@ def inspect_source(source, *, cookies=None, check_audio=True):
             return snapshot, jar, "LOGIN_REQUIRED", "PREVIEW_ONLY"
         if info.get("is_live") or info.get("live_status") == "is_live":
             return snapshot, jar, "UNAVAILABLE", "LIVE_UNSUPPORTED"
+        if isinstance(source, YouTubeSource):
+            snapshot = fetch_youtube_subtitles(source, cookies=jar, info=info, on_metadata=notify)
+            if snapshot["sources"]["subtitle_track"]["status"] == "READY":
+                return snapshot, jar, "READY", "SKIPPED"
         if isinstance(source, (BilibiliSource, YouTubeSource)):
             duration = info.get("duration")
             if (isinstance(duration, bool) or not isinstance(duration, (int, float))
@@ -160,11 +180,13 @@ def inspect_source(source, *, cookies=None, check_audio=True):
             uploader = info.get("uploader") or info.get("channel") or "作者未记录"
             snapshot.update(title=title, uploader=uploader, duration_ms=round(duration * 1000),
                             attribution=f"{source.platform}；{uploader}；《{title}》；{source.canonical_url}")
+            notify(snapshot)
         else:
             snapshot.update(metadata_for(source, info))
             snapshot["attribution"] = (
                 f"{source.platform}；{snapshot['uploader']}；《{snapshot['title']}》；{source.canonical_url}"
             )
+            notify(snapshot)
             with tempfile.TemporaryDirectory() as directory:
                 selected = save_subtitles(ydl, info.get("subtitles") or {}, Path(directory),
                                           snapshot["duration_ms"], info.get("language"))
@@ -176,6 +198,8 @@ def inspect_source(source, *, cookies=None, check_audio=True):
                 snapshot["sources"] = {"subtitle_track": track}
             if track["status"] == "READY":
                 return snapshot, jar, "READY", "SKIPPED"
+        if capture is not None:
+            capture["download_info"] = _download_info(info)
         available = (_open_media(ydl, info.get("formats") or []) if check_audio
                      else bool(info.get("formats")))
         return snapshot, jar, ("READY" if available else
@@ -183,20 +207,58 @@ def inspect_source(source, *, cookies=None, check_audio=True):
                                    "READY" if available else "FAILED")
 
 
-def preflight_source(value):
-    source = resolve_source(value)
-    snapshot, _, access, audio = inspect_source(source)
+def _public_metadata(source, snapshot):
     return {
         "platform": source.platform, "platform_key": platform_key(source),
         "url": source.canonical_url, "video_id": source.video_id,
         "page_number": getattr(source, "page_number", 1),
         "title": snapshot.get("title", "视频取材检查"),
         "duration": snapshot.get("duration_ms", 0) / 1000,
-        "access": access, "audio": audio,
+    }
+
+
+def _download_info(info):
+    """Only media-format fields may cross into the server-side preparation record."""
+    fields = {"url", "ext", "format_id", "vcodec", "acodec", "abr", "tbr", "asr",
+              "quality", "preference", "language", "protocol", "manifest_url", "container",
+              "audio_channels", "width", "height", "fps", "filesize", "filesize_approx"}
+    def headers(value):
+        return {k: v for k, v in value.items()
+                if k.lower() in {"user-agent", "referer", "origin", "accept", "accept-language"}}
+    formats = []
+    for value in info.get("formats") or []:
+        item = {k: v for k, v in value.items() if k in fields}
+        item["http_headers"] = headers(value.get("http_headers") or {})
+        if value.get("fragments"):
+            item["fragments"] = [{k: v for k, v in fragment.items() if k in {"url", "duration"}}
+                                 for fragment in value["fragments"]]
+        formats.append(item)
+    return {"id": info.get("id"), "title": info.get("title"), "duration": info.get("duration"),
+            "extractor": info.get("extractor"), "extractor_key": info.get("extractor_key"),
+            "webpage_url": info.get("webpage_url"), "formats": formats,
+            "http_headers": headers(info.get("http_headers") or {})}
+
+
+def prepare_source_result(value, *, on_metadata=None):
+    source = resolve_source(value)
+    captured = {}
+    snapshot, _, access, audio = inspect_source(
+        source, on_metadata=on_metadata, capture=captured,
+    )
+    public = {
+        **_public_metadata(source, snapshot), "access": access, "audio": audio,
         "subtitles": {name: {k: v for k, v in item.items() if k != "body"}
                       for name, item in snapshot["sources"].items()},
         "available": access == "READY",
     }
+    material = ({"version": 1, "video_id": source.video_id, "url": source.canonical_url,
+                 "prepared_at": time.time(), "snapshot": snapshot, **captured}
+                if access == "READY" else None)
+    return {"public": public, "material": material}
+
+
+def preflight_source(value):
+    return prepare_source_result(value)["public"]
 
 
 def prepare_source(value, *, browser=None, cookie_file=None, allow_login=True):
@@ -215,11 +277,22 @@ def prepare_source(value, *, browser=None, cookie_file=None, allow_login=True):
     return source, snapshot, cookies
 
 
-def download_source_audio(source, output, snapshot, cookies):
+def download_source_audio(source, output, snapshot, cookies, *, prepared=None):
     with tempfile.TemporaryDirectory(prefix="video-report-source-") as directory:
         path = Path(directory) / "cookies.txt"
         path.touch(mode=0o600)
         cookies.save(str(path), ignore_discard=True, ignore_expires=True)
+        info = (prepared.get("download_info") if prepared and
+                time.time() - prepared.get("prepared_at", 0) < 600 else None)
+        if info:
+            try:
+                return _download_video(source, output, media_metadata=snapshot,
+                                       cookie_file=path, audio_only=True, allow_muxed_audio=True,
+                                       resolved_info=info)
+            except UrlIngestError as exc:
+                if exc.category != "DOWNLOAD_ERROR":
+                    raise
+                # Signed media URLs can expire while queued; refresh only after a failed reuse.
         return _download_video(source, output, media_metadata=snapshot,
                                cookie_file=path, audio_only=True, allow_muxed_audio=True)
 

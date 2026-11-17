@@ -31,6 +31,10 @@
 
 统一平台入口为 `source_access.py`：`resolve_source` 解析链接／分享文本，`preflight_source` 始终匿名验证字幕正文或媒体地址的少量字节，`prepare_source` 在明确权限限制后按授权使用用户电脑上的登录态。CLI 自动模式设置 `source_access=True`；浏览器名／Cookie 文件路径只通过 Worker 环境传递，任务仅记录是否允许登录。网站任务不启用登录回退。充电试看在检查与下载两个位置拒绝；账号实际付费权限由平台决定，尚无付费样本实测。
 
+`prepare_source_result` 在同一次匿名检查中通过 `on_metadata` 提前返回视频信息，最终分别提供公开检查结果与服务端素材快照；`preflight_source` 只取公开部分。YouTube 单次解析同时提供元数据、字幕轨和媒体格式，字幕正文优先获取；无字幕时只读取少量媒体字节验证可访问性，不提前下载完整音视频。调用方可以把可信素材传给 `create_run(prepared_source=...)`，任务复用已取得的元数据与字幕正文。无字幕时，10 分钟内的媒体格式通过临时 `--load-info-json` 文件交给 yt-dlp，避免再次解析视频页；过期或下载失败时重新解析。格式快照过滤 Cookie／Authorization 等凭据，临时文件在下载结束时删除。
+
+素材保存在 SQLite 的 `source-preparation.json` 文档中，不导出到报告或 Agent 工作目录；Worker 读取后移除数据库文档中的临时媒体地址，字幕正文仍可参与任务复用。取消确认不创建 Core 任务，预检查缓存生命周期由调用方管理。
+
 抖音与小红书取材入口为 `fetch-douyin` / `fetch-xiaohongshu`。平台模块负责受限分享链接解析、匿名元数据与字幕发现；`platform_media.py` 保存规范字幕，缺少可用字幕时复用受监督 yt-dlp 下载和 FFmpeg 音频提取。抖音自动取得访客身份并补齐详情请求签名；小红书保留分享访问参数并解析 `mediaV2` 字幕。仅明确的登录要求触发用户本机浏览器或文件 Cookie 回退；链接无效、签名失败不触发登录。凭据按平台域筛选，不发送到媒体 CDN；下载临时文件在结束后删除。本机备用导出脚本仅保存 0600 文件，不上传凭据。输出按视频 ID 分隔，`media.json` 记录来源和 auth_mode；不创建流水线任务，不执行 ASR、Pi 或报告。
 
 YouTube 单视频走自动选源路径，由 [youtube_subtitles.py](../src/video_report_agent/youtube_subtitles.py) 读取作者字幕或原语言自动字幕，无可用字幕再下载音轨，由百炼 Qwen Audio 3.1 Filetrans 自动识别语言并保留方言表达。复用规范转写、缓存和 `TRANSCRIPT_READY` 终态。见 [文字稿来源](subtitle-sources.md#youtube-单视频)。

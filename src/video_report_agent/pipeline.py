@@ -11,6 +11,8 @@ import traceback
 import uuid
 from pathlib import Path
 
+from yt_dlp.cookies import YoutubeDLCookieJar
+
 from .asr import AsrError, transcribe_audio
 from .audio import AudioExtractionError, extract_audio
 from .bilibili_subtitles import SubtitleError, fetch_subtitles, validate_sources
@@ -86,6 +88,7 @@ def create_run(
     subtitle_name=None,
     source_access=False,
     source_login=False,
+    prepared_source=None,
 ) -> Path:
     if report_mode not in ("standard", "brief"):
         raise ValueError("report_mode must be standard or brief")
@@ -113,6 +116,12 @@ def create_run(
     if source_login and transcript_mode != "auto":
         raise ValueError("--browser / --cookies 登录取材仅支持自动选源。")
     source = resolve_source(url)
+    if prepared_source is not None and (
+        prepared_source.get("version") != 1
+        or prepared_source.get("video_id") != source.video_id
+        or not isinstance(prepared_source.get("snapshot"), dict)
+    ):
+        raise ValueError("预检查素材与视频不匹配。")
     youtube = isinstance(source, YouTubeSource)
     external = not isinstance(source, BilibiliSource)
     if external and (transcript_mode != "auto" or visual_enhancement):
@@ -165,6 +174,10 @@ def create_run(
             {"model_name": model_recovery.get("selected", {}).get("name")} if model_recovery else {}
         ),
     }
+    if prepared_source is not None:
+        metadata.update({key: prepared_source["snapshot"][key] for key in (
+            "title", "description", "uploader", "attribution", "duration_ms",
+        ) if key in prepared_source["snapshot"]})
     store = Store(database_path or root / "state.sqlite3", initialize=db is None)
     content = Path(subtitle_file).read_text() if subtitle_file else subtitle_content
     if content is not None:
@@ -173,6 +186,9 @@ def create_run(
         if db is None:
             store.mark_writes_open(db=connection)
         store.register(run, metadata, status, db=connection)
+        if prepared_source is not None:
+            store.document(run.name, "source-preparation.json",
+                           json.dumps(prepared_source, ensure_ascii=False), db=connection)
         if content is not None:
             store.document(run.name, metadata["subtitle_file"], content, db=connection)
     if export:
@@ -208,6 +224,13 @@ def generate(
     trace = RunTrace(run)
     try:
         documents = store.documents(run.name)
+        prepared = json.loads(documents["source-preparation.json"]) if (
+            documents.get("source-preparation.json")
+        ) else None
+        if prepared and prepared.get("download_info"):
+            store.document(run.name, "source-preparation.json", json.dumps(
+                {k: v for k, v in prepared.items() if k != "download_info"}, ensure_ascii=False,
+            ))
         automatic = metadata.get("transcript_mode") == "auto"
         selected = metadata.get("transcript_sources")
         needs_asr = selected is None or "asr" in selected
@@ -253,7 +276,10 @@ def generate(
             )
             with trace.span("subtitles", input={"sources": requested}) as detail:
                 try:
-                    if automatic and metadata.get("source_access"):
+                    if automatic and prepared and prepared.get("snapshot"):
+                        subtitle_snapshot = prepared["snapshot"]
+                        source_cookies = YoutubeDLCookieJar()
+                    elif automatic and metadata.get("source_access"):
                         _, subtitle_snapshot, source_cookies = prepare_source(
                             metadata["url"], browser=os.getenv("VIDEO_SOURCE_BROWSER") or None,
                             cookie_file=os.getenv("VIDEO_SOURCE_COOKIE_FILE") or None,
@@ -371,7 +397,8 @@ def generate(
                             break
                         if download_claim == "PRODUCE":
                             downloaded = (
-                                download_source_audio(source, run, metadata, source_cookies)
+                                download_source_audio(source, run, metadata, source_cookies,
+                                                      prepared=prepared)
                                 if source_cookies is not None else
                                 download_youtube_audio(source, run, metadata) if youtube
                                 else download_bilibili_video(

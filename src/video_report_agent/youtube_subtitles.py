@@ -73,7 +73,9 @@ def _read_track(ydl, entries, duration_ms, *, automatic):
     return []
 
 
-def fetch_youtube_subtitles(source: YouTubeSource, *, cookies=None) -> dict:
+def fetch_youtube_subtitles(
+    source: YouTubeSource, *, cookies=None, info=None, on_metadata=None,
+) -> dict:
     options = {
         "quiet": True, "no_warnings": True, "noplaylist": True, "cachedir": False,
         "socket_timeout": 10, "extractor_retries": 0, "ignore_no_formats_error": True,
@@ -81,10 +83,11 @@ def fetch_youtube_subtitles(source: YouTubeSource, *, cookies=None) -> dict:
     with YoutubeDL(options) as ydl:
         if cookies is not None:
             ydl.cookiejar = cookies
-        try:
-            info = ydl.extract_info(source.canonical_url, download=False, ie_key="Youtube")
-        except DownloadError:
-            raise UrlIngestError("YOUTUBE_UNAVAILABLE", "无法匿名读取这个 YouTube 视频。") from None
+        if info is None:
+            try:
+                info = ydl.extract_info(source.canonical_url, download=False, ie_key="Youtube")
+            except DownloadError:
+                raise UrlIngestError("YOUTUBE_UNAVAILABLE", "无法读取这个 YouTube 视频。") from None
         if not info or info.get("id") != source.external_id or info.get("is_live"):
             raise UrlIngestError("URL_INVALID", "请选择可以访问的 YouTube 单视频。")
         duration = info.get("duration")
@@ -95,6 +98,8 @@ def fetch_youtube_subtitles(source: YouTubeSource, *, cookies=None) -> dict:
         title = info.get("title") or source.external_id
         uploader = info.get("uploader") or info.get("channel") or "作者未记录"
         duration_ms = round(duration * 1000)
+        if on_metadata:
+            on_metadata({"title": title, "uploader": uploader, "duration_ms": duration_ms})
         item = {"status": "ABSENT", "count": 0}
         manual = info.get("subtitles") or {}
         language = info.get("language")

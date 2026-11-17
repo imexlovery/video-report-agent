@@ -123,6 +123,9 @@ def extract_douyin(self, url):
     for cookie in list(self.cookiejar):
         if not platform_domain(cookie.domain, "douyin.com"):
             self.cookiejar.clear(cookie.domain, cookie.path, cookie.name)
+    callback = self.get_param("video_report_metadata_callback")
+    if callback:
+        callback(result)
     # Limit subtitle discovery to the returned Douyin data, not the TikTok webpage fallback.
     subtitles = self._get_subtitles(detail, video_id, None)
     original = (detail["video"].get("cla_info") or {}).get("original_language_info") or {}

@@ -346,6 +346,9 @@ class Store:
             "status.json": encode(record["status"]),
             **documents,
         }.items():
+            if name == "source-preparation.json":
+                # Signed media addresses stay in server storage, outside the agent workspace.
+                continue
             path = run / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(body)

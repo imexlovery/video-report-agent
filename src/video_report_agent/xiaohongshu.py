@@ -84,6 +84,15 @@ def extract_xiaohongshu(self, url):
         raise ExtractorError("XHS_LINK_UNAVAILABLE", expected=True)
     if note.get("type") != "video" or not note.get("video"):
         raise ExtractorError("XHS_NOT_VIDEO", expected=True)
+    callback = self.get_param("video_report_metadata_callback")
+    if callback:
+        video = note["video"]
+        duration_ms = video.get("media", {}).get("video", {}).get("duration")
+        duration = (duration_ms / 1000 if isinstance(duration_ms, (int, float))
+                    else video.get("capa", {}).get("duration"))
+        callback({"title": note.get("title") or note_id,
+                  "uploader": note.get("user", {}).get("nickname") or "作者未记录",
+                  "duration": duration})
     # Reuse upstream format parsing without a second share-page request.
     original_page = self._download_webpage
     self._download_webpage = lambda *args, **kwargs: page

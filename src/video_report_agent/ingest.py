@@ -13,6 +13,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any, Callable
 from urllib.parse import parse_qsl, urlsplit
 
@@ -484,6 +485,7 @@ def _download_video(
     request_subtitles: bool = False, audio_only: bool = False, media_metadata: dict | None = None,
     cookie_file: Path | None = None,
     allow_muxed_audio: bool = False,
+    resolved_info: dict | None = None,
 ) -> DownloadResult:
     """Run the yt-dlp command and verify its run-local output."""
 
@@ -530,8 +532,15 @@ def _download_video(
         command.extend(["-S", "res:1080,vcodec:h264,acodec:aac", "--merge-output-format", "mp4"])
     if request_subtitles:
         command.extend(["--write-subs", "--sub-langs", "all", "--sub-format", "srt/vtt/ass/best"])
-    command.append(source.canonical_url)
-    completed = _run_download(command, run_dir, runner)
+    if resolved_info is not None:
+        with TemporaryDirectory(prefix="video-report-media-info-") as directory:
+            info_file = Path(directory) / "media.json"
+            info_file.write_text(json.dumps(resolved_info), encoding="utf-8")
+            command.extend(["--load-info-json", str(info_file)])
+            completed = _run_download(command, run_dir, runner)
+    else:
+        command.append(source.canonical_url)
+        completed = _run_download(command, run_dir, runner)
     if getattr(completed, "returncode", None) == 101 or (
         not str(getattr(completed, "stdout", "")).strip()
         and "does not pass filter" in str(getattr(completed, "stderr", ""))
