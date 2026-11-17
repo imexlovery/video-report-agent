@@ -198,7 +198,7 @@ The Protobuf field parsing for Bilibili's newer AI subtitle endpoint references 
 
 `video-report preflight URL` anonymously validates subtitle text or reads a small media range. `fetch-source URL --output DIR --browser edge` acquires materials into per-video directories on the user's computer, using login only after an explicit access requirement. `transcribe` / `generate` accept the same four platforms in automatic mode and expose `--browser` / `--cookies`. Embedded callers enable `source_access=True`; login additionally requires `source_login=True` and execution-only `VIDEO_SOURCE_BROWSER` / `VIDEO_SOURCE_COOKIE_FILE` settings. Credentials are not persisted in run metadata.
 
-The website checks access before confirming a task. Successful checks do not add UI messages; blocked inputs show only a disabled login placeholder, not a script workflow. It does not read browser cookies or upload credentials; local material upload/resubmission is not implemented. The standalone acquisition script requires an installed Core and FFmpeg. Bilibili supporter-only videos require the account's actual entitlement; preview-only media is rejected. No real paid-video sample has been validated.
+The website checks access before confirming a task. Successful checks do not add UI messages; blocked inputs show only an inactive resolution link beside the error, not a script workflow. It does not read browser cookies or upload credentials; local material upload/resubmission is not implemented. The standalone acquisition script requires an installed Core and FFmpeg. Bilibili supporter-only videos require the account's actual entitlement; preview-only media is rejected. No real paid-video sample has been validated.
 
 ### Douyin and Xiaohongshu acquisition
 
