@@ -15,6 +15,8 @@ from .audio import midpoint_pause_ms, probe_audio, split_pcm_audio
 from .media_config import DEFAULT_BASE_URL, QWEN_FILETRANS_MODEL, cloud_asr_parameters
 from .redaction import redact
 
+FILETRANS_TOKEN_FIELDS = ("input_tokens", "output_tokens", "total_tokens")
+
 
 class CloudAsrError(AsrError):
     def __init__(self, stage, detail, task_id=None, *, http_status=None, provider_code=None):
@@ -162,7 +164,7 @@ class ParaformerBackend:
 
         usage_fields = ("duration",)
         if self.model == QWEN_FILETRANS_MODEL:
-            usage_fields += ("input_tokens", "output_tokens", "total_tokens")
+            usage_fields += FILETRANS_TOKEN_FIELDS
         usage = {
             "content_duration_ms": total([r.usage.get("content_duration_ms") for r in results]),
             "service_usage": {
@@ -300,6 +302,14 @@ class ParaformerBackend:
                 for s in transcript["sentences"]
             ]
             normalized = normalize_asr_segments(rows)
+            provider_usage = completed.get("usage") or {}
+            service_usage = redact(provider_usage)
+            if self.model == QWEN_FILETRANS_MODEL:
+                # Generic diagnostics drop token fields; retain only known numeric counters.
+                for key in FILETRANS_TOKEN_FIELDS:
+                    count = provider_usage.get(key)
+                    if type(count) is int and count >= 0:
+                        service_usage[key] = count
             return AsrRun(
                 engine=self.engine,
                 backend="paraformer",
@@ -319,7 +329,7 @@ class ParaformerBackend:
                 timings={"upload_ms": upload_ms, "task_wait_ms": wait_ms},
                 usage={
                     "content_duration_ms": transcript.get("content_duration_in_milliseconds"),
-                    "service_usage": redact(completed.get("usage", {})),
+                    "service_usage": service_usage,
                 },
                 dropped_empty_raw_segment_ordinals=normalized.dropped_empty_raw_segment_ordinals,
                 dropped_non_positive_raw_segment_ordinals=(

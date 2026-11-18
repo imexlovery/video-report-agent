@@ -7,15 +7,25 @@ from video_report_agent import usage
 from video_report_agent.media_config import QWEN_FILETRANS_MODEL
 
 
-def test_qwen_filetrans_does_not_use_duration_rate(tmp_path):
+@pytest.mark.parametrize("service_usage,expected", [
+    ({"duration": 60, "input_tokens": 10000, "output_tokens": 2000}, .0134),
+    ({"duration": 60, "input_tokens": 10000, "output_tokens": 0}, .008),
+    ({"duration": 60, "input_tokens": 10000, "total_tokens": 12000}, None),
+    ({"duration": 60, "input_tokens": True, "output_tokens": 2000}, None),
+    ({"duration": 60}, None),
+])
+def test_qwen_filetrans_uses_provider_tokens(tmp_path, service_usage, expected):
     (tmp_path / "asr.json").write_text(json.dumps({
         "backend": "paraformer",
         "model": QWEN_FILETRANS_MODEL,
-        "usage": {"content_duration_ms": 60000, "service_usage": {"duration": 60}},
+        "usage": {"content_duration_ms": 60000, "service_usage": service_usage},
     }))
     for costs in (usage.call_costs, usage.cached_call_costs):
         result = costs(tmp_path, {}, 0.00008)
-        assert result["asr_cny_estimate"] is None and result["asr_basis"] == "unknown"
+        assert result["asr_cny_estimate"] == pytest.approx(expected)
+        assert result["asr_basis"] == ("token_estimate" if expected is not None else "unknown")
+        for status in ({"asr_reused_from": "old"}, {"asr_performed": False}):
+            assert costs(tmp_path, status, 0.00008)["asr_cny_estimate"] == 0
 
 
 def message(cost=0.12, tokens=120):

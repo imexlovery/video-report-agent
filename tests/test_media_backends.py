@@ -66,7 +66,7 @@ def test_config_snapshot_not_changed_by_environment(env, tmp_path):
     assert "sk-test-secret" not in (run / "input.json").read_text()
 
 
-def service(mode="ok", model="paraformer-v2"):
+def service(mode="ok", model="paraformer-v2", usage=None):
     calls = []
 
     def handle(request):
@@ -110,6 +110,7 @@ def service(mode="ok", model="paraformer-v2"):
             return httpx.Response(
                 200,
                 json={
+                    "usage": usage,
                     "output": {
                         "task_status": state,
                         "results": [
@@ -155,6 +156,28 @@ def test_cloud_normalizes_and_redacts_without_offset(audio, env):
     stored = json.dumps(result.to_dict())
     assert "signature" not in stored and "oss://" not in stored and "sk-test" not in stored
     assert len([r for r in calls if r.url.path.endswith("/transcription")]) == 1
+
+
+@pytest.mark.parametrize("output_tokens,expected", [(4, 0.0000276), ("sk-fake", None)])
+def test_filetrans_task_response_retains_safe_billing_counters(
+    audio, env, output_tokens, expected,
+):
+    from video_report_agent.usage import cached_call_costs
+
+    client, _ = service(model=QWEN_FILETRANS_MODEL, usage={
+        "duration": 1, "input_tokens": 21, "output_tokens": output_tokens, "total_tokens": 25,
+        "access_token": "secret",
+    })
+    with client:
+        result = ParaformerBackend(model=QWEN_FILETRANS_MODEL, client=client).transcribe(
+            audio, language="auto",
+        )
+    stored = json.dumps(result.to_dict())
+    assert "secret" not in stored and "sk-fake" not in stored
+    assert result.usage["service_usage"]["total_tokens"] == 25
+    (audio.parent / "asr.json").write_text(stored)
+    costs = cached_call_costs(audio.parent, {}, 0.00008)
+    assert costs["asr_cny_estimate"] == pytest.approx(expected)
 
 
 @pytest.mark.parametrize(

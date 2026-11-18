@@ -174,22 +174,30 @@ def _llm_costs(run):
 def _asr_costs(run, status, asr_rate, asr=None):
     if asr is None:
         asr = read_object(run / "asr.json")
-    duration = asr.get("usage", {}).get("content_duration_ms")
+    usage = asr.get("usage") or {}
+    duration = usage.get("content_duration_ms")
+    asr_cost, asr_basis = None, "unknown"
     if status.get("transcript_reused_from") or status.get("asr_reused_from"):
         asr_cost, asr_basis = 0, "reused"
     elif status.get("asr_performed") is False:
         asr_cost, asr_basis = 0, "not_used"
     elif asr.get("backend") == "mlx":
         asr_cost, asr_basis = 0, "local"
+    elif asr.get("model") == QWEN_FILETRANS_MODEL:
+        service_usage = usage.get("service_usage") or {}
+        input_tokens = service_usage.get("input_tokens")
+        output_tokens = service_usage.get("output_tokens")
+        if number(input_tokens) and number(output_tokens):
+            # DashScope Beijing list price per million tokens, checked 2026-11-18.
+            # https://help.aliyun.com/zh/model-studio/qwen-audio-3-1-asr-flash-filetrans
+            asr_cost = (input_tokens * 0.8 + output_tokens * 2.7) / 1_000_000
+            asr_basis = "token_estimate"
     elif (
         asr.get("backend") == "paraformer"
-        and asr.get("model") != QWEN_FILETRANS_MODEL
         and number(duration)
         and asr_rate is not None
     ):
         asr_cost, asr_basis = duration / 1000 * asr_rate, "duration_estimate"
-    else:
-        asr_cost, asr_basis = None, "unknown"
     return {
         "asr_cny_estimate": asr_cost,
         "asr_basis": asr_basis,
@@ -287,7 +295,7 @@ def _cached_asr_metadata(path, signature):
     return {
         "backend": asr.get("backend"),
         "model": asr.get("model"),
-        "usage": {"content_duration_ms": (asr.get("usage") or {}).get("content_duration_ms")},
+        "usage": asr.get("usage"),
     }
 
 
