@@ -6,7 +6,7 @@
 
 ## 当前能力
 
-- `fetch-douyin` / `fetch-xiaohongshu` 默认匿名取平台字幕，可用时省去媒体下载，否则获取音频并生成 16 kHz WAV；仅明确需要登录时读取用户本机提供的 Cookie。备用导出脚本仅写本机文件。专用 fetch 入口止于取材；统一 preflight / fetch-source 与自动转写流水线已接入。见 [使用说明](../README.md#抖音与小红书取材)。
+- `fetch-douyin` / `fetch-xiaohongshu` 默认匿名取平台字幕，可用时省去媒体下载，否则获取音频并生成 16 kHz WAV；仅明确需要登录时读取用户本机提供的 Cookie。备用导出脚本仅写本机文件。专用 fetch 入口止于取材；统一 preflight / fetch-source 与自动转写流水线已接入。见 [使用说明](cli.md#抖音与小红书取材)。
 - 两条使用路径：独立复制 Skill 与模板，用自己的 Coding Agent 阅读完整转写；或通过 `video-report generate` 执行下载到报告的完整流水线。
 - 自动流水线支持 Bilibili、YouTube、抖音、小红书的单视频及受限分享链接解析，最长 5 小时；CLI/Web 默认 `auto`，按作者字幕轨 → ai-zh → Qwen Audio 3.1 Filetrans 短路采用单路，Web OCR 关闭。主动选源可做多路对照／融合；Core 保留旧显式 ASR-only/fused 调用。
 - `transcribe` 支持公开 YouTube 单视频，匿名依次选择原语言作者字幕、原语言自动字幕或百炼 Qwen Audio 3.1 Filetrans 音频转写，交付 `transcript.md` 与规范单元。最长 5 小时，访问能力受上游和本机网络影响。见[文字稿来源](subtitle-sources.md)。

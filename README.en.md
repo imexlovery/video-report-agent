@@ -2,287 +2,58 @@
 
 [简体中文](README.md) | English
 
-Turn video transcripts into HTML reports you can skim, study and save. Use the [VReport website](https://vreport.tri4t.xyz), or give this repository's Skill and templates to your own Coding Agent to generate reports locally.
+Turn video transcripts into HTML reports you can skim, read in depth, and save.
 
-**The central asset is the [`video-report` template Skill](src/video_report_agent/skills/video-report/)**. It combines editing guidance, reading modes, visual templates and source constraints to help an Agent organize a readable report from a complete transcript. The Python pipeline handles downloading, transcription, Agent execution and image export. A separate Web Service owns the website, accounts and credits.
+## See the result
+
+<a href="docs/examples/report.png"><img src="docs/images/report-preview.png" alt="Sample reading report preview. Click for the full image." width="460"></a>
+
+[Sample HTML](docs/examples/report.html) · [Full PNG](docs/examples/report.png)
+
+Download the sample HTML from GitHub and open it in your browser. Standard reports follow your system theme, and you can switch between light and dark in the report.
+
+## Choose how to use it
 
 | What you want to do | Start here |
 |---|---|
 | Generate a report online | [Open VReport](https://vreport.tri4t.xyz) |
-| Give an existing transcript to your own Coding Agent | [Download Skill ZIP v0.7.0](https://github.com/imexlovery/video-report-agent/releases/download/skill-zip-v0.7.0/video-report-skill-v0.7.0.zip) · [Quick start and examples (Chinese)](docs/skill-bundle/README.md) |
-| Transcribe or generate a report from a Bilibili, YouTube, Douyin or Xiaohongshu link | [CLI installation](#option-2-run-the-complete-cli-pipeline) |
-
-## See the result
-
-This preview shows the top of a sample report. Click it for the complete image.
-
-[![Reading report preview](docs/images/report-preview.png)](docs/examples/report.png)
-
-[Sample HTML](docs/examples/report.html) · [Full PNG](docs/examples/report.png) · [Use online](https://vreport.tri4t.xyz)
-
-On GitHub, the HTML link opens the source file. Download it and open it in a browser. These examples ship with the repository and require no running service.
-
-**Standard reports support dark mode.** New Standard HTML reports follow your system appearance by default. Use the button in the upper-right corner to switch between light and dark, and your browser will remember your choice. Printing and PNG exports from Core use the light theme.
-
-## How the template Skill works
-
-Input can be a complete Markdown, TXT or SRT transcript, or another long text. Title, author, URL and timestamps are optional. The Agent reads the complete source, organizes sections around its information relationships, then writes, illustrates and revises the report using the selected HTML template.
-
-Keep all four parts together:
-
-| Asset | Purpose |
-|---|---|
-| [`SKILL.md`](src/video_report_agent/skills/video-report/SKILL.md) | Shared entrypoint: source fidelity, organization, promotion exclusion, language and delivery rules |
-| [`modes/`](src/video_report_agent/skills/video-report/modes/) | Standard / Brief content selection, reading depth and component guidance |
-| [`assets/`](src/video_report_agent/skills/video-report/assets/) | A separate HTML template for each mode, with inline styles and visual components |
-| [`references/`](src/video_report_agent/skills/video-report/references/) | On-demand guidance for mechanisms, procedures, evidence, arguments and narratives |
-
-The templates supply layout and expression tools; the source determines the sections. Mechanisms may need relationship diagrams, procedures may need steps and branches, and evidence may need data comparisons. The Agent chooses one primary editing direction and, when needed, one additional reference. It loads the selected mode, template and references as needed within a single Agent task.
-
-| Reading mode | Use case | Presentation |
-|---|---|---|
-| `standard` · Standard reading (default) | Understand the full main thread with necessary explanations, evidence and examples | Length follows useful information; long reports may include navigation and reliable source times |
-| `brief` · Concise overview | Grasp the core question, main judgments and decisive conditions | Separate visual template; body targets 1,600–2,200 non-whitespace characters, capped at 2,400; short sources can be shorter |
-
-Both modes read the full source and preserve number definitions, conditions, attribution and uncertainty. The Skill instructs the Agent to identify and exclude commercial promotion while retaining useful tutorial and test content. Hidden `data-source-units` attributes link claims to source locations; those links aid review but do not prove correctness.
-
-Delivery is a self-contained `report.html` with inline styles, ready to open in a browser. Quality depends on the transcript, model and actual checks. The standalone Skill ZIP contains editing instructions, templates and examples. To fetch subtitles or transcribe directly from a video link, install the Core CLI below.
+| Turn an existing transcript, subtitles, or long text into a report | [Download Skill ZIP v0.7.0](https://github.com/imexlovery/video-report-agent/releases/download/skill-zip-v0.7.0/video-report-skill-v0.7.0.zip) for your own coding agent |
+| Transcribe or generate a report locally from a single Bilibili, YouTube, Douyin, or Xiaohongshu video link | [Use the full CLI](#option-2-run-the-complete-cli-pipeline) |
 
 ## Option 1: use your own Coding Agent
 
-This is the most direct way to reuse the core asset. It needs no project Python backend, Pi or website.
+You’ll need a coding agent with a configured model and access to read and write local files.
 
-### 1. Prepare a complete transcript
+1. <a name="2-get-the-complete-skill-directory"></a>Download and unzip the Skill ZIP above. Keep the entire `video-report/` directory together.
+2. <a name="1-prepare-a-complete-transcript"></a><a name="3-ask-the-agent-to-generate"></a>Open your coding agent in the extracted directory and try the bundled transcript with this prompt:
 
-Use creator-provided subtitles, Bilibili AI subtitles, your own ASR transcript or another complete text, saved as `transcript.md`, TXT or SRT. Preserve timestamps and speakers when possible. Without reliable times, the report omits the corresponding chapter times.
+   ```text
+   Read video-report/SKILL.md and use standard mode.
+   Read all of examples/transcript.md and treat it as read-only input.
+   Preserve important conditions, numbers, and attributions.
+   Write a self-contained HTML report to output/report.html.
+   ```
 
-ASR converts speech into text; your Coding Agent's model reads it and generates the report. Choose these independently.
+3. Open `output/report.html` in your browser.
 
-### 2. Get the complete Skill directory
-
-Download and extract [Skill ZIP v0.7.0](https://github.com/imexlovery/video-report-agent/releases/download/skill-zip-v0.7.0/video-report-skill-v0.7.0.zip). It includes the complete Skill, a short Chinese guide, and a paired transcript and HTML example. Start with the bundled `README.md`.
-
-To get the source code, clone the repository:
-
-```sh
-git clone https://github.com/imexlovery/video-report-agent.git
-```
-
-Use `video-report/` from the download, or copy the complete `src/video_report_agent/skills/video-report/` directory from the source repository, preserving relative paths:
-
-```text
-my-report/
-├── transcript.md
-├── video-report/
-│   ├── SKILL.md
-│   ├── modes/
-│   ├── references/
-│   └── assets/
-│       ├── report-template.html
-│       └── brief-report-template.html
-└── output/
-```
-
-If your Agent supports Skills, install the directory using its conventions. Other Coding Agents with local file access can read the entrypoint explicitly. Standalone use requires neither `input.json` nor `source.info.json`. When no video description is supplied, the Skill removes the description placeholder.
-
-### 3. Ask the Agent to generate
-
-Open your Coding Agent in that folder and send:
-
-```text
-Read video-report/SKILL.md and follow it to generate a reading report.
-Use standard mode; read only its selected mode guide and template.
-Read transcript.md in full and write self-contained HTML to output/report.html.
-Preserve important conditions, numbers, formulas, attribution and uncertainty.
-Do not modify the original transcript. Show chapter times only when reliable.
-If browser tools are available, inspect the layout; otherwise state that
-only static checks were performed.
-```
-
-Replace `standard` with `brief` for an overview. Open `output/report.html` in a browser. PNG export depends on your Agent's tools.
+<a name="how-the-template-skill-works"></a>The [report Skill](src/video_report_agent/skills/video-report/SKILL.md) provides separate reading rules and templates for Standard and Brief. Replace the example path with your own transcript to run it on new material. Use `brief` in place of `standard` for a shorter read focused on the main findings and evidence. See the [Skill ZIP guide (Chinese)](docs/skill-bundle/README.md).
 
 ## Option 2: run the complete CLI pipeline
 
-Use a single-video URL or share text containing one link from Bilibili, YouTube, Douyin or Xiaohongshu. Export a transcript or continue to a Standard or Brief report:
+<a name="install"></a>You'll need Python 3.12, uv, FFmpeg, and Node.js 22.19.0 or later. Follow the guide to [install the CLI and its dependencies](docs/cli.en.md#install), then <a name="configure-the-model-and-asr"></a>[configure the report model and transcription](docs/cli.en.md#configure-the-model-and-asr).
 
-```text
-Video URL or share text
-  → detect the platform and fetch usable subtitles, or extract and transcribe audio
-  → canonical transcript (text, source IDs, times)
-  → Pi RPC + video-report Skill → HTML
-  → Chromium PNG export
-```
-
-Python handles deterministic processing and task supervision. Pi supplies model calls, file/shell tools, sessions and the Agent loop. The Skill defines content and visual presentation.
-
-### Install
-
-Use Python 3.12, uv, `ffmpeg` / `ffprobe` on PATH, and Node.js 22 with npm. Install from the source repository:
+<a name="generate-and-read"></a>From the repository directory, run this command with your video link:
 
 ```sh
-git clone https://github.com/imexlovery/video-report-agent.git
-cd video-report-agent
-npm install -g @earendil-works/pi-coding-agent@0.85.0
-pi --version
-uv sync
-uv run playwright install chromium
-test -f .env || cp .env.example .env
-```
-
-These instructions use Pi 0.85.0, the project's adapter baseline. `uv sync` does not install Pi. For local MLX Whisper on Apple Silicon, replace `uv sync` with `uv sync --extra mlx`.
-
-### Configure the model and ASR
-
-Edit the root `.env` and supply report-model credentials. Automatic source selection falls back to DashScope Qwen Audio 3.1 Filetrans and reads `DASHSCOPE_API_KEY` when ASR is needed. The example `ASR_BACKEND` and `ASR_MODEL` configure manual source selection. The CLI also accepts explicit backend and model overrides:
-
-```dotenv
-PI_PROVIDER=deepseek
-PI_MODEL=deepseek-flash
-PI_API_KEY=your-report-model-key
-PI_TASK_ISOLATION=local
-
-ASR_BACKEND=paraformer
-ASR_MODEL=paraformer-v2
-DASHSCOPE_API_KEY=your-dashscope-api-key
-```
-
-For manual MLX transcription on Apple Silicon, replace the backend and model with:
-
-```dotenv
-ASR_BACKEND=mlx
-ASR_MODEL=mlx-community/whisper-large-v3-turbo
-```
-
-The pipeline includes `mlx` and DashScope's `paraformer` backend. The DashScope backend supports Qwen Audio 3.1 Filetrans, Paraformer-v2, and the Fun-ASR file models listed in the code. Other ASR tools work with the standalone Skill. Cloud ASR uploads audio, and the report model receives the transcript content needed for generation.
-
-### Generate and read
-
-```sh
-# Standard reading
 uv run video-report generate 'https://www.bilibili.com/video/BV...'
-
-# Concise overview
-uv run video-report generate 'https://www.youtube.com/watch?v=VIDEO_ID' --report-mode brief
-
-# Transcript only, without calling the report model
-uv run video-report transcribe 'https://www.youtube.com/watch?v=VIDEO_ID'
 ```
 
-Outputs live in `runs/<run-id>/`. `transcribe` writes `transcript.md`; `generate` continues to `report.html` and `report.png`. If image export fails, the HTML remains available and `status.json` records `image_error`.
-
-### Choose subtitle and transcript sources
-
-The CLI defaults to `auto`. Bilibili tries creator subtitles, then Bilibili AI subtitles (`ai-zh`). YouTube tries original-language creator subtitles, then original-language automatic captions. Douyin and Xiaohongshu prefer usable original-language platform subtitles. When no usable subtitles are available, the CLI extracts audio and defaults to DashScope Qwen Audio 3.1 Filetrans. Manual selection with `--sources` is available for Bilibili:
-
-| Source | CLI arguments | Behavior |
-|---|---|---|
-| Creator subtitles | `--sources subtitle_track` | Use a non-AI subtitle track returned by Bilibili |
-| Bilibili AI subtitles | `--sources bilibili_ai` | Fetch the platform's existing Chinese `ai-zh` subtitles |
-| ASR | `--sources asr` | Download media and transcribe with the configured `mlx` or `paraformer` backend |
-| Local subtitle file | `--sources subtitle_track --subtitle-file captions.srt` | Import SRT, VTT or ASS subtitles |
-| Multiple sources | `--sources bilibili_ai asr` | Collect every selected source; the first usable source in argument order is primary, with the others used for local corrections |
-
-```sh
-# Use only Bilibili AI subtitles
-uv run video-report generate 'https://www.bilibili.com/video/BV...' --sources bilibili_ai
-
-# Export only the transcript for your own Coding Agent
-uv run video-report transcribe 'https://www.bilibili.com/video/BV...' --sources bilibili_ai
-```
-
-Manual selection collects only the selected sources; the AI-only example fails if its subtitles are unavailable. Selecting both AI subtitles and ASR collects both. Subtitle-only runs require no media download or ASR credentials unless visual enhancement is enabled.
-
-If manual Bilibili subtitle extraction requires authentication, set `BILIBILI_SUBTITLE_BROWSER=chrome` (or another browser supported by yt-dlp) in `.env` to use its existing Bilibili login, or supply `BILIBILI_SESSDATA` through the process environment. Browsers are not read by default. Keep credentials out of Git. See the [source selection guide](docs/subtitle-sources.md).
-
-The Protobuf field parsing for Bilibili's newer AI subtitle endpoint references [ccBilly-aipm/bilibili-ai-subtitle](https://github.com/ccBilly-aipm/bilibili-ai-subtitle) (MIT). Thank you to its author for publishing the extraction workflow and protocol implementation that informed this support.
-
-### Unified source access
-
-```sh
-uv run video-report preflight 'VIDEO_URL_OR_SHARE_TEXT'
-uv run video-report fetch-source 'VIDEO_URL_OR_SHARE_TEXT' --output .local/materials
-```
-
-`preflight` anonymously checks subtitle text or reads a small media range and returns `READY`, `LOGIN_REQUIRED` or `UNAVAILABLE`. `fetch-source` saves `source-material.json` in a per-video directory and extracts audio if no subtitles are available. It stops before ASR or report generation.
-
-`transcribe` and `generate` use the same acquisition path in automatic mode. If the platform explicitly requires login, run `fetch-source`, `transcribe` or `generate` on your computer with `--browser edge` or `--cookies LOCAL_FILE`. Manual source selection and visual enhancement are available only for Bilibili. Embedded callers enable `source_access=True`; login additionally requires `source_login=True` and execution-only `VIDEO_SOURCE_BROWSER` / `VIDEO_SOURCE_COOKIE_FILE` settings. Credentials are not persisted in run metadata.
-
-The website checks access before confirming a task. Successful checks do not add UI messages; blocked inputs show only an inactive resolution link beside the error, not a script workflow. It does not read browser cookies or upload credentials; local material upload/resubmission is not implemented. The standalone acquisition script requires an installed Core and FFmpeg. Bilibili supporter-only videos require the account's actual entitlement; preview-only media is rejected. No real paid-video sample has been validated.
-
-### Douyin and Xiaohongshu acquisition
-
-```sh
-uv run video-report fetch-douyin 'https://www.douyin.com/video/VIDEO_ID' --output .local/media
-uv run video-report fetch-xiaohongshu 'FULL_SHARE_URL' --output .local/media
-```
-
-Both commands try anonymous access first. Multiple subtitle languages without a known original language fall back to audio; translated Chinese is not preferred by default. Available native subtitles are saved to timestamped `subtitles.json` without downloading media. Otherwise, audio is downloaded (or muxed media when no audio-only format exists) and converted to mono 16 kHz WAV. `media.json` records platform, author, source, and authentication mode. ASR, report generation, and web integration are not invoked.
-
-Douyin initializes a visitor session and signs its detail request, following the [upstream fix discussion](https://github.com/yt-dlp/yt-dlp/pull/17826); no F2 dependency is needed. Xiaohongshu preserves share access parameters and reads subtitles from `mediaV2`. Expired links, signature failures, and absent subtitles do not trigger account login.
-
-Only an explicit login-required response enables `--browser edge`, `--cookies LOCAL_FILE`, or the platform-specific `DOUYIN_COOKIE` / `XIAOHONGSHU_COOKIE` environment fallback. Run authenticated acquisition on the user's own computer and transfer only subtitle/audio artifacts. No service-side credential upload or account pool is provided.
-
-When login is required, `uv run python scripts/export_platform_cookies.py xiaohongshu --browser edge` exports only that platform's cookies to `.local/platform-cookies/xiaohongshu.cookies.txt`. The script also supports `douyin`. Files use mode 0600, existing files are not overwritten, and cookie values are never printed. Keep these files local and delete them after use.
-
-### Optional tools and capabilities
-
-These switches apply to the complete Core pipeline. The standalone Skill ZIP uses your own Agent's tools and configuration.
-
-| Tool / capability | Default | Enable or disable |
-|---|---|---|
-| Term correction | Off | Add `--term-correction` to enable; omit to disable. Python: `create_run(..., term_correction=True/False)` |
-| Visual enhancement | Off | Add `--visual-enhancement` to enable; omit to disable. Python: `visual_enhancement=True/False` |
-| Report inspection (`report_inspection`) | Off | Add `--report-inspection` to enable. Python: `create_run(..., report_inspection=True/False)` |
-| Independent style editing (`style_edit`) | On | Use `--no-style-edit` to disable, `--style-edit` to enable. Python: `create_run(..., style_edit=True/False)` |
-| Independent diagrams (`generate_diagram`) | On as needed for Standard; off for Brief | Python: `create_run(..., diagrams=False)` disables it for Standard. Brief does not currently offer it; no CLI switch |
-| OCR (legacy fusion workflow) | Off | Use `--transcript-mode fused --ocr-mode auto` to enable, `--ocr-mode off` to disable. Requires the `enhancement` extra |
-
-Visual enhancement obtains a video track, samples nine frames and uses the task's selected report model to describe them. It shares the report model's provider, model, thinking level and Pi authentication (API Key or OAuth), then passes the descriptions to the report Agent. No separate vision model or key is needed. The model must support images and declare `"input": ["text", "image"]` in its `config/pi/models.json` entry; missing image input produces an explicit error. Enabling this adds one multimodal request's latency and usage.
-
-Standard allows at most one independent drawing tool call. The Agent requests a diagram when needed and can keep writing while it renders in the background. The drawing model can be configured separately as described below. Transient request failures receive at most one retry within the 180-second limit. If the diagram still cannot be embedded, its placeholder is removed and the otherwise complete report is delivered.
-
-Report inspection gives the same Agent programmatic findings and available screenshots, allowing at most two inspections and one consolidated revision. When task inspection is disabled, the Agent finishes after the complete draft without running checks through Bash. Independent style editing runs before rendering and adds model usage; it does not invoke the inspector afterward. `REPORT_REVIEW` only supplies the default for a standalone `PiRunner`; complete tasks use their task parameters. Basic file/shell tools, HTML delivery checks and final PNG export are part of the regular workflow, with no corresponding CLI disable switches. Run `uv run video-report generate --help` for all options.
-
-### Configure search for term correction
-
-Term correction checks important names as questions arise during reading or writing and preserves the original transcript. `--term-correction` enables `record_term_review`, `lookup_term` and `fetch_term_source`. Search and page fetch share a limit of three requests per task and may incur charges. Choose one search provider in `.env`, independently of the report model:
-
-```dotenv
-# Option 1: DeepSeek Search/Fetch (default provider)
-TERM_SEARCH_PROVIDER=deepseek
-DEEPSEEK_SEARCH_API_KEY=your-official-deepseek-key
-```
-
-```dotenv
-# Option 2: OpenAI Responses Web Search
-TERM_SEARCH_PROVIDER=openai
-OPENAI_SEARCH_API_KEY=your-openai-api-key
-OPENAI_SEARCH_MODEL=gpt-6-luna
-```
-
-DeepSeek reads `DEEPSEEK_SEARCH_API_KEY`, falling back to `DEEPSEEK_API_KEY`. OpenAI reads `OPENAI_SEARCH_API_KEY`, falling back to `OPENAI_API_KEY`. Neither uses `PI_API_KEY` or `DASHSCOPE_API_KEY`; provide credentials for the corresponding official service. OpenAI's search model is independently configurable: the example explicitly selects `gpt-6-luna`; the code defaults to `gpt-6.1-sol` when `OPENAI_SEARCH_MODEL` is absent. Model tokens and search are billed separately.
-
-After saving the configuration, add `--term-correction` to the generation command. Search configuration alone does not enable correction. Provider settings are saved on new tasks; restart a running service after changing `.env`. See [term correction](docs/term-correction.md) for evidence rules and Docker configuration.
-
-## Runtime and data
-
-- **Storage:** standalone CLI uses `runs/state.sqlite3` by default for tasks, transcripts, report HTML and caches. Task-directory JSON, transcripts and HTML are execution exports; media, PNG, Pi sessions and diagnostic logs remain files. See [SQLite storage](docs/sqlite-storage.md).
-- **Configuration:** `.env` is read from the working directory; process environment variables take precedence. Pi configuration lives in `config/pi/` there. Missing model defaults are initialized; existing configuration is preserved. Set `PI_CODING_AGENT_DIR` before startup to choose another directory. Do not commit credentials.
-- **Independent drawing model:** set both `DIAGRAM_PROVIDER` and `DIAGRAM_MODEL`, with optional `DIAGRAM_THINKING`, and configure that provider's API Key or OAuth in Pi. Leave them blank to inherit the report model and authentication. Changes apply to new tasks. OAuth requires Local execution; Docker drawing uses API Keys. See [Core architecture](docs/ARCHITECTURE.md).
-- **Isolation:** the example uses `PI_TASK_ISOLATION=local`; Pi tools have your local user permissions. Docker mode requires an application image, Docker daemon and healthy task cleaner with the same scope. It does not fall back to local execution on failure. See [Core architecture](docs/ARCHITECTURE.md).
-- **Traces:** `run.trace.jsonl` records pipeline stages; `pi.events.jsonl` records model and tool events. Completion requires `agent_settled`, final assistant `stopReason == "stop"`, and HTML delivery checks.
-- **Limits:** built-in ingestion accepts single videos from the four supported platforms and tries anonymous access first. Availability depends on the platform, link and account permissions. Videos are limited to five hours, execution to 30 minutes. Submitted cloud ASR may continue charging after a local stop. Default understanding comes from the transcript, so visual-only information may be missing. Native Windows execution of the full pipeline is not presented as verified here.
+Open `runs/<run-id>/report.html` when the run finishes. If you only need a transcript, use [`transcribe`](docs/cli.en.md#generate-and-read).
 
 ## Development and further reading
 
-```sh
-uv run --extra enhancement pytest -q
-uv run ruff check src tests
-uv lock --check
-```
+- [CLI guide](docs/cli.en.md) · <a name="choose-subtitle-and-transcript-sources"></a>[Subtitle and transcript sources](docs/cli.en.md#choose-subtitle-and-transcript-sources) · <a name="unified-source-access"></a>[Link checks and local acquisition](docs/cli.en.md#unified-source-access) · <a name="douyin-and-xiaohongshu-acquisition"></a>[Douyin and Xiaohongshu acquisition](docs/cli.en.md#douyin-and-xiaohongshu-acquisition)
+- <a name="optional-tools-and-capabilities"></a>[Optional tools and flags](docs/cli.en.md#optional-tools-and-capabilities) · <a name="configure-search-for-term-correction"></a>[Search for term correction](docs/cli.en.md#configure-search-for-term-correction) · <a name="runtime-and-data"></a>[Runtime and data](docs/cli.en.md#runtime-and-data)
+- [Core documentation (Chinese)](docs/README.md) · [Report evaluation](evals/report-review/README.md)
 
-- [Project documentation](docs/README.md): scope, architecture, plans and decisions.
-- [Report Skill entrypoint](src/video_report_agent/skills/video-report/SKILL.md): actual generation rules and reading order.
-- [Report evaluation](evals/report-review/README.md): public synthetic smoke inputs and optional live-model evaluation. HTML/source-link checks, content fidelity and visual quality need separate assessment.
-
-Callers use the packaged Skill by default. Experiments can select a complete directory through `PiRunner(skill_dir=...)` or the Worker environment variable `VIDEO_REPORT_SKILL_DIR`. Accounts, credits, queues and website deployment belong to the separate Web Service; public Core maintains generation capabilities.
+Public Core maintains the generation pipeline and report Skill. A separate web service runs the website and manages accounts and credits.
