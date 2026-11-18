@@ -4,13 +4,16 @@
 
 Turn video transcripts into HTML reports you can skim, read in depth, and save.
 
+- **Supported platforms** Single-video links from Bilibili, YouTube, Douyin, and Xiaohongshu. You can also give the Skill a complete transcript, subtitles, or other long-form text.
+- **How it works** Core fetches usable subtitles first and extracts and transcribes audio when needed. Pi runs the AI agent that reads the full transcript and writes a self-contained HTML report. Core then attempts to export a full-length PNG.
+- **Core asset** The [`video-report` Skill](src/video_report_agent/skills/video-report/SKILL.md) contains editing and source-checking rules, HTML templates for Standard reading and Brief overviews, and references for organizing different kinds of material.
+- **Models** The CLI defaults to `deepseek-flash` for report writing, and you can select another model in Pi. Automatic source selection falls back to Alibaba Cloud Qwen Audio 3.1 Filetrans for speech recognition. On Apple Silicon, you can explicitly select local MLX Whisper.
+
 ## See the result
 
 GPT-6.2 Sol generated this Standard report about Walter Pitts and the early history of neural networks. It explains AND, OR, and inhibition through a bubble tea example, then uses a generated diagram to show how signals feed back through a neural loop.
 
-| Light | Dark |
-| :---: | :---: |
-| [<img src="docs/images/report-preview.png" width="410" alt="Light report excerpt showing a neural feedback loop">](docs/examples/report.png) | [<img src="docs/images/report-preview-dark.png" width="410" alt="Dark report excerpt showing the same neural feedback diagram">](docs/examples/report-dark.png) |
+<a href="docs/examples/report.png"><img src="docs/images/report-preview.png" width="460" alt="Light report preview beginning with the title and introduction. Click for the full image."></a>
 
 [Full HTML report (Chinese)](docs/examples/report.html) · [Light PNG](docs/examples/report.png) · [Dark PNG](docs/examples/report-dark.png)
 
@@ -22,7 +25,7 @@ Download the HTML from GitHub and open it in a browser. The report follows your 
 |---|---|
 | Generate a report online | [Open VReport](https://vreport.tri4t.xyz) |
 | Turn an existing transcript, subtitles, or long text into a report | [Download Skill ZIP v0.7.0](https://github.com/imexlovery/video-report-agent/releases/download/skill-zip-v0.7.0/video-report-skill-v0.7.0.zip) for your own AI agent |
-| Transcribe or generate a report locally from a single Bilibili, YouTube, Douyin, or Xiaohongshu video link | [Use the full CLI](#option-2-run-the-complete-cli-pipeline) |
+| Transcribe or generate a report locally from a video link | [Use the full CLI](#option-2-run-the-complete-cli-pipeline) |
 
 <a name="option-1-use-your-own-coding-agent"></a>
 
@@ -44,22 +47,6 @@ You’ll need an AI agent with a configured model and access to read and write l
 
 <a name="how-the-template-skill-works"></a>The [report Skill](src/video_report_agent/skills/video-report/SKILL.md) provides separate reading rules and templates for Standard and Brief. Replace the example path with your own transcript to run it on new material. Use `brief` in place of `standard` for a shorter read focused on the main findings and evidence. See the [Skill ZIP guide (Chinese)](docs/skill-bundle/README.md).
 
-<a name="optional-tools-and-capabilities"></a>
-
-## Report generation tools
-
-These tools come with the full Core pipeline. With the standalone Skill ZIP, the available tools depend on your AI agent.
-
-| Tool and flag | What it does |
-|---|---|
-| **Diagram generation** | In Standard, the AI agent can request an SVG to explain a mechanism, sequence, or relationship. Core embeds it in the report. |
-| **Term verification** `--term-correction` | Checks names and technical terms against video metadata first, then looks up web sources when needed. The original transcript is preserved. |
-| **Visual context** `--visual-enhancement` | Samples nine frames from a Bilibili video and uses an image-capable model to describe details beyond the transcript. |
-| **Report inspection** `--report-inspection` | Returns structural checks, source references, and available screenshots from the draft to the same AI agent for revision. |
-| **Style editing** | Runs a separate prose edit for smoother sentences and transitions. On by default. Use `--no-style-edit` to skip it. |
-
-To prepare source material, use `preflight` to check a link or `fetch-source` to collect subtitles when available or extract audio. See the [CLI guide](docs/cli.en.md#optional-tools-and-capabilities) for defaults, limits, and Python options.
-
 ## Option 2: run the complete CLI pipeline
 
 <a name="install"></a>You'll need Python 3.12, uv, FFmpeg, and Node.js 22.19.0 or later. Follow the guide to [install the CLI and its dependencies](docs/cli.en.md#install), then <a name="configure-the-model-and-asr"></a>[configure the report model and transcription](docs/cli.en.md#configure-the-model-and-asr).
@@ -71,6 +58,20 @@ uv run video-report generate 'https://www.bilibili.com/video/BV...'
 ```
 
 Open `runs/<run-id>/report.html` when the run finishes. If you only need a transcript, use [`transcribe`](docs/cli.en.md#generate-and-read).
+
+<a name="optional-tools-and-capabilities"></a>
+
+### Report generation tools
+
+| Tool and flag | What it does |
+|---|---|
+| **Diagram generation** | In Standard, the AI agent can request an SVG to explain a mechanism, sequence, or relationship. Core embeds it in the report. |
+| **Term verification** `--term-correction` | Checks names and technical terms against video metadata first, then looks up web sources when needed. The original transcript is preserved. |
+| **Visual context** `--visual-enhancement` | Samples nine frames from a Bilibili video and uses an image-capable model to describe details beyond the transcript. |
+| **Report inspection** `--report-inspection` | Returns structural checks, source references, and available screenshots from the draft to the same AI agent for revision. |
+| **Style editing** | Runs a separate prose edit for smoother sentences and transitions. On by default. Use `--no-style-edit` to skip it. |
+
+To prepare source material, use `preflight` to check a link or `fetch-source` to collect subtitles when available or extract audio. See the [CLI guide](docs/cli.en.md#optional-tools-and-capabilities) for defaults, limits, and Python options.
 
 ## Development and further reading
 

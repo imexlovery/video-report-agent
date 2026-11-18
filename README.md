@@ -4,13 +4,16 @@
 
 把视频转写整理成可以扫读、精读和保存的 HTML 阅读报告。
 
+- **支持平台**　B 站、YouTube、抖音和小红书的单视频链接。已有完整转写、字幕或长篇文本时，可以直接交给 Skill。
+- **生成流程**　Core 优先获取可用字幕，缺少字幕时提取音频并转写。Pi 驱动 AI Agent 阅读完整转写、编写自包含的 HTML，Core 再尝试导出 PNG 长图。
+- **核心资产**　[`video-report` Skill](src/video_report_agent/skills/video-report/SKILL.md) 汇集内容取舍和来源核对规则、Standard 精读与 Brief 速览的 HTML 模板，以及按内容关系选用的编辑参考。
+- **主要模型**　CLI 默认用 `deepseek-flash` 写报告，可通过 Pi 更换模型。自动选源的语音转写默认用百炼 Qwen Audio 3.1 Filetrans，Apple Silicon 上也可显式选用本地 MLX Whisper。
+
 ## 先看成品
 
 《沃尔特·皮茨：用逻辑解释大脑，怎样启发了计算机》是一份由 GPT-6.2 Sol 生成的 Standard 报告。它用点奶茶解释「与」「或」和「抑制」，再用独立图示说明神经元闭环中的信号回传。
 
-| 浅色 | 深色 |
-| :---: | :---: |
-| [<img src="docs/images/report-preview.png" width="410" alt="浅色报告片段，展示神经元闭环与信号回传">](docs/examples/report.png) | [<img src="docs/images/report-preview-dark.png" width="410" alt="深色报告片段，展示同一张神经元闭环图">](docs/examples/report-dark.png) |
+<a href="docs/examples/report.png"><img src="docs/images/report-preview.png" width="460" alt="浅色报告预览，从标题和导语开始，点击查看完整长图"></a>
 
 [完整 HTML 报告](docs/examples/report.html) · [浅色长图](docs/examples/report.png) · [深色长图](docs/examples/report-dark.png)
 
@@ -22,7 +25,7 @@
 |---|---|
 | 想在线生成报告 | [打开 VReport](https://vreport.tri4t.xyz) |
 | 已有转写、字幕或长篇文本 | [下载 Skill ZIP v0.7.0](https://github.com/imexlovery/video-report-agent/releases/download/skill-zip-v0.7.0/video-report-skill-v0.7.0.zip)，交给自己的 AI Agent |
-| 有 B 站、YouTube、抖音或小红书的单视频链接，想在本地运行 | [使用完整 CLI](#方式二运行完整-cli-流水线)，生成转写或报告 |
+| 有视频链接，想在本地运行 | [使用完整 CLI](#方式二运行完整-cli-流水线)，生成转写或报告 |
 
 <a name="方式一交给自己的-coding-agent"></a>
 
@@ -43,22 +46,6 @@
 
 <a name="模板-skill-如何工作"></a>[报告 Skill](src/video_report_agent/skills/video-report/SKILL.md) 为 Standard 和 Brief 提供各自的阅读规则与模板。换成自己的转写时，替换输入路径即可。想先看主要结论和依据，可把 `standard` 改成 `brief`。详见 [Skill ZIP 使用说明](docs/skill-bundle/README.md)。
 
-<a name="报告流程中可选的工具与能力"></a>
-
-## 报告生成工具
-
-完整 Core 流水线提供下列工具。独立 Skill ZIP 使用你自己的 AI Agent 提供的工具。
-
-| 工具与开关 | 能做什么 |
-|---|---|
-| **独立绘图** | Standard 中由 AI Agent 按需发起，把机制、步骤或关系画成 SVG 并嵌入正文。 |
-| **术语求证** `--term-correction` | 先用视频信息核对人名、产品名和专业术语，证据不足时查找网页来源，保留原始转写。 |
-| **画面辅助** `--visual-enhancement` | 从 B 站视频抽取 9 帧，用支持图片输入的模型生成画面描述，补充字幕里的演示信息。 |
-| **报告检查** `--report-inspection` | 把初稿的结构检查、来源定位和可用截图反馈给同一个 AI Agent，供它集中修订。 |
-| **文风校订** | 单独整理句子和段落衔接，减少生硬转述。默认开启，可用 `--no-style-edit` 关闭。 |
-
-只想准备素材时，可以用 `preflight` 检查链接，或用 `fetch-source` 获取可用字幕，缺少字幕时提取音频。各工具的默认值、限制和 Python 参数见 [CLI 使用指南](docs/cli.md#报告流程中可选的工具与能力)。
-
 ## 方式二：运行完整 CLI 流水线
 
 <a name="安装"></a>准备 Python 3.12、uv、FFmpeg 和 Node.js 22.19.0 或更新版本，按指南[安装 CLI 和运行依赖](docs/cli.md#安装)，再<a name="配置模型与转写"></a>[配置报告模型和转写](docs/cli.md#配置模型与转写)。
@@ -70,6 +57,20 @@ uv run video-report generate 'https://www.bilibili.com/video/BV...'
 ```
 
 完成后打开 `runs/<run-id>/report.html`。只需要文字稿时，使用 [`transcribe`](docs/cli.md#生成与查看)。
+
+<a name="报告流程中可选的工具与能力"></a>
+
+### 报告生成工具
+
+| 工具与开关 | 能做什么 |
+|---|---|
+| **独立绘图** | Standard 中由 AI Agent 按需发起，把机制、步骤或关系画成 SVG 并嵌入正文。 |
+| **术语求证** `--term-correction` | 先用视频信息核对人名、产品名和专业术语，证据不足时查找网页来源，保留原始转写。 |
+| **画面辅助** `--visual-enhancement` | 从 B 站视频抽取 9 帧，用支持图片输入的模型生成画面描述，补充字幕里的演示信息。 |
+| **报告检查** `--report-inspection` | 把初稿的结构检查、来源定位和可用截图反馈给同一个 AI Agent，供它集中修订。 |
+| **文风校订** | 单独整理句子和段落衔接，减少生硬转述。默认开启，可用 `--no-style-edit` 关闭。 |
+
+只想准备素材时，可以用 `preflight` 检查链接，或用 `fetch-source` 获取可用字幕，缺少字幕时提取音频。各工具的默认值、限制和 Python 参数见 [CLI 使用指南](docs/cli.md#报告流程中可选的工具与能力)。
 
 ## 开发与进一步阅读
 
