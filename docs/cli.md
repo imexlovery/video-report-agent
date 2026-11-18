@@ -85,7 +85,7 @@ CLI 默认使用 `auto`。B 站依次尝试作者字幕、B 站 AI 自动字幕 
 # 只使用 B站 AI 自动字幕
 uv run video-report generate 'https://www.bilibili.com/video/BV...' --sources bilibili_ai
 
-# 只生成文字稿，后续交给自己的 Coding Agent
+# 只生成文字稿，后续交给自己的 AI Agent
 uv run video-report transcribe 'https://www.bilibili.com/video/BV...' --sources bilibili_ai
 ```
 

@@ -1,6 +1,6 @@
 # Video Report Skill
 
-把完整转写、字幕或其他长篇文本整理成可以直接用浏览器打开的 HTML 阅读报告。需要一个能读写本地文件的 Coding Agent，以及它已经配置好的模型。
+把完整转写、字幕或其他长篇文本整理成可以直接用浏览器打开的 HTML 阅读报告。需要一个能读写本地文件的 AI Agent，以及它已经配置好的模型。
 
 [示例转写](examples/transcript.md) · [示例 HTML](examples/report.html)
 
@@ -31,7 +31,7 @@ examples/
 ## 三步开始
 
 1. 解压到一个本地目录。先用浏览器打开 `examples/report.html` 查看成品。
-2. 在这个目录打开 Coding Agent，提供完整转写。先试用时，可以直接使用 `examples/transcript.md`。
+2. 在这个目录打开 AI Agent，提供完整转写。先试用时，可以直接使用 `examples/transcript.md`。
 3. 把下面这段指令发给 Agent：
 
 ```text
@@ -47,7 +47,7 @@ examples/
 
 ## 安装到自己的 Agent（可选）
 
-支持 Skills 的 Agent 可以按自身约定安装完整的 `video-report/` 目录。其他能读写本地文件的 Coding Agent 直接读取 `video-report/SKILL.md` 即可。请同时保留 `modes/`、`references/` 和 `assets/`，只复制入口文件会缺少生成规则与模板。
+支持 Skills 的 Agent 可以按自身约定安装完整的 `video-report/` 目录。其他能读写本地文件的 AI Agent 直接读取 `video-report/SKILL.md` 即可。请同时保留 `modes/`、`references/` 和 `assets/`，只复制入口文件会缺少生成规则与模板。
 
 ## 使用范围
 

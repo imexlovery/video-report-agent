@@ -13,7 +13,7 @@
 - [项目首页与快速开始](../README.md)
 - CLI 使用指南 · [简体中文](cli.md) / [English](cli.en.md)
 - [独立 Skill 下载包使用说明](skill-bundle/README.md)
-- [示例 HTML](examples/report.html) / [完整长图](examples/report.png)
+- [示例 HTML](examples/report.html) / [浅色长图](examples/report.png) / [深色长图](examples/report-dark.png)
 - [合成 smoke 与可选评测](../evals/report-review/README.md)
 
 维护规则见 [AGENTS.md](../AGENTS.md)。这些文档供 Agent 接续工作、用户按需查阅；描述源码能力和真实剩余工作，不维护调用方的部署进度。

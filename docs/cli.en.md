@@ -85,7 +85,7 @@ The CLI defaults to `auto`. Bilibili tries creator subtitles, then Bilibili AI s
 # Use only Bilibili AI subtitles
 uv run video-report generate 'https://www.bilibili.com/video/BV...' --sources bilibili_ai
 
-# Export only the transcript for your own Coding Agent
+# Export only the transcript for your own AI agent
 uv run video-report transcribe 'https://www.bilibili.com/video/BV...' --sources bilibili_ai
 ```
 

@@ -3,255 +3,384 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=900">
-<title>削藩与分配：中国财政再平衡的逻辑与路径</title>
+<title>沃尔特·皮茨：用逻辑解释大脑，怎样启发了计算机</title>
+<meta name="video-report-theme" content="local">
+<script>
+(() => {
+  const setting = document.querySelector('meta[name="video-report-theme"]').content;
+  const restorePrefix = '#report-theme-restore=';
+  const storageKey = 'video-report-theme';
+  const system = window.matchMedia('(prefers-color-scheme: dark)');
+  const root = document.documentElement;
+  let choice = setting;
+  let button;
+
+  if (setting === 'local') {
+    try {
+      choice = localStorage.getItem(storageKey);
+    } catch {
+      // Some browsers disable storage for standalone files.
+    }
+  }
+
+  function applyTheme() {
+    const dark = choice === 'dark' || (choice !== 'light' && system.matches);
+    root.dataset.reportTheme = dark ? 'dark' : 'light';
+    if (button) button.setAttribute('aria-pressed', String(dark));
+  }
+
+  applyTheme();
+  system.addEventListener('change', applyTheme);
+  document.addEventListener('DOMContentLoaded', () => {
+    button = document.querySelector('.report-theme-toggle');
+    if (!button) return;
+    applyTheme();
+    button.hidden = false;
+    if (setting !== 'local' && location.hash.startsWith(restorePrefix)) {
+      const state = new URLSearchParams(location.hash.slice(restorePrefix.length));
+      window.addEventListener('load', () => {
+        const url = new URL(window.location.href);
+        url.hash = state.get('hash') || '';
+        history.replaceState(history.state, '', url.href);
+        window.scrollTo({ top: Number(state.get('top')), behavior: 'instant' });
+        if (state.get('focus') === 'true') button.focus({ preventScroll: true });
+      }, { once: true });
+    }
+    button.addEventListener('click', (event) => {
+      choice = root.dataset.reportTheme === 'dark' ? 'light' : 'dark';
+      if (setting !== 'local') {
+        // The hosted report is sandboxed. Its own URL saves the preference.
+        const url = new URL(window.location.href);
+        const state = new URLSearchParams({
+          hash: url.hash, top: String(window.scrollY), focus: String(event.detail === 0),
+        });
+        url.searchParams.set('report_theme', choice);
+        url.hash = restorePrefix + state;
+        window.location.replace(url.href);
+        return;
+      }
+      try {
+        localStorage.setItem(storageKey, choice);
+      } catch {
+        // The current page can still switch when storage is unavailable.
+      }
+      applyTheme();
+    });
+  });
+})();
+</script>
 <style>
-:root{color-scheme:light;--paper:#ffffff;--canvas:#f2f5f7;--ink:#414b55;--heading:#242d35;--muted:#65717d;--accent:#c8562e;--orange:#ff8658;--line:#e9edf0;--blue:#23658b;--blue-wash:#edf7ff;--wash:#fff8e8}
+html{scroll-behavior:smooth;scroll-padding-top:24px}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+/* 稳定视觉语言；组件按内容关系选择，不设配额。 */
+:root{color-scheme:light;--paper:#fff;--canvas:#f2f5f7;--ink:#414b55;--heading:#242d35;--muted:#65717d;--accent:#c8562e;--orange:#ff8658;--line:#e9edf0;--blue:#23658b;--blue-wash:#edf7ff;--wash:#fff8e8}
 *{box-sizing:border-box}body{margin:0;background:var(--canvas);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;font-size:17px;line-height:1.85;-webkit-font-smoothing:antialiased}
-::selection{background:#ffddc8;color:var(--heading)}.paper{max-width:860px;margin:24px auto;padding:48px 46px 30px;background:var(--paper);border-radius:8px;box-shadow:0 8px 30px #25384b0b;position:relative;overflow-wrap:anywhere}.paper:before{content:"";position:absolute;inset:0 0 auto;height:4px;border-radius:8px 8px 0 0;background:linear-gradient(90deg,#ff9d64,#a9a6ba)}.paper:after{content:"";display:block;margin-top:20px;height:3px;background:linear-gradient(90deg,#ff9d64,#a9a6ba)}
-h1,h2,h3,p{margin:0}h1,h2,h3{color:var(--heading);text-wrap:pretty}h1{font-size:34px;line-height:1.45;font-weight:750;letter-spacing:0}.subtitle{text-wrap:balance;font-size:21px;font-weight:600;line-height:1.6;margin-top:12px;color:#4c5965}.lead{margin-top:20px;line-height:1.9}.meta{font-size:12px;color:var(--muted);margin-top:18px;line-height:1.8}
-section{margin-top:42px}section>h2{display:flex;align-items:baseline;gap:12px;font-size:24px;font-weight:750;line-height:1.55;padding-bottom:13px;border-bottom:1px solid var(--line);margin-bottom:21px}.num{display:inline-flex;align-items:center;justify-content:center;align-self:flex-start;flex-shrink:0;min-width:28px;height:28px;padding:0 5px;margin-top:5px;background:#424e58;border-radius:50%;color:white;font-size:16px;line-height:1;font-weight:650;font-variant-numeric:tabular-nums}.section-time{margin-left:auto;flex-shrink:0;font-size:12px;font-weight:400;color:#666666;white-space:nowrap;font-variant-numeric:tabular-nums;letter-spacing:0}
-h3{font-size:19px;font-weight:700;line-height:1.6;margin:27px 0 12px}h3:before{content:"";display:inline-block;width:8px;height:8px;margin-right:9px;margin-bottom:2px;border-radius:50%;background:var(--dot,var(--orange))}p+p{margin-top:14px}strong{font-weight:650;color:var(--heading)}ul,ol{padding-left:1.4em;margin:16px 0}li+li{margin-top:8px}li::marker{color:var(--accent)}a{color:var(--blue);text-underline-offset:4px}a:hover{color:var(--accent)}:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
-.callout{margin:25px 0;padding:20px 24px;background:var(--blue-wash);border:1px solid #d2e8f8;border-left:4px solid #6db6e9;border-radius:7px;color:var(--blue)}.callout h3{margin:0 0 9px;color:var(--blue);font-size:18px}.callout h3:before{display:none}.callout strong{color:inherit}.keyline{margin:25px 0;padding:20px 24px;background:var(--wash);border-left:4px solid #f4c975;border-radius:6px;line-height:1.85}.keyline p,.keyline blockquote{margin:0}.keyline cite{display:block;font-size:13px;font-style:normal;margin-top:10px;color:var(--muted)}
-.cards,.comparison,.categories{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px;margin:26px 0}.card,.comparison>div,.category{min-width:0;padding:22px 24px;background:#fff;border-radius:9px;box-shadow:0 4px 16px #25384b12}.card:nth-child(2n){--dot:#73ac45}.card h3,.comparison h3,.category h3{margin:0 0 11px;font-size:18px}.card p,.category p,.comparison p{font-size:16px;line-height:1.85}.categories{grid-template-columns:repeat(auto-fit,minmax(195px,1fr))}.category{border-top:3px solid #a8cf88;--dot:#73ac45;padding:18px 20px}.category:nth-child(3n+2){border-top-color:#ffc586;--dot:#ff8658}.category:nth-child(3n){border-top-color:#90cbe9;--dot:#479ece}.category ul{padding-left:1.2em}
-.steps{list-style:none;counter-reset:step;padding:0;margin:24px 0}.steps>li{counter-increment:step;position:relative;padding-left:38px;margin:23px 0}.steps>li:before{content:counter(step);position:absolute;left:0;top:3px;width:25px;height:25px;border-radius:50%;background:var(--accent);color:white;text-align:center;line-height:25px;font-size:14px;font-weight:650}.steps h3{margin:0 0 7px}.steps h3:before{display:none}.steps p{font-size:16px}
+::selection{background:#ffddc8;color:var(--heading)}.paper{max-width:860px;margin:24px auto;padding:48px 46px 30px;background:var(--paper);border-radius:8px;box-shadow:0 8px 30px #25384b0b;position:relative}.paper:before{content:"";position:absolute;inset:0 0 auto;height:4px;border-radius:8px 8px 0 0;background:linear-gradient(90deg,#ff9d64,#a9a6ba)}.paper:after{content:"";display:block;margin-top:20px;height:3px;background:linear-gradient(90deg,#ff9d64,#a9a6ba)}
+h1,h2,h3,p{margin:0}h1,h2,h3{color:var(--heading);text-wrap:pretty}h1{font-size:34px;line-height:1.45;font-weight:750;letter-spacing:0}.subtitle{text-wrap:balance;font-size:21px;font-weight:600;line-height:1.6;margin-top:12px;color:#4c5965}.lead{margin-top:20px;line-height:1.9}.meta{font-size:12px;color:var(--muted);margin-top:18px;line-height:1.8}.meta a{color:inherit;text-decoration:underline}
+.report-nav{counter-reset:report-nav;position:fixed;z-index:3;left:calc(50vw - 724px);top:32px;width:272px;max-height:calc(100vh - 64px);overflow:auto;padding:8px 8px 8px 0;background:transparent}.report-nav-title{display:block;padding:0 12px 20px;color:var(--heading);font-size:18px;font-weight:650}.report-nav>a{counter-increment:report-nav;display:grid;grid-template-columns:22px minmax(0,1fr);gap:12px;align-items:center;min-height:49px;margin-bottom:7px;padding:12px 16px;border:1px solid #e6ebee;border-left:4px solid transparent;border-radius:5px;background:#ffffffaa;color:#596873;font-size:15px;line-height:1.5;text-decoration:none}.report-nav>a::before{content:counter(report-nav,decimal-leading-zero);color:#93a0aa;font-size:12px;font-variant-numeric:tabular-nums}.report-nav>a:hover{background:var(--blue-wash);color:var(--blue)}.report-nav>a[aria-current="location"]{background:#fff;border-left-color:#dc8e65;transform:translateX(8px);box-shadow:0 6px 18px #263e5010;color:var(--ink);font-weight:650}
+
+section{margin-top:42px}section>h2{display:flex;flex-wrap:nowrap;align-items:baseline;gap:8px 12px;font-size:24px;font-weight:750;line-height:1.55;padding-bottom:13px;border-bottom:1px solid var(--line);margin-bottom:21px}.num{display:inline-flex;align-items:center;justify-content:center;align-self:flex-start;flex-shrink:0;min-width:28px;height:28px;padding:0 5px;margin-top:5px;background:#424e58;border-radius:50%;color:white;font-size:16px;line-height:1;font-weight:650;font-variant-numeric:tabular-nums}h3{font-size:19px;font-weight:700;line-height:1.6;margin:27px 0 12px}h3:before{content:"";display:inline-block;width:8px;height:8px;margin-right:9px;margin-bottom:2px;border-radius:50%;background:var(--dot,var(--orange))}p+p{margin-top:14px}strong{font-weight:650;color:var(--heading)}ul,ol{padding-left:1.4em;margin:16px 0}li+li{margin-top:8px}li::marker{color:var(--accent)}a{color:var(--blue);text-underline-offset:4px}a:hover{color:var(--accent)}:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
+.section-title{flex:1 1 0;min-width:0}.section-time{display:block;flex:0 0 auto;white-space:nowrap;margin-left:auto;font-size:12px;font-weight:400;line-height:1.6;color:#666666;font-variant-numeric:tabular-nums;overflow-wrap:normal}
+.section-time a{color:inherit}.section-time a:hover{color:var(--accent)}
+.callout{margin:25px 0;padding:20px 24px;background:var(--blue-wash);border:0;border-radius:7px;color:var(--blue)}.callout h3{margin:0 0 9px;color:var(--blue);font-size:18px}.callout h3:before{display:none}.callout strong{color:inherit}.keyline{margin:25px 0;padding:20px 24px;background:var(--wash);border:0;border-radius:6px;line-height:1.85}.keyline p,.keyline blockquote{margin:0}.keyline cite{display:block;font-size:13px;font-style:normal;margin-top:10px;color:var(--muted)}
+.cards,.comparison,.categories{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px;margin:26px 0}.card,.comparison>div,.category{min-width:0;padding:22px 24px;background:#fff;border-radius:9px;box-shadow:0 4px 16px #25384b12}.card h3,.comparison h3,.category h3{margin:0 0 11px;font-size:18px}.card p,.category p,.comparison p{font-size:16px;line-height:1.85}.categories{grid-template-columns:repeat(auto-fit,minmax(195px,1fr))}.category{border-top:3px solid var(--line);padding:18px 20px}.category ul{padding-left:1.2em}
+.categories.categories-stacked{grid-template-columns:minmax(0,1fr);gap:18px}.categories-stacked>.category{padding:18px 20px}.categories-stacked>.category ul{margin:10px 0 0}.categories-stacked>.category li+li{margin-top:5px}
+/* 长解释分类：复用 category，标题与列表圆点分层，允许自然篇幅。 */
+.categories.categories-detailed{grid-template-columns:minmax(0,1fr);gap:28px}.categories-detailed>.category{--category-tone:#2c6e83;padding:26px 28px;background:#fff;border:0;border-left:3px solid var(--category-tone);box-shadow:0 3px 16px #273c4910}.categories-detailed>.category>h3{font-size:22px;line-height:1.55;margin:0 0 12px}.categories-detailed>.category>h3:before{display:none}.categories-detailed .category-meta{font-size:14px;color:var(--muted);margin:0 0 16px}.categories-detailed h4{font-size:18px;font-weight:650;line-height:1.6;color:var(--heading);margin:24px 0 10px}.categories-detailed p,.categories-detailed li{font-size:17px;line-height:1.85}.categories-detailed>.category>:last-child{margin-bottom:0}
+.categories-detailed>.category[data-tone="rust"]{--category-tone:#a64c35}.categories-detailed>.category[data-tone="ochre"]{--category-tone:#75602b}.categories-detailed>.category[data-tone="plum"]{--category-tone:#77558a}.categories-detailed>.category[data-tone="sage"]{--category-tone:#456e51}.categories-detailed>.category[data-tone="rose"]{--category-tone:#8e516d}.categories-detailed .category-number{font-size:15px;font-weight:600;color:var(--category-tone);margin-right:12px;font-variant-numeric:tabular-nums}.categories-detailed li::marker{color:#8b959e}
+
+.steps{list-style:none;counter-reset:step;padding:0;margin:24px 0}.steps>li{counter-increment:step;position:relative;padding-left:38px;margin:23px 0}.steps>li:before{content:counter(step);position:absolute;left:0;top:3px;width:25px;height:25px;border-radius:50%;background:var(--accent);color:white;text-align:center;line-height:25px;font-size:14px;font-weight:650}.steps h3{margin:0 0 7px}.steps h3:before{display:none}
 .stats,.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:20px;margin:26px 0}.stats{padding:24px 0;border-block:1px solid var(--line);text-align:center}.stat+.stat{border-left:1px solid var(--line)}.tile{text-align:center;padding:20px 14px;border-radius:8px;box-shadow:0 3px 12px #25384b0e}.value{display:block;font-size:28px;font-weight:700;color:var(--accent);line-height:1.4;font-variant-numeric:tabular-nums}.caption{display:block;font-size:14px;line-height:1.65;color:var(--muted);margin-top:8px}
-.bars{display:grid;gap:14px;margin:26px 0}.bar-row{display:grid;grid-template-columns:130px 1fr 84px;align-items:center;gap:14px;font-size:15px}.bar-track{height:22px;background:#eef2f5;border-radius:4px;overflow:hidden}.bar-fill{display:block;height:100%;border-radius:4px;background:#6db6e9}.bar-row:nth-child(2) .bar-fill{background:#a4c9de}.bar-row:nth-child(3) .bar-fill{background:#cdd7de}.bar-value{font-weight:650;color:var(--heading);font-variant-numeric:tabular-nums;text-align:right}.bar-note{font-size:14px;color:var(--muted);margin-top:2px}
-pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:20px;background:#f5f7f9;border-radius:6px}code{font-family:ui-monospace,monospace;font-size:.9em}table{border-collapse:collapse;width:100%;margin:24px 0;font-size:15px}th,td{text-align:left;vertical-align:top;padding:12px;border-bottom:1px solid var(--line)}th{font-weight:650;background:#f5f7f9}
-details{margin-top:42px;padding-top:20px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}.intro+details{padding:0 0 20px;border-top:0;border-bottom:1px solid var(--line)}summary{cursor:pointer;width:fit-content;color:var(--heading)}details[open] summary{margin-bottom:14px}.video-description-text{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}footer{margin-top:28px;font-size:12px;color:var(--muted)}
-@media print{body{background:white}.paper{margin:0 auto;box-shadow:none}.callout,.card,.category,.tile,.bars{break-inside:avoid}h2,h3{break-after:avoid}}
+.bars{margin:26px 0;display:grid;gap:16px}.bar{display:grid;gap:7px}.bar-head{display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap}.bar-name{font-size:15px;line-height:1.6;color:var(--muted)}.bar-value{font-size:15px;font-weight:650;color:var(--heading);font-variant-numeric:tabular-nums}.bar-track{display:block;height:12px;border-radius:3px;background:#eff6fa;overflow:hidden}.bar-fill{display:block;height:100%;border-radius:3px;background:var(--bar-color,#7ac5ef)}.bar-highlight{--bar-color:#ffb38a}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:20px;background:#f5f7f9;border-radius:6px}code{font-family:ui-monospace,monospace;font-size:.9em}table{border-collapse:separate;border-spacing:0;width:100%;max-width:100%;margin:24px auto;font-size:15px;line-height:1.75;overflow-wrap:break-word;border:1px solid #dce9f1;border-radius:7px;overflow:hidden}th,td{text-align:left;vertical-align:top;min-width:5em;padding:16px;border-bottom:1px solid var(--line)}th{font-weight:650;color:var(--blue);background:var(--blue-wash)}thead th{font-size:14px}tbody{background:var(--paper)}tbody th{background:transparent;color:var(--heading);border-right:1px solid #e6eef3}tbody tr:last-child>th,tbody tr:last-child>td{border-bottom:0}td:first-child{color:var(--heading);font-weight:550}tbody th[scope="row"]{min-width:7em}.table-details{table-layout:auto}.table-details tbody th{min-width:7.5em}.table-compact{width:auto}.table-number{text-align:right;font-variant-numeric:tabular-nums}td>ul,td>ol{margin:0;padding-left:1.2em}td li+li{margin-top:6px}td p+p{margin-top:8px}
+.evidence-rows{list-style:none;counter-reset:evidence-row;display:grid;gap:31px;margin:25px 0 34px;padding:0}.evidence-rows>li{counter-increment:evidence-row;display:grid;grid-template-columns:minmax(150px,186px) minmax(0,1fr);gap:22px;margin:0}.evidence-topic:before{content:counter(evidence-row,decimal-leading-zero);display:block;color:var(--accent);font-size:12px;font-weight:700;line-height:1.2}.evidence-topic h3{font-size:17px;line-height:1.5;margin:5px 0 4px}.evidence-topic h3:before{display:none}.evidence-body{min-width:0}.evidence-judgment{margin:0;color:var(--blue);font-weight:650;line-height:1.55}.evidence-detail{margin:8px 0 0;font-size:15px;line-height:1.72}
+.cycle-map{margin:26px 0}.cycle-map svg{display:block;width:100%;height:auto}.cycle-node{fill:#edf7fc;stroke:#d6eaf3;stroke-width:1}.cycle-edge{fill:none;stroke:#6997ad;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.cycle-title{font-size:17px;font-weight:650;fill:var(--heading)}.cycle-note{font-size:14px;fill:#426779}.cycle-label{font-size:14px;fill:#426779}.cycle-map figcaption{margin-top:8px;font-size:14px;color:var(--muted)}
+details{margin-top:24px;font-size:13px;color:var(--muted)}.intro+details~section:first-of-type{margin-top:24px}summary{cursor:pointer;width:fit-content;color:var(--heading)}details[open] summary{margin-bottom:12px}.video-description-text{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}footer{margin-top:24px;font-size:12px;color:var(--muted)}.paper{overflow-wrap:anywhere}
+footer{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap}.footer-link,.footer-link:hover{color:inherit;text-decoration:underline}
+@media print{body{background:white}.paper{margin:0 auto;box-shadow:none}.callout,.card,.category,.tile{break-inside:avoid}h2,h3{break-after:avoid}}
+@media print{.categories-detailed>.category{break-inside:auto}.categories-detailed h4{break-after:avoid}}
+@media(min-width:1195px) and (max-width:1448px){.paper{margin-left:310px;margin-right:24px}.report-nav{left:24px}}
+@media(max-width:1194px){.report-nav{display:none}}
+@media print{.report-nav{display:none}}
+
+.stats.stats-counts{gap:0;border:0;padding:14px 0}.stats-counts>.stat{position:relative;min-width:0;padding:0 20px;text-align:center}.stats-counts>.stat+.stat{border-left:0}.stats-counts>.stat+.stat:before{content:"";position:absolute;left:0;top:0;bottom:0;border-left:1px solid var(--line)}.stats-counts .value{display:grid;grid-template-columns:1fr auto 1fr;align-items:baseline;font-size:30px;font-weight:650;line-height:1.35}.stats-counts .count-amount{grid-column:2}.stats-counts .value small{grid-column:3;justify-self:start;margin-left:4px;font-size:14px;font-weight:400;color:var(--muted)}.stats-counts .caption{font-size:16px;line-height:1.75;color:var(--ink);margin:10px auto 0;max-width:220px}
+/* 开放式关系组件：沿用纸面、字号与蓝橙色，不另设题材皮肤。 */
+.definitions{margin:24px 0}.definitions>div{display:grid;grid-template-columns:minmax(120px,170px) minmax(0,1fr);gap:22px;padding:14px 0;border-bottom:1px solid var(--line)}.definitions dt{font-weight:650;color:var(--heading)}.definitions dd{margin:0;min-width:0}.definitions>div:last-child{border-bottom:0}
+.mapping{margin:26px 0}.mapping-row{display:grid;grid-template-columns:140px minmax(0,1fr);gap:24px;align-items:baseline;padding:17px 0;border-bottom:1px solid var(--line)}.mapping-row:last-child{border-bottom:0}.mapping-task{font-size:17px;font-weight:650;color:var(--heading)}.mapping-relation{display:flex;gap:14px;align-items:baseline;flex-wrap:wrap;min-width:0;font-size:17px;line-height:1.85}.mapping-relation>span{min-width:0;max-width:100%}.mapping-arrow{color:var(--blue);flex:none}
+.steps.steps-route{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:24px}.steps-route>li{padding:38px 0 0;margin:0;min-width:0}.steps-route>li:before{top:0}.steps-route>li:after{content:"";position:absolute;left:32px;right:0;top:12px;border-top:1px solid var(--line)}.steps-route>li:last-child:after{display:none}.steps-route h3{font-size:17px}.steps-route p{font-size:16px}
+.branches{margin:24px 0}.branches>p{font-weight:650;color:var(--heading)}.branches>ul{list-style:none;margin:14px 0 0 12px;padding:0 0 0 24px;border-left:1px solid #a8bfcd}.branches>ul>li{position:relative;padding:6px 0;margin:8px 0}.branches>ul>li:before{content:"";position:absolute;left:-24px;top:21px;width:16px;border-top:1px solid #a8bfcd}
+@media print{.mapping-row,.definitions>div,.branches>ul>li{break-inside:avoid}}
+/* 可选均衡短卡：三列为主，余一项时末四项分成两行，余两项时均分末行。 */
+.categories.categories-balanced{grid-template-columns:repeat(6,minmax(0,1fr))}.categories-balanced>.category{grid-column:span 2}.categories-balanced:has(>.category:last-child:nth-child(3n+4))>.category:nth-last-child(-n+4),.categories-balanced:has(>.category:last-child:nth-child(3n+2))>.category:nth-last-child(-n+2){grid-column:span 3}.categories-balanced>.category:only-child{grid-column:1/-1}
+table>caption.caption{display:table-caption;caption-side:top;text-align:left;margin:0 0 8px}.table-group>th{background:#f3f8fb;border-right:0;padding:10px 16px;color:var(--heading)}
+.paired-bars{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:30px;margin:26px 0}.paired-group{min-width:0}.paired-group .bar+.bar{margin-top:12px}.paired-group>h3{margin:0 0 12px}.paired-group>h3:before{display:none}
+.metric-rows{margin:24px 0 8px}.metric-row{padding:12px 0}.metric-head{display:grid;grid-template-columns:150px minmax(0,1fr);gap:20px;align-items:baseline}.metric-head h3{margin:0;font-size:18px}.metric-head h3:before{display:none}.metric-value{margin:0;color:var(--blue);font-weight:650;line-height:1.65}.metric-detail{margin:8px 0 0 170px;display:grid;gap:6px;font-size:15px;line-height:1.75}.metric-detail p{margin:0}.metric-detail strong{color:var(--muted);font-size:14px}
+.phase-list{border-top:1px solid #d7e5ec;margin:24px 0}.phase-row{display:grid;grid-template-columns:220px minmax(0,1fr);gap:22px;padding:18px 10px;border-bottom:1px solid #d7e5ec}.phase-id{display:flex;flex-direction:column;gap:4px;color:#2b4e63}.phase-id strong{font-size:17px;line-height:1.55}.phase-id span{font-size:15px;color:var(--muted)}.phase-main p{margin:0;line-height:1.65}.phase-main p:first-child{font-weight:650;color:var(--heading)}.phase-main p+p{margin-top:5px}
+.reading-items{margin:24px 0}.reading-item{padding:14px 0 19px;margin-bottom:8px;border-bottom:1px solid var(--line)}.reading-item>h3{font-size:18px;margin:0 0 7px}.reading-item>h3:before{display:none}.reading-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;padding-top:10px}.reading-fields strong{font-size:14px;color:var(--blue)}.reading-fields p{font-size:15px;line-height:1.7;margin:2px 0 0}
+.reading-items-layered{counter-reset:layer}.reading-items-layered>.layer-progress{font-size:14px;line-height:1.5;color:var(--blue);background:var(--blue-wash);padding:8px 14px;border-radius:5px}.layer-progress span{margin:0 8px;color:var(--accent)}.reading-items-layered>.reading-item{counter-increment:layer;display:grid;grid-template-columns:42px minmax(0,1fr);column-gap:15px;padding:18px 0;margin:0}.reading-items-layered>.reading-item:before{content:counter(layer,decimal-leading-zero);grid-column:1;grid-row:1/span 2;padding-top:3px;font-size:14px;font-weight:700;color:var(--accent)}.reading-items-layered>.reading-item>h3{grid-column:2;margin:0 0 8px}.reading-items-layered>.reading-item>.reading-fields{grid-column:2;gap:20px;padding:0}.reading-items-layered .reading-fields p{font-size:16px;line-height:1.75}.reading-items-layered>.reading-item:last-child{border-bottom:0}
+
+.report-theme-toggle {
+  position: fixed;
+  z-index: 4;
+  top: 16px;
+  right: 12px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--paper);
+  color: var(--heading);
+  cursor: pointer;
+}
+.report-theme-toggle:not([hidden]) { display: grid; place-items: center; }
+.report-theme-toggle:hover { background: var(--blue-wash); }
+.report-theme-toggle::before {
+  content: "";
+  width: 20px;
+  height: 20px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  background: linear-gradient(90deg, currentColor 50%, transparent 50%);
+}
+@media (pointer: coarse) {
+  .report-theme-toggle { right: 4px; width: 60px; height: 60px; }
+  .report-theme-toggle::before { transform: scale(1.3); }
+}
+@media (forced-colors: active) {
+  .report-theme-toggle::before { forced-color-adjust: none; color: ButtonText; }
+}
+@media print { .report-theme-toggle:not([hidden]) { display: none; } }
+
+@media screen {
+  :root[data-report-theme="dark"] {
+    color-scheme: dark;
+    --canvas: #15181c;
+    --paper: #20242a;
+    --surface: #292f36;
+    --ink: #d6dbe1;
+    --heading: #f0f2f5;
+    --muted: #aab4bf;
+    --accent: #ffae82;
+    --orange: #ec986a;
+    --line: #404953;
+    --blue: #99c9f2;
+    --blue-wash: #233746;
+    --wash: #3a3021;
+    --warm-text: #e6cc9a;
+    --rule-blue: #465b6c;
+    --diagram-ink: #b0cddd;
+    --diagram-edge: #82a9be;
+  }
+
+  [data-report-theme="dark"] ::selection { background: #684631; }
+  [data-report-theme="dark"] .paper {
+    box-shadow: 0 8px 30px #080a0d66;
+  }
+  [data-report-theme="dark"] .paper::before,
+  [data-report-theme="dark"] .paper::after {
+    background: linear-gradient(90deg, #e7a078, #8e849e);
+  }
+  [data-report-theme="dark"] .subtitle,
+  [data-report-theme="dark"] .section-time { color: var(--muted); }
+
+  [data-report-theme="dark"] .report-nav > a {
+    background: var(--paper);
+    color: var(--muted);
+    border-color: #343c45;
+    border-left-color: transparent;
+  }
+  [data-report-theme="dark"] .report-nav > a::before { color: #9ba9b6; }
+  [data-report-theme="dark"] .report-nav > a:hover {
+    background: var(--blue-wash);
+    color: var(--blue);
+  }
+  [data-report-theme="dark"] .report-nav > a[aria-current="location"] {
+    background: #302c2b;
+    border-left-color: var(--accent);
+    box-shadow: 0 6px 18px #090a0d55;
+    color: var(--heading);
+  }
+
+  [data-report-theme="dark"] .num { background: #43505d; }
+  [data-report-theme="dark"] .steps > li::before {
+    background: var(--accent);
+    color: var(--paper);
+  }
+  [data-report-theme="dark"] .keyline { color: var(--warm-text); }
+  [data-report-theme="dark"] .keyline strong { color: #f3deb8; }
+
+  [data-report-theme="dark"] .card,
+  [data-report-theme="dark"] .comparison > div,
+  [data-report-theme="dark"] .category,
+  [data-report-theme="dark"] .tile {
+    background: var(--surface);
+    box-shadow: 0 2px 10px #090a0d44, inset 0 0 0 1px #37404a;
+  }
+  [data-report-theme="dark"] .categories-detailed > .category { --category-tone: #8bbacb; }
+  [data-report-theme="dark"] .categories-detailed > .category[data-tone="rust"] { --category-tone: #eaa389; }
+  [data-report-theme="dark"] .categories-detailed > .category[data-tone="ochre"] { --category-tone: #d8be7b; }
+  [data-report-theme="dark"] .categories-detailed > .category[data-tone="plum"] { --category-tone: #c6a8da; }
+  [data-report-theme="dark"] .categories-detailed > .category[data-tone="sage"] { --category-tone: #9dc9aa; }
+  [data-report-theme="dark"] .categories-detailed > .category[data-tone="rose"] { --category-tone: #dfa2bb; }
+  [data-report-theme="dark"] .categories-detailed li::marker { color: var(--muted); }
+
+  [data-report-theme="dark"] table { border-color: var(--rule-blue); }
+  [data-report-theme="dark"] tbody th { border-right-color: var(--rule-blue); }
+  [data-report-theme="dark"] .table-group > th { background: #2b343e; }
+  [data-report-theme="dark"] .phase-list,
+  [data-report-theme="dark"] .phase-row { border-color: var(--line); }
+  [data-report-theme="dark"] .phase-id { color: var(--diagram-ink); }
+  [data-report-theme="dark"] .branches > ul,
+  [data-report-theme="dark"] .branches > ul > li::before { border-color: var(--diagram-edge); }
+  [data-report-theme="dark"] pre { background: #191d22; }
+
+  [data-report-theme="dark"] .bar-track { background: #383f47; }
+  [data-report-theme="dark"] .bar-fill { background: var(--bar-color, #82bbdf); }
+  [data-report-theme="dark"] .bar-highlight { --bar-color: #f4a87e; }
+  [data-report-theme="dark"] .cycle-node { fill: var(--blue-wash); stroke: #62869b; }
+  [data-report-theme="dark"] .cycle-edge { stroke: var(--diagram-edge); }
+  [data-report-theme="dark"] .cycle-note,
+  [data-report-theme="dark"] .cycle-label { fill: var(--diagram-ink); }
+
+  /* Independent diagrams use their own palette, including dark labels. */
+  [data-report-theme="dark"] figure[data-report-diagram] > svg { background: #fff; }
+}
 </style>
 </head>
-<body><main class="paper">
+<body>
+<button class="report-theme-toggle" type="button" aria-label="深色模式" aria-pressed="false" title="切换浅色或深色" hidden></button>
+<main class="paper">
 <header class="intro">
-<h1>削藩与分配：中国财政再平衡的逻辑与路径</h1>
-<p class="subtitle">从包干制、土地财政到统一大市场，中央如何重建财税秩序</p>
-<p class="lead">这段讲解从一个三轮分配的思想实验出发，先解释“藩”在经济体制里的现代含义，再回到中国地方财政的演变，最后落到中央正在推进的工具与两个尚未回答的问题。以下按问题的推进顺序重组，保留原文的关键数字、政策名称与判断条件。</p>
-<p class="meta">Bilibili；数据库kira；《我们为什么要削藩？谁又是藩？分配问题怎么解决，结果能成功吗？》；https://www.bilibili.com/video/BV1xJYT6EEYc/</p>
+<h1>沃尔特·皮茨：用逻辑解释大脑，怎样启发了计算机</h1>
+
+<p class="lead"><span data-source-units="unit-000063 unit-000064 unit-000082 unit-000087 unit-000149 unit-000198 unit-000199">沃尔特·皮茨和沃伦·麦卡洛克把神经元抽象成能做逻辑运算的开关，试图理解许多细胞连起来为何能产生复杂行为。从自学逻辑到研究随机网络，皮茨的经历串起了这个早期模型的两面：它启发了计算机设计，却难以解释真实的视觉处理。</span></p>
+
+<p class="meta">Bilibili；留声社；《连接大脑与电脑？野生天才的一生有多传奇？【留声社·AI简史02】》；<a href="https://www.bilibili.com/video/BV15nWq6oEeR/?p=1">https://www.bilibili.com/video/BV15nWq6oEeR/?p=1</a></p>
 </header>
 
-<section>
-<h2><span class="num">1</span>一个思想实验：钱在三个口袋之间怎么分<span class="section-time">00:00–02:27</span></h2>
-<p data-source-units="unit-000004 unit-000006 unit-000007">先假设某个平行宇宙里有一个叫水獭国的国家，一年创造 100 块钱的 GDP。这笔钱主要在三个口袋之间分配：居民企业、政府、居民部门。按这个设定，居民部门大概能拿到 61 块，六成以上，看起来还算可以。</p>
-<p data-source-units="unit-000009 unit-000010 unit-000013 unit-000014">但仔细算账就会察觉不对劲。除开日常生活开支，剩下的钱大多会存起来，比例约三分之一，也就是 20 块左右；真正变成消费、重新流回经济循环的只有 40 块上下。其中还有一部分以增值税的形式交还给国家，留在普通人手里、体现为生活质量的比 40 块还少，而全球平均水平约 60 块。高收入群体消费不完自己拿到的钱，大量财富沉淀为资产；低收入群体有消费意愿却没有消费能力；中间的人看着上面够不着、看着下面怕掉下去，最终也选择存钱。</p>
-<h3>财富沉淀与消费缺口</h3>
-<p data-source-units="unit-000012 unit-000015">水獭国的基尼系数大概在 0.46 上下浮动，这意味着高收入群体拿到了远超比例的份额。与此同时，一场技术革命让大多数热钱跑到相应企业当中，于是出现一种特殊情况：内部消费严重不足，财富的绝对量并没有减少，它转向了储蓄，新技术重新流入居民端的部分自然减少。</p>
-<div class="keyline" data-source-units="unit-000016 unit-000017 unit-000018 unit-000019">
-<p>可以把经济想象成一只木桶：技术是最长的那块板，资本第二长，基建第三长，但木桶能装多少水取决于最短的那块板——<strong>消费</strong>。技术在迭代、产业在升级、基建在扩张，如果六成以上居民连日常消费都精打细算，这只桶就永远装不满；最长和最短之间的落差越大，水漏得也越快。</p>
-</div>
-<p data-source-units="unit-000019 unit-000020 unit-000021">这种落差的结果，是居民买不起自己生产的工业品，通缩压力随之出现：企业产品难卖、有技术没市场，大量资源集中在投资和生产端，却没有同步把钱分到消费端。产品需要迭代，迭代又需要市场有足够的消费支撑，社会活力于是不断下降。</p>
-<div class="bars" role="img" aria-label="居民消费支出占 GDP 比重：中国约 40%，中等收入经济体平均约 55%，全球平均约 60%">
-<div class="bar-row"><span>中国</span><span class="bar-track"><span class="bar-fill" style="width:40%"></span></span><span class="bar-value">约 40%</span></div>
-<div class="bar-row"><span>中等收入经济体</span><span class="bar-track"><span class="bar-fill" style="width:55%"></span></span><span class="bar-value">约 55%</span></div>
-<div class="bar-row"><span>全球平均</span><span class="bar-track"><span class="bar-fill" style="width:60%"></span></span><span class="bar-value">约 60%</span></div>
-<span class="bar-note">口径为居民消费支出占 GDP 比重，出自视频开篇的设定与后文引用。</span>
-</div>
-<p data-source-units="unit-000022 unit-000023">困境该怎么处理？答案就是这期讲解的主题：削藩与分配。</p>
-</section>
+<!-- VIDEO_DESCRIPTION_START -->
+<details><summary>视频简介（展开）</summary><div class="video-description-text">【留声社·AI简史】
+监制：工具人Tim、亚历山德里亚
+主编：苏莱曼、小镍
+策划：苏莱曼、小镍、听风
+文案：听风、小镍
+主持人：小镍
+后期：石头
+运营：小镍、落幕
 
-<section>
-<h2><span class="num">2</span>谁是“藩”：从分封制到制度性闭环<span class="section-time">02:26–06:45</span></h2>
-<p data-source-units="unit-000026">“藩”这个字最早的意思是篱笆，后来引申为屏障、边界，再后来变成一个政治概念：被中央授予权力、替中央守一方的地方势力。</p>
-<h3>分封、郡县与藩镇</h3>
-<p data-source-units="unit-000027 unit-000028 unit-000029 unit-000030">周朝分封天子，把土地分给诸侯，诸侯有兵权、税权和行政权，这套制度在初期是合理的：古代的生产力决定了天子无法真正控制所有地盘，分封成为当时唯一可行的治理方案。但时间一长，诸侯在自己的地盘上经营几代，利益固化、阶级固化，开始脱离天子的掌控。春秋五霸、战国七雄，本质上都是藩做大之后的结果。</p>
-<p data-source-units="unit-000031 unit-000032 unit-000033">秦始皇采用郡县制的目的，就是逐步取消分封、全部改成中央指派官员到地方管理，结果秦二世而亡。到了汉朝开国又回到分封制，刘邦把儿子们分到各地当藩王，觉得自家人靠得住，几十年后自家人一样做大、一样不听话。唐朝的藩镇又是另一种形态：安史之乱后，朝廷为维持边疆稳定，给节度使极大的权力，兵权、税收、人事都由节度使自己安排，中晚唐一百多年藩镇割据，中央政令出不了长安。</p>
-<div class="callout" data-source-units="unit-000034 unit-000035 unit-000036 unit-000037 unit-000038">
-<p><strong>跨越一千多年的共同逻辑：</strong>中央把权力授予地方，地方在运行中更看重自己的利益，直到利益固化，进而与中央制衡甚至对抗。这不是某个朝代的特殊问题，也不是某个制度的设计失误；只要一个国家足够大、治理层级足够多，藩就会以某种形式出现。古代的生产力只是决定了藩在本地拥有几乎无限的权利。</p>
-</div>
-<p data-source-units="unit-000039 unit-000040 unit-000041 unit-000042">到了现代社会，藩的形式发生了变化，底层逻辑却一致：它已经演化成一套制度性的闭环，取代了拥兵自重的家族或势力——某个层级的政府或某类市场主体拥有独立的规则制定权和利益结构，导致中央政策难以穿透，或者穿透了也无法执行。这在政治经济学里对应一个专门的研究领域：<strong>财政联邦主义</strong>，研究中央和地方之间怎么分钱、分权、分责，以及这种分配关系在长期运行中会产生什么变化。</p>
-<table>
-<thead><tr><th>案例</th><th>机制</th><th>结果</th></tr></thead>
-<tbody>
-<tr data-source-units="unit-000043 unit-000044 unit-000045 unit-000046 unit-000047 unit-000048 unit-000049 unit-000050"><td><strong>美国州际竞争</strong></td><td>各州有自己的税法、公司法与监管标准；特拉华州以极低的公司注册门槛和极度宽松的公司法，吸引超过六成《财富》五百强企业注册</td><td>企业实际经营地在加州、纽约、德州，法律归属地却在特拉华；注册费与特许经营税流向特拉华，经营所在地税基被侵蚀。“你降我也降”，公共服务的资金被挤压。中国地方招商“你返 70% 的税，我就返 80%”是同一逻辑</td></tr>
-<tr data-source-units="unit-000051 unit-000052 unit-000053"><td><strong>欧盟与爱尔兰</strong></td><td>欧盟花了几十年建统一市场，商品、资本、人员、服务的自由流动写进条约，但成员国财政主权高度独立，比中美之间更严重</td><td>爱尔兰长期把企业税率压在 12.5%，吸引苹果、谷歌的欧洲总部；欧盟委员会为此和爱尔兰打了十几年官司，要求苹果补缴 130 亿欧元税款。统一市场与财政主权之间的冲突至今没有真正解决</td></tr>
-<tr data-source-units="unit-000054 unit-000055 unit-000056 unit-000057 unit-000058 unit-000059"><td><strong>印度 GST 改革</strong></td><td>2017 年之前，各邦有各自的消费税率、商品分类标准和征收环节；一辆卡车从南部泰米尔纳德邦开到北部旁遮普邦，在边界排队检查、缴纳过境税的时间比路上行驶还长</td><td>14 亿人口的市场被切成二十多块。2017 年 GST 改革用全国统一税制替代各邦各自为政的体系，推行至今仍在和地方进行利益博弈</td></tr>
-</tbody>
-</table>
-<p data-source-units="unit-000060 unit-000061 unit-000062">至此可以得到一个前提：藩是所有大型经济体在中央与地方之间寻找平衡时几乎必然催生的结构性产物。而对国内观众来说，了解国内的藩远比了解国外更重要。</p>
-</section>
+参考资料：
+	那个试图用逻辑拯救世界的人——阿曼达·格夫特，《鹦鹉螺》 --- The Man Who Tried to Redeem the World with Logic — Amanda Gefter, Nautilus ARTIFICIAL INTELLIGENCE
+	 
+	沃尔特·皮茨——尼尔·R·斯马尔海泽，《生物学与医学展望》 --- Walter Pitts — Neil R. Smalheiser, Perspectives in Biology and Medicine, 43(2), 217–226 (2000) researchgate.net
+	 
+	为什么心智在头脑中——沃伦·S·麦卡洛克 --- Why the Mind Is in the Head — Warren S. McCulloch</div></details>
+<!-- VIDEO_DESCRIPTION_END -->
 
-<section>
-<h2><span class="num">3</span>中国的起点：财政包干制与 1994 年分税制<span class="section-time">06:44–10:19</span></h2>
-<p data-source-units="unit-000063 unit-000064">国内这些藩的出现有一个重要节点：1980 年代中国实行财政包干制。简单说就是中央和地方“分灶吃饭”——中央和每个省谈一个基数，每年交给中央多少钱，交完之后剩下的归自己。</p>
-<p data-source-units="unit-000065 unit-000066 unit-000067">这套制度一开始运行得十分顺利。改革开放刚起步、百废待兴，需要调动地方积极性；既然多赚的钱归自己，各地就拼命搞经济。乡镇企业的爆发、经济特区的起步、各地开发区的萌芽，背后都有这套财政激励在推动。</p>
-<h3>从激励到失衡</h3>
-<p data-source-units="unit-000068 unit-000069 unit-000070 unit-000071 unit-000072">到了 90 年代初，问题开始涌现：地方越来越富，中央越来越穷。中央财政收入占全国财政收入的比重从 1984 年的 40% 左右一路跌到 1993 年的 22%，全中国收上来的税只有五分之一多一点。一个中央政府连自己的基本开支都保不住，意味着宏观调控能力几乎丧失：想搞跨区域大工程搞不了，想平衡区域差距做不到，想应对经济波动没有弹药。更直接的是，中央穷到要靠向地方借钱来维持运转，地方有时候还不一定愿意给。</p>
-<div class="tiles">
-<div class="tile" data-source-units="unit-000070"><span class="value">约 40%</span><span class="caption">1984 年中央财政收入占全国比重</span></div>
-<div class="tile" data-source-units="unit-000070"><span class="value">22%</span><span class="caption">1993 年中央财政收入占全国比重</span></div>
-<div class="tile" data-source-units="unit-000084"><span class="value">52%</span><span class="caption">2000 年中央财政收入占全国比重</span></div>
-</div>
-<p data-source-units="unit-000073 unit-000074 unit-000075 unit-000076 unit-000077">1993 年，中央带队到各个省份一家一家谈，过程极其复杂。分税制的本质是财权的重新分配，而任何时代这种改制都是惊天动地的：古代有王安石变法，美国近现代有罗斯福新政。过程艰辛，结果顺利，谈判最终安稳落地，分税制改革在 1994 年 1 月 1 日正式实施。</p>
-<h3>税种划分与转移支付</h3>
-<p data-source-units="unit-000078 unit-000079 unit-000080 unit-000081">改革的核心设计是把税种分为中央税、地方税和共享税。占比最高的是共享税中的增值税，<strong>75% 归中央、25% 归地方</strong>；消费税 100% 归中央；企业所得税和个人所得税后来也改成中央占 60%、地方占 40%。</p>
-<p data-source-units="unit-000082 unit-000083 unit-000084 unit-000085 unit-000086">中央的财权问题得到缓解，再通过转移支付把钱向中西部和经济薄弱地区倾斜，客观上推动了均衡发展。山川大河上的跨山大桥、高速公路，以及数不清的扶贫政策，有相当一部分得益于改革带来的重新分配。中央财政收入占全国的比重从 1993 年的 22% 回升到 2000 年的 52%；国家有钱，才有能力修高速公路网、建高铁网络、建立覆盖全国的转移支付体系，每年几万亿资金从东部转移到中西部。1997 年亚洲金融危机、2008 年全球金融危机能够妥善应对，核心的财政体制就是分税制。</p>
-<h3>地方锦标赛</h3>
-<p data-source-units="unit-000087 unit-000088 unit-000089 unit-000090 unit-000091 unit-000092 unit-000093">与此同时，地方政府发展经济的动力也没有被限制。分税制后短期内地方的钱不够花，需要找出路，于是有了更强的招商引资冲动：各地搞开发区、建工业园、拉企业落户，本质上是在争夺税基——企业越多，留在本地的那 25% 增值税就越多。经济学家把这种现象称为<strong>地方锦标赛</strong>，每个地方管理者都像一个经营者，拼命发展自己辖区的经济。这套机制有副作用，客观上却是中国 30 年高速增长的重要引擎之一。全国性公共服务体系也由此有了财政基础：义务教育的全面普及、新型农村合作医疗、最低生活保障制度，这些覆盖十几亿人的民生工程，没有中央集中财力之后的大规模转移支付是建不起来的。</p>
-</section>
 
-<section>
-<h2><span class="num">4</span>分税制的副作用：土地财政、城投与招商内卷<span class="section-time">10:18–14:52</span></h2>
-<p data-source-units="unit-000094 unit-000095 unit-000096 unit-000097 unit-000098">分税制的设计适配的是一个特定历史阶段：高速增长、城镇化快速推进、增量空间巨大。在那个阶段，地方政府缺钱反而是动力——地可以卖、楼可以盖、工厂可以引进、GDP 可以跑起来，副作用在高速增长中被消化甚至掩盖。但增长阶段切换之后，副作用就从隐性变成显性：分税制把大头税收拿给中央，教育、医疗、社保、基建这些最花钱的事权却留在地方，于是出现“钱不够花”的局面。</p>
-<p data-source-units="unit-000099 unit-000100 unit-000101 unit-000102 unit-000103 unit-000104 unit-000105">地方政府开始寻找替代财源，由此催生了房地产浪潮。地方的逻辑很简单：先低价从农民手里征地，再高价卖给开发商，差价归财政，这就是<strong>第二财政</strong>。早期这条路确实有效，让地方政府有了搞基建的钱，也推动了城镇化。从 1992 年到 2024 年，全国地方政府累计出让土地近 1 亿亩，收取的土地出让金超过 83 万亿元；代价是农民的土地被低价征收，征地补偿与土地出让价格之间的巨大差额，构成从农村向城市、从居民向政府的财富转移。城市居民则背上了高房价——地价是房价的重要组成部分，地方政府对高地价的依赖和居民对低房价的需求之间存在根本矛盾，整个经济体对土地收入形成了路径依赖。</p>
-<div class="categories">
-<div class="category" data-source-units="unit-000106 unit-000107 unit-000108">
-<h3>土地财政收紧</h3>
-<p>当房地产进入下行周期，这条路就走不通了。2022 年以来土地出让收入大幅下滑，很多地方政府突然发现自己最大的一笔收入几近枯竭。</p>
-</div>
-<div class="category" data-source-units="unit-000109 unit-000110 unit-000111 unit-000112 unit-000113 unit-000114">
-<h3>城投债务</h3>
-<p>在地产最疯狂的年代，光卖地不够，各地又成立融资平台公司（城投），用政府信用背书去银行和资本市场借钱。城投在早期有正向作用，大量市政道路、桥梁、污水处理厂、供水供电设施由它融资建设。问题是这套模式绕过了中央的预算约束，借多少、怎么花、能不能还，中央看不清；运作方式靠借新还旧，只要能一直借到钱就能一直转。截至 2025 年末，全国地方政府法定债务 54.8 万亿元，隐性债务 6.5 万亿元，这还不包括大量城投平台的经营性债务，一旦某个环节断裂就可能引发连锁反应。</p>
-</div>
-<div class="category" data-source-units="unit-000115 unit-000116 unit-000117 unit-000118 unit-000119 unit-000120 unit-000121 unit-000122 unit-000123 unit-000124">
-<h3>招商内卷与市场分割</h3>
-<p>地方为争夺税基，用税收返还、土地出让金减免、财政奖励补贴企业：你给 70% 的税返，我就给 80%，他就给 90%，本质上是全体纳税人出钱补贴少数企业的落户，很多项目的实际效益远低于补贴成本。竞争最激烈时，各地设地方标准、进行招标限制、只补贴本地企业，把 14 亿人的市场变成“散装集体”，企业跨省做生意遇到的地方壁垒有时比出口到东南亚还多。超大规模市场本是一项竞争优势，地方保护主义让它变成阻碍。</p>
-</div>
-<div class="category" data-source-units="unit-000127 unit-000128 unit-000129 unit-000130 unit-000131 unit-000132">
-<h3>资本避税与财富外移</h3>
-<p>改革推进过程中，曾依靠人情关系甚至灰色产业发家的富豪开始把财富向外转移：离岸信托、VIE 架构、境外持股，通过精密的法律安排把财富放到国家主权够不着的地方。一个月薪万元的大城市白领每月被代扣个税，一个年收入几千元的县城居民也要缴纳增值税，而年收入几个亿的大老板通过这些架构可以实现近乎零纳税。这种结构性不公平侵蚀的是整个税基的完整性和社会的公平感。</p>
-</div>
-</div>
-<p data-source-units="unit-000133 unit-000134 unit-000135 unit-000136">这就是 1994 年分税制改革后诞生的隐形矛盾全面爆发的路径：税改之后事权和财权错配，地方需要更多资源，于是有了土地财政，而后是城投债务，再然后是招商内卷、市场碎片化，以及在解决问题过程中出现的财富转移。回到当年的视角，这套制度是长期运行中自然生长出来的结构性产物，想要发展就需要承担发展带来的风险和代价。</p>
-</section>
 
-<section>
-<h2><span class="num">5</span>为什么是现在：三个条件同时成型<span class="section-time">14:51–18:51</span></h2>
-<p data-source-units="unit-000137 unit-000138">为什么偏偏到了这几年才开始加大力度削藩？原因在于三个重要条件同时成型，原本可以慢慢来的改制，变成了不改就可能内爆的催命符。</p>
-<ol class="steps">
-<li data-source-units="unit-000139 unit-000140 unit-000141 unit-000142 unit-000143">
-<h3>外部环境：内循环成为战略底牌</h3>
-<p>以前国内市场碎一点问题不大，东西可以卖到国外，有外需兜底，增长引擎不会出大问题。但美国加关税、欧盟搞反补贴调查，出口这条路的不确定性陡增；外贸依旧在增长，风险却在变大。内循环于是成为中国经济的战略底牌，这张牌处理不好相当于自断一臂。2025 年 7 月中央财经委会议明确说明，建设全国统一大市场不仅是构建新发展格局、推动高质量发展的需要，也是赢得国际竞争主动权的需要——统一大市场已经不只是经济问题，还是国家安全问题。</p>
-</li>
-<li data-source-units="unit-000144 unit-000145">
-<h3>内部环境：财政压力到了临界点</h3>
-<p>房地产下行、土地财政缩水，城投平台越来越难维持，融资成本上升、新增借款渠道收窄，很多地方连基层公务员工资都发得吃力。截至 2025 年底，全国政府债务负债率 73.2%，总量可控，但结构性压力已经非常明显。</p>
-</li>
-<li data-source-units="unit-000146 unit-000147 unit-000148 unit-000149 unit-000150 unit-000151 unit-000152">
-<h3>居民端：钱不敢花、不愿花</h3>
-<p>居民消费支出占 GDP 的比重大约 40%，全球平均约 60%，中等收入经济体平均约 55%——每创造 100 块钱 GDP，老百姓只花掉 40 块。2026 年上半年 GDP 增长 4.2%，社会消费品零售总额只增长 1.3%，5 月份甚至是负增长；居民人均可支配收入增长 5.2%，人均消费支出只增长 3.7%。银行中长期定存利率已经普遍降到很低水平，2026 年居民定期存款到期规模约 75 万亿元，同比增幅高达 17%。利率低到几乎没有收益，人们还是在拼命存钱：钱并不缺，缺的是花的意愿与底气。</p>
-</li>
-</ol>
-<h3>不敢花的三个原因</h3>
-<ul>
-<li data-source-units="unit-000154 unit-000155"><strong>分到手的蛋糕太小。</strong>中国居民部门可支配收入占 GDP 的比重约 60.8%。</li>
-<li data-source-units="unit-000156 unit-000157 unit-000158"><strong>居民内部差距太大。</strong>过去五年，高收入组的可支配收入累计增长 35%，中等收入组只增长 25%，相差十个百分点；高收入群体消费不完自己的财富，低收入群体有强烈消费意愿却没有消费能力。</li>
-<li data-source-units="unit-000159 unit-000160 unit-000161"><strong>社保兜底不足。</strong>医疗、教育、养老、住房这四项开支中的任何一项，都可能让一个普通家庭陷入困境；没有安全感，就只能攒钱以防万一。</li>
-</ul>
-<p data-source-units="unit-000162 unit-000163 unit-000164 unit-000165 unit-000166 unit-000167 unit-000168 unit-000169">把前面讲的所有藩拉回来，会发现说到底都是分配问题：城投和土地财政的 83 万亿土地出让金，是从居民部门向政府部门的财富转移，农民失去土地、城市居民背上高房价，地方政府拿这些钱去搞基建和行政开支；资本之藩通过离岸架构合法避税，税负事实上向中产和工薪阶层倾斜——普通上班族个税税率可以到 45%，通过信托持有资产的亿万富翁可能一分钱个税都不用交；地方保护和招商内卷让全民为少数企业买单。这些财政资源如果投入医疗、教育、养老，普通人的消费信心会完全不同。</p>
-<div class="keyline" data-source-units="unit-000170 unit-000171 unit-000172">
-<p>这些结构不改，消费起不来；消费起不来，内循环就转不动；内循环转不动，在外部压力持续加大的背景下，整个经济增长的可持续性就要打问号。</p>
-</div>
-<p data-source-units="unit-000173 unit-000174 unit-000175 unit-000176 unit-000177">所以 2026 年 7 月，国务院批复了扩大消费的“十五五”规划。文件锚定了一个目标：到 2030 年社会消费品零售总额达到 60 万亿元左右，居民消费率明显提高；规划明确提出健全收入分配制度、完善社会保障、促进就业、增加居民财产性收入。文件本身是一份重新分配的路线图：削藩是手段，让老百姓有钱花、敢花钱才是目的。</p>
-</section>
 
-<section>
-<h2><span class="num">6</span>中央的棋局：三步收权与三件工具<span class="section-time">18:50–24:44</span></h2>
-<p data-source-units="unit-000178 unit-000179 unit-000180">问题搞清楚之后，中央准备如何解决？把这几年的动作排在一起看，它们构成一张精心设计的包围网，各环节同时在合拢，看不出零散地头疼医头的痕迹。</p>
-<ol class="steps">
-<li data-source-units="unit-000181 unit-000182 unit-000183 unit-000184 unit-000185 unit-000186 unit-000187">
-<h3>2018 年国地税合并</h3>
-<p>1994 年分税制时分设了国税局和地税局两套班子：国税局归中央垂直管理，收中央税和共享税；地税局归地方政府管，收地方税。这意味着地方政府对地方税的征管有很大操作空间——税怎么收、收多少、给谁优惠，地方说了算的成分很大。2018 年省级及以下的国税和地税合并，实行以国家税务总局为主的管理体制，人财物全部集中管理，全国税收数据实现一本账。效果很明确：地方政府在税收征管上做手脚的空间被大幅压缩，这是对地方的第一次制度性收权。</p>
-</li>
-<li data-source-units="unit-000188 unit-000189 unit-000190 unit-000191 unit-000192 unit-000193 unit-000194 unit-000195 unit-000196">
-<h3>城投退出令</h3>
-<p>2024 年 8 月底，央行、财政部、发改委、证监会四部门联合发布 150 号文，设了一条硬线：2027 年 6 月末之前，所有地方政府融资平台必须完成退出。退出标准有三条：隐性债务清零、取得三分之二以上金融债权人同意、彻底剥离政府融资功能，要么转型成自主经营的市场化企业，要么合规注销。截至 2025 年底，全国超过 82% 的融资平台已经退出；宁夏、内蒙古、吉林、辽宁走得最快，退出比例超过全国平均水平，江苏、浙江、山东退出的绝对数量最多，主要集中在区县级。预计 2026 年底超九成完成，2027 年上半年进入收尾。这一步的目的是彻底封死地方政府绕过中央预算约束自行借钱的通道：以后地方要融资只有一条路——发行纳入预算管理的政府债券，额度中央批、用途中央查、还款中央查。</p>
-</li>
-<li data-source-units="unit-000197 unit-000198 unit-000199 unit-000200 unit-000201 unit-000202 unit-000203 unit-000204">
-<h3>12 万亿化债组合拳</h3>
-<p>2024 年 11 月，全国人大常委会批准了近年来力度最大的化债方案：从 2024 年到 2026 年，每年发行 2 万亿元再融资专项债置换存量隐性债务，三年共 6 万亿；从 2024 年开始连续五年每年从新增专项债中安排 8000 亿元专门化债，五年共 4 万亿；加上棚改类隐性债务 2 万亿按原合同偿还，合计 12 万亿。中央做的事情是把债务从暗处挪到明处——从城投平台看不清、管不住的隐性账本，挪到政府法定债务这个中央能监管的账本上来，同时用低利率政府债券置换高利率城投债务，置换后平均利息成本降低超过 2.5 个百分点。截至 2024 年末，隐性债务已降到 10.5 万亿元，比 2023 年底减少将近 4 万亿。财政部长给出预期：2028 年之前，地方需要自行消化的隐性债务从 14.3 万亿大幅降到 2.3 万亿。</p>
-</li>
-</ol>
-<div class="callout">
-<p><strong>三件事的共同逻辑：</strong>让地方政府的每一分钱都落在中央看得见的账本上——税收一本账、融资一条道、债务从暗到明，三步合在一起就是化债。</p>
-</div>
-<h3>配套的三件工具</h3>
-<div class="cards">
-<div class="card" data-source-units="unit-000208 unit-000209 unit-000210 unit-000211 unit-000212 unit-000213">
-<h3>金税四期</h3>
-<p>系统打通了 138 个数据源，税务、银行、公安、市场监管、海关、不动产登记、车管所、人社八个部门的信息全部互通，为每个纳税人和企业建立一个“数字孪生体”：收入多少、消费多少、资产多少、有几套房、开什么车，系统全部有数，任何数据不匹配都会自动预警。以前税务稽查靠人工抽查、覆盖率很低，现在系统自动扫描。2025 年国家税务总局专门成立高净值人群税收管理处，盯的是年收入千万以上和资产规模较大的企业主群体；2025 年前 11 个月，全国查处 1818 名“双高”人员，查补税款 15.23 亿元。</p>
-</div>
-<div class="card" data-source-units="unit-000214 unit-000215 unit-000216 unit-000217 unit-000218 unit-000219">
-<h3>CRS 全球税务信息交换</h3>
-<p>CRS 全称共同申报准则，已覆盖一百多个国家和地区。机制是：在香港、新加坡、瑞士、开曼群岛等地开设的金融账户，当地金融机构会自动采集账户信息，再通过政府间协议交换给中国税务机关。以前很多人以为钱出了国就安全，CRS 相当于明牌告诉全球富豪：只要生活在地球上，交税就不可避免。2025 年 3 月起，湖北、山东、上海、浙江四地税务机关先后对取得境外收入未申报的纳税人进行追缴，到 11 月扩展到北京、广东、福建等地；2026 年 3 月以来，大量有海外账户的中国居民在个税 APP 上收到弹窗提醒。</p>
-</div>
-<div class="card" data-source-units="unit-000220 unit-000221 unit-000222 unit-000223 unit-000224 unit-000225 unit-000226 unit-000227">
-<h3>离岸信托新规</h3>
-<p>个税新规于 2026 年 7 月 24 日正式落地，是威慑力最大的一项。以前超级富豪把股权、房产、现金装进在开曼或 BVI 注册的离岸信托，名义上资产不再属于个人而属于信托，境外税法管不到，等于财富隐身。新规出台后三个环节全覆盖：装入时按财产市场价值扣除原值后的余额交财产转让所得税；放在信托里增值了，无论是否实际分配，按年申报交税；信托终止分配时再交一道税。如果本人是中国居民，通过非居民身份装入财产但信托由本人实际控制，照样视为居民个人的信托。配套的 15 号公告指明申报表单、办税渠道、分期缴税方式，给了 90 天窗口期让纳税人自查补缴，也相当于最后通牒。</p>
-</div>
-<div class="card">
-<h3>三件工具合力</h3>
-<p>金税四期管国内，CRS 管境外，离岸信托新规管法律架构，三项工具合力编织成一张前所未有的税收监管网，资本之藩的隐身难度变得越来越大。</p>
-</div>
-</div>
-</section>
 
-<section>
-<h2><span class="num">7</span>重写规则：统一大市场与公平竞争<span class="section-time">24:43–25:48</span></h2>
-<p data-source-units="unit-000228 unit-000229 unit-000230">改革到这里还没有结束。地方债问题和税收问题主要是应对当下困境，如果不把基础打好，时间一长类似问题恐怕还会出现，于是进入最后一步：重写规则。</p>
-<div class="categories">
-<div class="category" data-source-units="unit-000231 unit-000232 unit-000233">
-<h3>全国统一大市场建设条例</h3>
-<p>条例具有法律约束力。地方政府如果违反条例搞地方保护，市场主体可以拿着条例去起诉。全国统一大市场从 2022 年开始连续五年写进政府工作报告，2026 年进入立法阶段。</p>
-</div>
-<div class="category" data-source-units="unit-000234">
-<h3>招商引资鼓励和禁止事项清单</h3>
-<p>用白纸黑字列出地方哪些能做、哪些不能做。返还土地出让金、违规税收返还、超标准财政补贴这些以前各地招商引资的常规操作，全部进入禁止名单。</p>
-</div>
-<div class="category" data-source-units="unit-000235">
-<h3>破除卡点堵点专项行动</h3>
-<p>2026 年 5 月启动，为期八个月，目标是到 2026 年底基本消除因地方标准不当引发的市场分割。</p>
-</div>
-</div>
-<p data-source-units="unit-000236">三个方向、九个步骤互相叠加之后，变成一个不断加深的战略递进，也形成一张不断收缩的天网。</p>
-</section>
 
-<section>
-<h2><span class="num">8</span>两条历史路线与两个没有答案的问题<span class="section-time">25:47–29:48</span></h2>
-<p data-source-units="unit-000237 unit-000238 unit-000239">事情真的会顺利吗？答案是不好说，但可以回顾历史。汉初也面临削藩难题，走过两条路线。</p>
-<div class="comparison">
-<div data-source-units="unit-000240 unit-000241 unit-000242">
-<h3>晁错的路线：硬削</h3>
-<p>直接上奏、下诏削减藩王的封地和权力。效果立竿见影，七个诸侯国直接造反，史称七国之乱。虽然三个月就平定，代价却极大：军队大规模调动、经济遭受重创，晁错本人被腰斩。</p>
-</div>
-<div data-source-units="unit-000243 unit-000244 unit-000245 unit-000246 unit-000247">
-<h3>汉武帝的路线：推恩令</h3>
-<p>不直接夺权，而是规定藩王的封地必须由所有儿子均分继承。表面上这是一项恩赐——以前只有嫡长子能继承，现在所有儿子都有份。实际效果是每传一代封地就碎裂一次，几代之后横跨数郡的大国变成一个个小县，构不成威胁。整个过程没有一个藩王造反，因为每一步看起来都合理合法。推恩令依靠一系列制度工具，让藩的经济基础逐步瓦解，全程没有一刀切式的夺权。</p>
-</div>
-</div>
-<ul>
-<li data-source-units="unit-000248"><strong>城投退了，</strong>就借不到钱了。</li>
-<li data-source-units="unit-000249"><strong>税网密了，</strong>就藏不住钱了。</li>
-<li data-source-units="unit-000250"><strong>统一市场立法了，</strong>就搞不了地方保护了。</li>
-<li data-source-units="unit-000251 unit-000252"><strong>离岸信托堵死了，</strong>就转不走财富了。每一步都不是致命一击，但每一步都在缩小藩的生存空间。</li>
-</ul>
-<p data-source-units="unit-000253">不过推恩令能不能一路走下去，取决于两个尖锐的问题。</p>
-<h3>问题一：地方的动力从哪里来</h3>
-<p data-source-units="unit-000254 unit-000255 unit-000256 unit-000257">过去 30 年中国经济的高速增长，很大程度上靠地方政府之间的竞争。GDP 竞赛有问题，它确实是一种极强的激励机制，每个地方管理者都拼了命发展经济。城投退了、招商内卷停了、税收优惠收了，地方政府发展经济的抓手需要重新寻找方向。</p>
-<p data-source-units="unit-000258 unit-000259 unit-000260 unit-000261">目前能看到的一个替代方向是消费税改革：2026 年政府工作报告提出，推进部分消费税品目征收环节后移并下划地方。消费税是中国的第四大税种，2025 年收入 1.69 万亿元，目前 100% 归中央；部分下划地方可以给地方一个新的税源，同时引导地方政府从拼命搞投资转向努力促消费——你那里的消费好了，消费税收入就多，形成正向循环。</p>
-<div class="callout" data-source-units="unit-000262 unit-000263 unit-000264 unit-000265 unit-000266">
-<p><strong>但差额还没有着落。</strong>消费税的盘子补不上土地财政的窟窿：土地出让金高峰期一年好几万亿，消费税即使全部下划，地方也不到 2 万亿。中间的差额靠中央转移支付、地方债，还是新的税种，答案现在还不清楚。如果差额长期补不上，经济的一个重要引擎可能会熄火。</p>
-</div>
-<h3>问题二：扎篱笆与抄家之间的分寸能不能长期保持</h3>
-<p data-source-units="unit-000268 unit-000269 unit-000270 unit-000271 unit-000272 unit-000273">地方跑不了，资本可以跑。目前中央采取的策略是扎篱笆：不禁止你有钱，但你必须在中国的税法体系之下合规地有钱；不禁止你搞离岸信托，但你得按规定交税；也不禁止你在海外投资，但你的收入必须申报。这个分寸在顶层设计中是清楚的。</p>
-<h3>分寸感的执行风险</h3>
-<p data-source-units="unit-000274 unit-000275 unit-000276 unit-000277 unit-000278 unit-000279">但政策从顶层到基层执法之间有很多层级，历史上政策的初衷和基层的执行之间经常出现偏差。如果基层在执行中层层加码，把合规监管变成运动式清查，企业家的信心就可能动摇——他们不一定会公开反对，但会用脚投票，缩减投资、转移资产、减少在华经济活动。扎篱笆让人觉得规则明确、可以预期、可以配合；抄家让人觉得没有安全感、随时可能被清算。两者之间的分寸感，可能是这场改革成败的关键变量之一。</p>
-<h3>节奏与耐心</h3>
-<p data-source-units="unit-000280 unit-000281">推恩令成功的前提有三个：中央足够强、执行足够持久、节奏足够稳。汉武帝在位 54 年，推恩令从元朔二年开始，花了十几年才把主要的大国全部拆完，整个过程不急不躁、一代一代地削弱，没有给任何一个藩王造反的理由和时机，所以推恩令成为中国历史上最成功的制度变革之一。</p>
-<p data-source-units="unit-000282 unit-000283 unit-000284 unit-000285">中央的决心是明确的：12 万亿化债方案、离岸信托新规、统一市场条例都是大动作。但经济下行压力是真实的，如果地方财政断裂、风险上升，或者资本大规模外流，节奏就可能被迫加速。这也是为什么动作大但推进慢——国家不是个人，任何一份文件、一个决策都牵扯着上千万乃至十数亿人，耐心永远是最宝贵的财富。</p>
-</section>
 
-<section>
-<h2><span class="num">9</span>结论：一场还没结束的系统性重构<span class="section-time">29:47–31:17</span></h2>
-<p data-source-units="unit-000286 unit-000287">这场削藩是国内经济从高速增长切换到高质量发展过程中必须完成的一次系统性重构。它要拆掉的是一整套过去 30 年运转良好、现在已经不适应新阶段的利益分配格局，城投、信托、地方壁垒只是其中的具体环节。它的成败不取决于任何一项单独的政策，而取决于中央能不能在收权与放活之间、在监管与信心之间、在公平与效率之间找到那个精确的平衡点。</p>
-<p data-source-units="unit-000288 unit-000289 unit-000290 unit-000291 unit-000292 unit-000293">生于斯、长于斯，生活在这个时代是无奈的，也是无法改变的。每一代人都有自己的困惑，都会面临时代的局限：20 年前的人抱怨父母怎么不去下海经商，十年前的人抱怨父母为什么没赶上互联网浪潮，而现在的人也会抱怨自己没早点去追短视频、互联网的风口。也许十年后回头看，当下的时代遍地都是机会，这可能就是每一代人的宿命——你永远觉得别人的时代更好，永远觉得自己错过了什么。真相是，没有哪个时代是轻松的，也没有哪个时代是没有机会的。</p>
-<div class="keyline" data-source-units="unit-000294 unit-000295 unit-000296 unit-000297">
-<p><strong>治世不一道，便国不法古。</strong>规则在变，赛道在变，能活下来的从来都是最能适应变化的。未来不迎，当时不杂，过往不恋；管好眼前的事，看清脚下的路，剩下的交给时间。</p>
-</div>
-</section>
 
-<details><summary>来源与处理说明</summary>
-<p>来源：Bilibili 视频《我们为什么要削藩？谁又是藩？分配问题怎么解决，结果能成功吗？》，上传者“数据库kira”，视频内自述频道名为“阿酷”。链接 https://www.bilibili.com/video/BV1xJYT6EEYc/ ，总时长约 31:16。原始转写为 ASR 输出（paraformer），未使用字幕与 OCR。本报告为转写文本的编辑整理，未做独立事实核验。</p>
-<p>章节与来源单元对应：第 1 章 unit-000001–000023；第 2 章 unit-000024–000062；第 3 章 unit-000063–000097；第 4 章 unit-000098–000136；第 5 章 unit-000137–000177；第 6 章 unit-000178–000227；第 7 章 unit-000228–000236；第 8 章 unit-000237–000285；第 9 章 unit-000286–000298。章节时间按各章首尾单元起止向下/向上取整到秒。</p>
-<p>几处转写质量说明：视频原名与正文多处写作“水塔国”，结合上下文统一为“水獭国”；“翻/番/藩”混用处统一为“藩”；“划债/化寨”统一为“化债”；“11% 以下”的定存利率与上下文“几乎没有收益”不符，报告未采用该数值，仅保留“很低水平”这一可确认的部分。这些改动不改变来源的判断与数字口径。</p>
-</details>
-<footer>精读 · 本地阅读报告</footer>
-</main></body></html>
+
+
+
+<nav class="report-nav" aria-label="章节导航"><span class="report-nav-title">目录</span><a href="#s1">从底特律图书馆到麦卡洛克家</a><a href="#s2">1943 年：用神经元网络做逻辑运算</a><a href="#s3">在麻省理工：从固定规则转向随机网络</a><a href="#s4">研究团队重聚，维纳却切断了联系</a><a href="#s5">青蛙视网膜揭示了模型的局限</a></nav>
+<section id="s1"><h2><span class="num">1</span><span class="section-title">从底特律图书馆到麦卡洛克家</span><span class="section-time"><a href="https://www.bilibili.com/video/BV15nWq6oEeR/?p=1&amp;t=143">02:23–09:17</a></span></h2>
+
+<p data-source-units="unit-000016 unit-000017 unit-000018 unit-000021 unit-000022 unit-000023 unit-000024 unit-000027 unit-000028 unit-000029 unit-000030 unit-000031 unit-000032">1935 年，12 岁的沃尔特·皮茨为躲避追打跑进底特律的公共图书馆。他常在那里自学语言、逻辑和数学，这一次翻到了罗素和怀特海合著的《数学原理》。三个卷本近两千页，他花了几个星期研读，把发现的几处错误寄给罗素。按视频讲述，罗素回信邀他去剑桥读研究生；皮茨买不起船票，没能成行。这本书还让皮茨有了一个更长久的信念：<strong>混乱的世界也可以用严密的逻辑理解</strong>。</p>
+<p data-source-units="unit-000034 unit-000041 unit-000042 unit-000044 unit-000045 unit-000046 unit-000047">15 岁的皮茨听说罗素要访问芝加哥大学，便离家到了芝加哥。他后来拿着写满更正和建议的书去见哲学家卡尔纳普。卡尔纳普回忆，皮茨说有一段读不懂。两人翻到那一页细读，卡尔纳普发现自己也读不懂。皮茨当时没有稳定收入，会面后又没了音讯；卡尔纳普花了几个月找到他，开始指导他，还帮他找了一份学生工作。</p>
+<h3>两个问题在同一张桌上相遇</h3>
+<p data-source-units="unit-000052 unit-000053 unit-000054 unit-000062 unit-000063 unit-000064 unit-000073 unit-000075 unit-000076 unit-000077 unit-000078 unit-000079 unit-000080">医学生杰罗姆·莱特文把皮茨介绍给沃伦·麦卡洛克。两人都受《数学原理》影响，但关心的问题各有侧重：皮茨想用逻辑理解世界，麦卡洛克想弄清人怎样通过大脑认识世界。麦卡洛克提出用数学为神经活动建模，皮茨很快找到了能用的数学工具。1942 年，皮茨和莱特文搬进麦卡洛克家。据莱特文回忆，麦卡洛克夫妇把他们当作家人；有了安稳的住处，皮茨和麦卡洛克也能继续讨论到深夜。</p>
+</section>
+<section id="s2"><h2><span class="num">2</span><span class="section-title">1943 年：用神经元网络做逻辑运算</span><span class="section-time"><a href="https://www.bilibili.com/video/BV15nWq6oEeR/?p=1&amp;t=25">00:25–13:18</a></span></h2>
+
+<p data-source-units="unit-000067 unit-000068 unit-000069 unit-000070 unit-000071 unit-000072 unit-000082 unit-000083 unit-000084 unit-000085 unit-000087">单个神经细胞只接收和发出信号，许多细胞连起来却能参与复杂推理。麦卡洛克和皮茨在 1943 年发表的论文中，用后来称为 <strong>MP 神经元模型</strong>的数学开关来研究这个问题：多条线路送来输入，满足条件时输出 1（发信号），否则输出 0（不发信号）。改变触发条件，同一种抽象单元就能表达不同的逻辑关系。</p>
+<dl class="definitions">
+<div data-source-units="unit-000088 unit-000089"><dt>与：两个输入都要有</dt><dd>你和室友都想喝奶茶，才下单。</dd></div>
+<div data-source-units="unit-000090"><dt>或：至少有一个输入</dt><dd>你和室友中只要有一人想喝，就可以下单。</dd></div>
+<div data-source-units="unit-000091 unit-000092"><dt>抑制：输入有否决权</dt><dd>只要收到「别点」的信号，即使想喝也不下单；这体现了「非」的作用。</dd></div>
+</dl>
+<h3>神经元连成环后，活动可以留下痕迹</h3>
+<p data-source-units="unit-000098 unit-000099 unit-000101 unit-000102 unit-000103">沿链条传递时，一个神经元在当前时刻激发，下一个在下一时刻响应。如果末端输出回到前端成为新的输入，<strong>在适当条件下，外界刺激消失后，环内活动仍能持续</strong>。</p>
+<figure data-report-diagram="true" data-source-units="unit-000098 unit-000099 unit-000101 unit-000102 unit-000103"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 660 286" width="100%" font-family="sans-serif" style="display:block;width:100%;height:auto">
+  <rect width="660" height="286" rx="16" fill="#f7fafc" />
+  <text x="330" y="38" text-anchor="middle" font-size="24" font-weight="700" fill="#15283b">神经元闭环中的信号回传</text>
+  <g text-anchor="middle" font-size="17" fill="#283d50">
+    <text x="165" y="78">外界刺激触发活动</text>
+    <text x="495" y="78">外界刺激消失后</text>
+  </g>
+  <path d="M330 88v155" stroke="#d4dee6" stroke-width="2" />
+  <g stroke="#526d86" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M165 91v22m-5-6 5 6 5-6" />
+    <path d="M146 147l-32 48m0-8v8l8-3" />
+    <path d="M111 218h106m-7-5 7 5-7 5" />
+    <path d="M216 195l-32-48m8 3-8-3v8" />
+  </g>
+  <g stroke="#00726b" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M476 147l-32 48m0-8v8l8-3" />
+    <path d="M441 218h106m-7-5 7 5-7 5" />
+    <path d="M546 195l-32-48m8 3-8-3v8" />
+  </g>
+  <g stroke="#526d86" stroke-width="2.5" fill="#e8eff6">
+    <circle cx="165" cy="131" r="13" />
+    <circle cx="92" cy="218" r="13" />
+    <circle cx="238" cy="218" r="13" />
+  </g>
+  <g stroke="#00726b" stroke-width="3" fill="#ccefe8">
+    <circle cx="495" cy="131" r="13" />
+    <circle cx="422" cy="218" r="13" />
+    <circle cx="568" cy="218" r="13" />
+  </g>
+  <text x="574" y="173" text-anchor="middle" font-size="17" fill="#005e59">末端回传</text>
+  <text x="495" y="260" text-anchor="middle" font-size="17" fill="#15283b">条件合适时，环内活动持续</text>
+</svg><figcaption>神经元闭环中的信号回传</figcaption></figure>
+<p data-source-units="unit-000103 unit-000104 unit-000105 unit-000106">麦卡洛克把这种活动看作一种记忆：网络保留了某件事发生过的痕迹，却不一定保留它发生的时间。两人用模运算等工具来描述按固定周期重复的关系，像钟表走过十二点又从一点数起。</p>
+<p data-source-units="unit-000005 unit-000010 unit-000011 unit-000012 unit-000096 unit-000097 unit-000109 unit-000110 unit-000111">1936 年，图灵机已经给可计算性提供了严格的数学定义。麦卡洛克和皮茨要回答的是另一个问题：连接起来的简单单元能做什么运算。后来人们把人工智能的研究思路分为强调逻辑与规则的符号路线、强调感知与行动的行为路线，以及重视网络与学习的连接路线；而这项早期工作已经用形式逻辑搭建了神经网络。论文最初在神经科学界反响有限：数学表述不易读懂，一些实验研究者也认为二值模型过于简单，难以描述真实大脑。</p>
+</section>
+<section id="s3"><h2><span class="num">3</span><span class="section-title">在麻省理工：从固定规则转向随机网络</span><span class="section-time"><a href="https://www.bilibili.com/video/BV15nWq6oEeR/?p=1&amp;t=798">13:18–19:23</a></span></h2>
+
+<p data-source-units="unit-000112 unit-000114 unit-000115 unit-000116 unit-000119 unit-000122 unit-000123 unit-000124 unit-000125 unit-000127 unit-000128 unit-000129">莱特文又把皮茨带到数学家诺伯特·维纳面前。维纳在黑板上推演了约五分钟，皮茨便提出异议；大约一个小时后，两人把算式写到了第二面墙。维纳帮没有高中毕业文凭的皮茨进入麻省理工学院，承诺让他攻读数学博士。1943 年秋天前，皮茨搬进剑桥市的公寓，第一次有了自己的住处。维纳也带来了新的研究工具：要描述真实大脑中的随机性，得把概率和统计纳入模型。</p>
+<p data-source-units="unit-000131 unit-000132 unit-000133 unit-000134 unit-000135 unit-000136 unit-000138 unit-000139 unit-000140 unit-000160 unit-000164 unit-000166">遗传信息难以逐一指定海量突触连接，皮茨由此设想，大脑起初是一张随机连接的网。外界刺激反复作用时，神经元的<strong>触发阈值</strong>，也就是神经元发出信号所需达到的条件，会逐渐改变；网络由此形成新的秩序，把经验变成学到的行为。他尝试用统计力学把微观的神经活动同整体的行为规律联系起来。后来他在控制论会议上宣布要研究大量随机连接的神经元在三维空间中的共同活动，这也是博士论文的题目，但论文进展不大。维纳认为，朋友间的其他活动分散了他的精力。</p>
+<h3>早期模型先在计算机设计中找到了用处</h3>
+<p data-source-units="unit-000142 unit-000143 unit-000144 unit-000145 unit-000146 unit-000147 unit-000148 unit-000149 unit-000152 unit-000153 unit-000154 unit-000156 unit-000157">维纳牵线让皮茨结识了约翰·冯·诺伊曼。冯·诺伊曼起草 1945 年的 EDVAC 报告时，用原本描述神经活动的逻辑表达来组织电子计算机的基本元件。与此同时，皮茨协助维纳编辑《控制论》，参与梅西控制论会议，并在 1947 年再次与麦卡洛克合写论文，尝试用网络的几何结构来解释大脑皮层怎样归纳视觉与听觉信息。</p>
+</section>
+<section id="s4"><h2><span class="num">4</span><span class="section-title">研究团队重聚，维纳却切断了联系</span><span class="section-time"><a href="https://www.bilibili.com/video/BV15nWq6oEeR/?p=1&amp;t=1247">20:47–22:53</a></span></h2>
+
+<p data-source-units="unit-000179 unit-000180 unit-000181 unit-000182 unit-000183 unit-000184 unit-000185">分开后，皮茨在信里说，他常常想家，想和麦卡洛克聊上一整晚。1952 年，麻省理工学院电子实验室副主任杰里·威斯纳邀请麦卡洛克主持脑科学项目。为了和皮茨重聚，麦卡洛克放弃原有的教授职位，来到剑桥担任研究员。莱特文和年轻的神经科学家帕特里克·沃尔等人也加入了项目，团队在麻省理工学院 20 号楼开展研究。</p>
+<p data-source-units="unit-000188 unit-000189 unit-000190 unit-000191 unit-000192 unit-000193 unit-000196">也是在 1952 年，维纳给威斯纳发电报，宣布与麦卡洛克团队断绝联系。按莱特文和麦卡洛克一方的回忆，维纳的妻子玛格丽特曾向丈夫指称，女儿芭芭拉住在麦卡洛克家时受到那里的年轻人勾引，暗指皮茨等人。维纳没有向皮茨说明，也没有给他解释的机会。维纳不仅是引皮茨进入麻省理工学院的导师，在皮茨的生活中也曾如父亲一般。决裂后，皮茨逐渐变得孤僻，对科研和生活失去了兴趣。</p>
+</section>
+<section id="s5"><h2><span class="num">5</span><span class="section-title">青蛙视网膜揭示了模型的局限</span><span class="section-time"><a href="https://www.bilibili.com/video/BV15nWq6oEeR/?p=1&amp;t=1378">22:58–25:19</a></span></h2>
+
+<p data-source-units="unit-000198 unit-000199 unit-000200">莱特文和马图拉纳等人研究青蛙视觉时发现，<strong>视网膜已经在筛选和加工一部分视觉信息</strong>。当时简化的逻辑模型不足以解释这一过程。也许能做出一台具有相同效果的机器，但机器与青蛙眼睛的工作原理很可能不同。这一区别解释了同一套抽象为何能在计算机设计中派上用场，却没能解决皮茨最看重的生理问题。</p>
+<p data-source-units="unit-000201 unit-000202 unit-000203 unit-000204 unit-000205 unit-000206 unit-000207 unit-000208">据莱特文回忆，皮茨也参与了这项研究，并因此深受打击。他原本希望用数学说明真实大脑怎样工作；发现真实细胞的处理过程比逻辑开关复杂得多，他开始觉得自己的心血白费了，最后烧掉了研究随机神经网络的博士论文手稿。</p>
+<h3>两位合作者最后的通信</h3>
+<p data-source-units="unit-000209 unit-000210 unit-000211 unit-000212 unit-000213 unit-000214 unit-000215 unit-000216">此后皮茨陷入酗酒，朋友曾接他到家里暂住，也有人陪他露营、徒步，他却越来越少与人来往。1969 年 4 月，两人都住了院。听说麦卡洛克身上接满了监测仪器，连翻身都不方便，皮茨在信中苦笑：这是个十足的控制论处境。5 月 14 日，皮茨去世，年仅 46 岁。四个多月后，70 岁的麦卡洛克也去世了。</p>
+</section>
+<details><summary>来源说明</summary><p>Bilibili；留声社；《连接大脑与电脑？野生天才的一生有多传奇？【留声社·AI简史02】》；<a href="https://www.bilibili.com/video/BV15nWq6oEeR/?p=1">https://www.bilibili.com/video/BV15nWq6oEeR/?p=1</a></p></details>
+<footer><span>视频报告·精读</span><a class="footer-link" href="https://vreport.tri4t.xyz/">vreport.tri4t.xyz</a></footer>
+</main>
+<script>
+(() => {
+  const links = [...document.querySelectorAll('.report-nav>a')];
+  const entries = links.map(link => ({link, target:document.getElementById(link.hash.slice(1))})).filter(entry => entry.target);
+  if (!entries.length) return;
+  function updateCurrent() {
+    let current = entries[0];
+    for (const entry of entries) {
+      if (entry.target.getBoundingClientRect().top <= 160) current = entry;
+    }
+    if (window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2) current = entries[entries.length - 1];
+    for (const entry of entries) {
+      if (entry === current) entry.link.setAttribute('aria-current', 'location');
+      else entry.link.removeAttribute('aria-current');
+    }
+  }
+  window.addEventListener('scroll', updateCurrent, {passive:true});
+  window.addEventListener('resize', updateCurrent);
+  updateCurrent();
+})();
+</script>
+</body></html>
