@@ -89,6 +89,7 @@ def _provider_failure(message: dict) -> tuple[str, str | None, int | None]:
         return "unknown_provider_failure", provider_code, http_status
     if (
         http_status in {401, 402, 403}
+        or provider_code == "AccessDenied.Unpurchased"
         or any(term in lowered for term in (
             "invalid_api_key", "authentication", "insufficient_quota", "quota exceeded",
             "billing",
@@ -228,11 +229,17 @@ class PiRunner:
         alternate: dict,
         failure_count: int,
         request_seconds: float,
+        *,
+        provider_code: str | None = None,
     ) -> tuple[str, dict] | None:
         current_key = (current.get("provider"), current.get("model"))
         initial_key = (initial.get("provider"), initial.get("model"))
         on_initial = current_key == initial_key
         alternate_key = (alternate.get("provider"), alternate.get("model"))
+        if category == "auth_or_quota_failure" and provider_code == "AccessDenied.Unpurchased":
+            if on_initial and all(alternate_key) and alternate_key != current_key:
+                return "switch_model", alternate
+            return None
         if category == "input_content_rejected":
             if on_initial and alternate_key != current_key:
                 return "switch_model", alternate
@@ -842,7 +849,7 @@ class PiRunner:
                         )
 
                     message = last_assistant or {}
-                    category, provider_code, http_status = _provider_failure(message)
+                    category, provider_code, _ = _provider_failure(message)
                     current = model_state["current"]
                     key = (message.get("provider") or current.get("provider"),
                            message.get("model") or current.get("model"))
@@ -855,7 +862,7 @@ class PiRunner:
                         request_seconds = max(0, event["_trace_received_at"] - started)
                     recovery = self._select_recovery(
                         category, current, model_state["initial"], model_state["alternate"],
-                        failure_count, request_seconds,
+                        failure_count, request_seconds, provider_code=provider_code,
                     )
                     final = model_state.get("final_fallback") or {}
                     on_final = bool(final) and (current.get("provider"), current.get("model")) == (
@@ -868,10 +875,10 @@ class PiRunner:
                     # It receives one attempt, never routes back or retries indefinitely.
                     if on_final:
                         recovery = None
-                    elif final and category in {
+                    elif final and (recovery is not None or category in {
                         "input_content_rejected", "output_content_rejected",
                         "transient_provider_failure",
-                    } and (
+                    }) and (
                         recovery is None
                         or model_state["recovery_scheduled"] >= max_recoveries - 1
                     ):

@@ -302,6 +302,9 @@ def test_grok_responses_stream_failure_recovers_to_deepseek(
 
 @pytest.mark.parametrize("primary,alternate,first_error,first_age,second_error,second_age", [
     (("qwenai", "deepseek-v4.1-flash"), ("heyroute ", "grok-4.7"),
+     '403 {"message":"Access to model denied.","code":"AccessDenied.Unpurchased"}', 0.12,
+     "HTTP 503 unavailable", 2),
+    (("qwenai", "deepseek-v4.1-flash"), ("heyroute ", "grok-4.7"),
      "HTTP 400 data_inspection_failed: input data", 1,
      "OpenAI Responses stream ended before a terminal response event", 169),
     (("heyroute ", "grok-4.7"), ("qwenai", "deepseek-v4.1-flash"),
@@ -376,6 +379,9 @@ def test_fallback_failure_gets_one_bounded_retry(
       "errorMessage": "HTTP 401 invalid_api_key"},
      ("auth_or_quota_failure", "invalid_api_key", 401)),
     ({"provider": "qwenai", "stopReason": "error",
+      "errorMessage": '{"code":"AccessDenied.Unpurchased"}'},
+     ("auth_or_quota_failure", "AccessDenied.Unpurchased", None)),
+    ({"provider": "qwenai", "stopReason": "error",
       "errorMessage": "unexpected response"},
      ("unknown_provider_failure", None, None)),
 ])
@@ -384,14 +390,16 @@ def test_public_provider_failure_classification(message, expected):
 
 
 @pytest.mark.parametrize("path", [
-    "retry-primary", "retry-alternate", "input-rejected", "qwen-primary",
+    "retry-primary", "retry-alternate", "input-rejected", "qwen-primary", "model-access-denied",
+    "model-access-denied-final-slot",
 ])
 @pytest.mark.parametrize("final_stop", ["stop", "error"])
 def test_final_fallback_has_reserved_attempt_and_never_routes_back(tmp_path, path, final_stop):
     primary = ("heyroute ", "grok-4.7")
     alternate = ("qwenai", "deepseek-v4.1-flash")
     final = ("deepseek", "deepseek-flash")
-    if path == "qwen-primary":
+    final_slot_only = path == "model-access-denied-final-slot"
+    if path in {"qwen-primary", "model-access-denied"} or final_slot_only:
         primary, alternate = alternate, primary
     scenarios = {
         "retry-primary": [
@@ -412,6 +420,14 @@ def test_final_fallback_has_reserved_attempt_and_never_routes_back(tmp_path, pat
             (alternate, "HTTP 503 terminated", 169),
             (alternate, "HTTP 503 terminated", 169),
         ],
+        "model-access-denied": [
+            (primary, '403 {"code":"AccessDenied.Unpurchased"}', 0.12),
+            (alternate, "HTTP 503 terminated", 169),
+            (alternate, "HTTP 503 terminated", 169),
+        ],
+        "model-access-denied-final-slot": [
+            (primary, '403 {"code":"AccessDenied.Unpurchased"}', 0.12),
+        ],
     }
     sequence = scenarios[path]
     steps = [provider_attempt(*pair, i + 1, stop_reason="error", error=error, age=age)
@@ -422,8 +438,9 @@ def test_final_fallback_has_reserved_attempt_and_never_routes_back(tmp_path, pat
     def selection(pair):
         return {"provider": pair[0], "model": pair[1], "thinking": "low"}
 
+    max_attempts = 1 if final_slot_only else 3
     recovery = {"selected": selection(primary), "alternate": selection(alternate),
-                "final_fallback": selection(final), "max_additional_attempts": 3}
+                "final_fallback": selection(final), "max_additional_attempts": max_attempts}
     state = {"initial": recovery["selected"], "current": recovery["selected"].copy(),
              "alternate": recovery["alternate"], "final_fallback": recovery["final_fallback"],
              "recovery_scheduled": 0, "recovery_count": 0, "request_count": 0}
@@ -438,8 +455,10 @@ def test_final_fallback_has_reserved_attempt_and_never_routes_back(tmp_path, pat
             asyncio.run(consume)
         assert state["recovery_stop_reason"] == "final_fallback_failed"
     assert len(process.prompts) == len(sequence) + 1
-    assert [(c["provider"], c["modelId"]) for c in process.model_commands] == [alternate, final]
-    assert state["recovery_count"] == len(sequence) <= 3
+    assert [(c["provider"], c["modelId"]) for c in process.model_commands] == (
+        [final] if final_slot_only else [alternate, final]
+    )
+    assert state["recovery_count"] == len(sequence) <= max_attempts
 
 
 @pytest.mark.parametrize("drawing,enabled,mode", [
@@ -504,24 +523,43 @@ def test_explicit_input_rejection_can_switch_non_qwen_initial_model():
     ) == ("switch_model", alternate)
 
 
-@pytest.mark.parametrize("cancelled,remaining,expected", [
-    (False, 60, "recovery_time_budget_exhausted"),
-    (True, 900, "cancelled"),
+@pytest.mark.parametrize("code,on_initial", [
+    ("AccessDenied.Other", True),
+    ("AccessDenied.Unpurchased", False),
 ])
-def test_public_recovery_stops_before_request_when_time_or_cancel_blocks(
-    tmp_path, cancelled, remaining, expected,
+def test_access_denied_recovery_is_limited_to_unpurchased_on_initial_model(code, on_initial):
+    initial = {"provider": "qwenai", "model": "deepseek-v4.1-flash"}
+    alternate = {"provider": "heyroute ", "model": "grok-4.7"}
+    assert PiRunner._select_recovery(
+        "auth_or_quota_failure", initial if on_initial else alternate, initial, alternate,
+        1, 0.12, provider_code=code,
+    ) is None
+
+
+@pytest.mark.parametrize("provider_error,provider_category", [
+    ("HTTP 503 unavailable", "transient_provider_failure"),
+    ('403 {"code":"AccessDenied.Unpurchased"}', "auth_or_quota_failure"),
+])
+@pytest.mark.parametrize("cancelled,remaining,max_attempts,stop_reason,category", [
+    (False, 60, 2, "recovery_time_budget_exhausted", "recovery_time_budget_exhausted"),
+    (True, 900, 2, None, "cancelled"),
+    (False, 900, 0, "recovery_attempt_budget_exhausted", None),
+])
+def test_public_recovery_stops_before_request_when_budget_or_cancel_blocks(
+    tmp_path, provider_error, provider_category, cancelled, remaining, max_attempts,
+    stop_reason, category,
 ):
     primary = ("qwenai", "deepseek-v4.1-flash")
     alternate = ("heyroute ", "grok-4.7")
     process = RecoveryProcess([provider_attempt(
-        *primary, 1, stop_reason="error", error="HTTP 503 unavailable", age=2,
+        *primary, 1, stop_reason="error", error=provider_error, age=2,
     )])
     if cancelled:
         (tmp_path / "cancel.requested").touch()
     recovery = {
         "selected": {"provider": primary[0], "model": primary[1], "thinking": "low"},
         "alternate": {"provider": alternate[0], "model": alternate[1], "thinking": "low"},
-        "max_additional_attempts": 2, "min_remaining_seconds": 120,
+        "max_additional_attempts": max_attempts, "min_remaining_seconds": 120,
     }
     state = {
         "initial": recovery["selected"], "current": recovery["selected"].copy(),
@@ -535,8 +573,10 @@ def test_public_recovery_stops_before_request_when_time_or_cancel_blocks(
             model_state=state, deadline=time.monotonic() + remaining,
         ))
 
-    assert error.value.failure_category == expected
+    assert error.value.failure_category == (category or provider_category)
+    assert state.get("recovery_stop_reason") == stop_reason
     assert len(process.prompts) == 1
+    assert not process.model_commands
     assert state["recovery_scheduled"] == 0
 
 
