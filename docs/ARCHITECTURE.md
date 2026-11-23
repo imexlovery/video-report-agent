@@ -31,7 +31,7 @@
 
 Standard 与 Brief 题头来源均按实际平台、作者、原视频完整标题和 URL 展示；共用 Skill 从来源元数据／链接确定平台，产品沿用 `input.json.attribution`，未知字段省略，不默认 Bilibili。此规则作用于后续生成，不重写已有报告。
 
-统一平台入口为 `source_access.py`：`resolve_source` 解析链接／分享文本，`preflight_source` 始终匿名验证字幕正文或媒体地址的少量字节，`prepare_source` 在明确权限限制后按授权使用用户电脑上的登录态。CLI 自动模式设置 `source_access=True`；浏览器名／Cookie 文件路径只通过 Worker 环境传递，任务仅记录是否允许登录。网站任务不启用登录回退。充电试看在检查与下载两个位置拒绝；账号实际付费权限由平台决定，B站充电内容尚无真实付费样本验证。YouTube 会员样本匿名检查的问题暂存于 [PLAN](PLAN.md)。
+统一平台入口为 `source_access.py`：`resolve_source` 解析链接／分享文本，`preflight_source` 始终匿名验证字幕正文或媒体地址的少量字节，`prepare_source` 在明确权限限制后按授权使用用户电脑上的登录态。CLI 自动模式设置 `source_access=True`；浏览器名／Cookie 文件路径只通过 Worker 环境传递，任务仅记录是否允许登录。网站以匿名检查结果判断视频能否提交。充电试看在检查与下载两个位置拒绝；账号实际付费权限由平台决定，B站充电内容尚无真实付费样本验证。YouTube 会员样本匿名检查的问题暂存于 [PLAN](PLAN.md)。
 
 `prepare_source_result` 在同一次匿名检查中通过 `on_metadata` 提前返回视频信息，最终分别提供公开检查结果与服务端素材快照；`preflight_source` 只取公开部分。YouTube 单次解析同时提供元数据、字幕轨和媒体格式，字幕正文优先获取；无字幕时只读取少量媒体字节验证可访问性，不提前下载完整音视频。调用方可以把可信素材传给 `create_run(prepared_source=...)`，任务复用已取得的元数据与字幕正文。无字幕时，10 分钟内的媒体格式通过临时 `--load-info-json` 文件交给 yt-dlp，避免再次解析视频页；过期或下载失败时重新解析。格式快照过滤 Cookie／Authorization 等凭据，临时文件在下载结束时删除。
 
@@ -41,7 +41,7 @@ Standard 与 Brief 题头来源均按实际平台、作者、原视频完整标�
 
 YouTube 单视频走自动选源路径，由 [youtube_subtitles.py](../src/video_report_agent/youtube_subtitles.py) 读取原语言作者字幕或原语言自动字幕，无可用字幕再下载音轨，由百炼 Qwen Audio 3.1 Filetrans 自动识别语言并保留方言表达。复用规范转写、缓存和 `TRANSCRIPT_READY` 终态。见 [文字稿来源](subtitle-sources.md#youtube-单视频)。
 
-默认 Web/CLI 的 Bilibili `auto` 依次尝试作者字幕轨、`ai-zh`、Qwen Audio 3.1 Filetrans。任一字幕正文可用即结束采集。Local 可主动使用自选来源。自选文字稿入口接收有序的 `transcript_sources`：ASR、非 AI 字幕轨、B站 `ai-zh`。第一路可用来源提供时间轴，其余已选来源参与局部校对；未选 ASR 时跳过媒体下载、音频提取与 ASR。字幕获取、来源状态、缓存及对照命令见 [可选文字稿来源](subtitle-sources.md)。`transcribe` 在 `TRANSCRIPT_READY` 结束，不启动后续 Agent/报告阶段；旧显式 ASR-only/fused 调用保持兼容。
+默认 Web/CLI 的 Bilibili `auto` 依次尝试作者字幕轨、`ai-zh`、Qwen Audio 3.1 Filetrans。任一字幕正文可用即结束采集。视频通过取材检查但没有可用字幕时，生成阶段可用 Worker 配置的 `BILIBILI_SESSDATA` 补查字幕；媒体下载沿用原有访问路径。Local 可主动使用自选来源。自选文字稿入口接收有序的 `transcript_sources`：ASR、非 AI 字幕轨、B站 `ai-zh`。第一路可用来源提供时间轴，其余已选来源参与局部校对；未选 ASR 时跳过媒体下载、音频提取与 ASR。字幕获取、来源状态、缓存及对照命令见 [可选文字稿来源](subtitle-sources.md)。`transcribe` 在 `TRANSCRIPT_READY` 结束，不启动后续 Agent/报告阶段；旧显式 ASR-only/fused 调用保持兼容。
 
 `create_run` 登记数据库中的输入与初始状态，再导出任务材料；独立运行默认 `runs/state.sqlite3`，嵌入调用显式传 `database_path`。受监督 execution 原子认领 run，并把数据库路径与执行 ID 传给可信 Python Worker。调用方持有业务事务时，Core 方法使用同一个 `db`，不另开连接或提交；提交后才导出与派发。详见 [SQLite 存储](sqlite-storage.md)。
 

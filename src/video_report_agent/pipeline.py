@@ -307,6 +307,25 @@ def generate(
                             for s in requested
                         }
                     }
+                else:
+                    if (
+                        automatic
+                        and isinstance(source, BilibiliSource)
+                        and source_cookies is not None
+                        and os.getenv("BILIBILI_SESSDATA", "").strip()
+                        and not any(
+                            track["status"] == "READY"
+                            for track in subtitle_snapshot["sources"].values()
+                        )
+                    ):
+                        # Public material is already accessible. Use the service login
+                        # only for subtitles, keeping the original media access path.
+                        try:
+                            subtitle_snapshot = fetch_subtitles(
+                                source, requested, first_available=True,
+                            )
+                        except SubtitleError as exc:
+                            detail["authenticated_retry_error"] = exc.category
                 name = subtitle_snapshot_name(metadata["video_id"])
                 write_json(run / name, subtitle_snapshot)
                 documents[name] = json.dumps(subtitle_snapshot)

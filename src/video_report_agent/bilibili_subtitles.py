@@ -252,21 +252,27 @@ class BilibiliSubtitles:
     def video_info(self, source):
         data = self._json("/x/web-interface/view", params={"bvid": source.bvid})
         pages = data.get("pages", [])
+        if not isinstance(pages, list):
+            raise SubtitleError("SUBTITLE_FETCH_FAILED", "B站接口返回了无效的视频信息。")
         if data.get("bvid") != source.bvid or not 1 <= source.page_number <= len(pages):
             raise SubtitleError("URL_INVALID", "视频信息或分 P 与请求不一致。")
         page = pages[source.page_number - 1]
+        title, aid = data.get("title"), data.get("aid")
+        cid = page.get("cid") if isinstance(page, dict) else None
+        if not isinstance(title, str) or not isinstance(aid, int) or not isinstance(cid, int):
+            raise SubtitleError("SUBTITLE_FETCH_FAILED", "B站接口返回了无效的视频信息。")
         duration = page.get("duration")
         if not isinstance(duration, (int, float)) or not 0 < duration <= MAX_VIDEO_SECONDS:
             raise SubtitleError("VIDEO_DURATION_INVALID", "视频时长无效或超过 5 小时。")
-        title = data["title"]
         if len(pages) > 1:
             title += f" - P{source.page_number} {page.get('part', '')}"
-        uploader = data.get("owner", {}).get("name", "")
+        owner = data.get("owner")
+        uploader = owner.get("name", "") if isinstance(owner, dict) else ""
         return {
             "video_id": source.video_id,
             "bvid": source.bvid,
-            "aid": data["aid"],
-            "cid": page["cid"],
+            "aid": aid,
+            "cid": cid,
             "page": source.page_number,
             "duration_ms": round(duration * 1000),
             "title": title,
@@ -308,7 +314,11 @@ class BilibiliSubtitles:
             data = self._json("/x/player/wbi/v2", params=params)
             if data.get("aid") != info["aid"] or data.get("cid") != info["cid"]:
                 raise ValueError("subtitle identity mismatch")
-            tracks = data.get("subtitle", {}).get("subtitles", [])
+            subtitle = data.get("subtitle", {})
+            player_tracks = subtitle.get("subtitles", []) if isinstance(subtitle, dict) else None
+            if not isinstance(player_tracks, list):
+                raise ValueError("invalid subtitle tracks")
+            tracks = player_tracks
         except (SubtitleError, KeyError, ValueError, TypeError, IndexError):
             failures.append("PLAYER_SUBTITLE_FAILED")
         # Query the new interface even when the old one only has a manual track.
@@ -331,7 +341,8 @@ class BilibiliSubtitles:
             failures.append("WEB_SUBTITLE_FAILED")
         unique = {}
         for track in tracks:
-            if track.get("subtitle_url"):
+            url = track.get("subtitle_url") if isinstance(track, dict) else None
+            if isinstance(url, str) and url and isinstance(track.get("lan"), str):
                 unique.setdefault((str(track.get("id")), track.get("lan")), track)
         return list(unique.values()), logged_in, failures
 

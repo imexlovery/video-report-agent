@@ -16,7 +16,7 @@ OCR 在 Web 暂时关闭；Core 的旧 CLI 接口保留。以下规则仅描述�
 
 ## 登录与提取
 
-手动字幕接口可通过 `BILIBILI_SUBTITLE_BROWSER=edge`（或 yt-dlp 支持的其他浏览器）读取已有 B站登录态，也可由环境提供 `BILIBILI_SESSDATA`。默认不读取浏览器。Cookie 只留在内存中，仅发送到 B站 API 域，不写入任务、缓存、日志或前端，也不发给字幕 CDN。
+视频通过匿名取材检查但未取得可用字幕时，自动转写可使用 Worker 环境中的 `BILIBILI_SESSDATA` 补查作者字幕和 `ai-zh`。该配置仅用于字幕补查，提交准入和媒体下载仍按原有访问路径处理。手动字幕接口也支持 `BILIBILI_SESSDATA`，或通过 `BILIBILI_SUBTITLE_BROWSER=edge`（或 yt-dlp 支持的其他浏览器）读取已有登录态。字幕 Cookie 只留在内存中，仅发送到 B站 API 域，不写入任务、缓存、日志或前端，也不发给字幕 CDN。
 
 先取得指定分 P 的 aid/cid/时长，再查询 WBI 签名播放器接口与新版 Protobuf 字幕接口。播放器响应必须与请求的 aid/cid 一致。两者返回同一轨道时保留签名播放器地址，避免新版不可直接下载的地址覆盖可用地址。下载签名 URL 不持久化。
 
@@ -27,7 +27,7 @@ OCR 在 Web 暂时关闭；Core 的旧 CLI 接口保留。以下规则仅描述�
 从 Core 仓库执行：
 
 ```bash
-BILIBILI_SUBTITLE_BROWSER=edge uv run video-report \
+uv run video-report \
   --runs .local/evals/subtitle-trial/runs \
   transcribe 'https://www.bilibili.com/video/BVxxxxxxxxxx/'
 ```

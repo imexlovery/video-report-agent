@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
+from yt_dlp.cookies import YoutubeDLCookieJar
 
 from video_report_agent import pipeline
 from video_report_agent.asr import DEFAULT_ASR_MODEL
@@ -36,6 +37,10 @@ def snapshot(author="ABSENT", ai="READY"):
 
 def forbidden(*a, **kw):
     pytest.fail("A stopped or unselected stage was called")
+
+
+def preparation(subtitles):
+    return {"version": 1, "video_id": subtitles["video_id"], "snapshot": subtitles}
 
 
 @pytest.mark.parametrize(
@@ -80,7 +85,56 @@ def test_auto_captions_stop_without_asr_credentials_media_ocr_or_report(
     assert result["transcript_reused_from"] == runs[0].name
 
 
-@pytest.mark.parametrize("source_error", [False, True, "invalid-nav"])
+@pytest.mark.parametrize(
+    "prepared,anonymous_author,anonymous_ai,chosen",
+    [
+        (True, "LOGIN_REQUIRED", "FAILED", "bilibili_ai"),
+        (False, "ABSENT", "LOGIN_REQUIRED", "bilibili_ai"),
+        (True, "READY", "SKIPPED", "subtitle_track"),
+    ],
+)
+def test_auto_service_login_supplements_public_source(
+    tmp_path, monkeypatch, prepared, anonymous_author, anonymous_ai, chosen,
+):
+    anonymous = snapshot(anonymous_author, anonymous_ai)
+    monkeypatch.setenv("BILIBILI_SESSDATA", "fixture-session")
+    monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+    for name in ("download_source_audio", "transcribe_audio", "PiRunner"):
+        monkeypatch.setattr(pipeline, name, forbidden)
+    if prepared:
+        monkeypatch.setattr(pipeline, "prepare_source", forbidden)
+    else:
+        monkeypatch.setattr(pipeline, "prepare_source", lambda *a, **kw: (
+            validate_bilibili_url(URL), anonymous, YoutubeDLCookieJar(),
+        ))
+    monkeypatch.setattr(BilibiliSubtitles, "video_info", lambda *a: snapshot())
+    calls = []
+
+    def tracks(client, info):
+        calls.append("authenticated subtitles")
+        assert client.client.cookies.get("SESSDATA", domain="api.bilibili.com") == "fixture-session"
+        return [{
+            "id": 1, "lan": "ai-zh", "subtitle_url": "https://aisubtitle.hdslb.com/fixture",
+        }], True, []
+
+    monkeypatch.setattr(BilibiliSubtitles, "tracks", tracks)
+    monkeypatch.setattr(
+        BilibiliSubtitles, "_get", lambda *a, **kw: httpx.Response(200, json={"body": BODY}),
+    )
+    run = pipeline.create_run(
+        tmp_path, URL, transcript_mode="auto", transcript_only=True, source_access=True,
+        prepared_source=preparation(anonymous) if prepared else None,
+    )
+    result = pipeline.generate(run)
+    assert result["state"] == "TRANSCRIPT_READY", result
+    assert result["transcript_primary_source"] == chosen
+    assert result["asr_performed"] is False
+    assert calls == (["authenticated subtitles"] if chosen == "bilibili_ai" else [])
+
+
+@pytest.mark.parametrize(
+    "source_error", [False, True, "invalid-nav", "invalid-view", "service-login", "no-login"],
+)
 def test_auto_reaches_asr_only_after_captions_unavailable(tmp_path, monkeypatch, source_error):
     calls = []
     monkeypatch.setenv("ASR_BACKEND", "paraformer")
@@ -89,11 +143,14 @@ def test_auto_reaches_asr_only_after_captions_unavailable(tmp_path, monkeypatch,
 
     def fetch(*a, **kw):
         calls.append("subtitles")
-        if source_error == "invalid-nav":
+        if source_error in ("invalid-nav", "invalid-view"):
 
             def handler(request):
                 if request.url.path.endswith("/nav"):
                     return httpx.Response(200, text="not json")
+                page = {"cid": 12, "duration": 3}
+                if source_error == "invalid-view":
+                    del page["cid"]
                 return httpx.Response(
                     200,
                     json={
@@ -102,7 +159,7 @@ def test_auto_reaches_asr_only_after_captions_unavailable(tmp_path, monkeypatch,
                             "bvid": "BV1qxn16yEvP",
                             "aid": 1,
                             "title": "合成视频",
-                            "pages": [{"cid": 12, "duration": 3}],
+                            "pages": [page],
                         },
                     },
                 )
@@ -125,6 +182,11 @@ def test_auto_reaches_asr_only_after_captions_unavailable(tmp_path, monkeypatch,
         return SimpleNamespace(
             media_path=path, title="合成视频", uploader="示例", attribution="Bilibili"
         )
+
+    def download_public(source, run, metadata, cookies, *, prepared):
+        assert list(cookies) == []
+        assert prepared["snapshot"]["sources"]["bilibili_ai"]["status"] == "LOGIN_REQUIRED"
+        return download(source, run)
 
     def audio(path, target):
         calls.append("audio")
@@ -150,13 +212,25 @@ def test_auto_reaches_asr_only_after_captions_unavailable(tmp_path, monkeypatch,
 
     monkeypatch.setattr(pipeline, "fetch_subtitles", fetch)
     monkeypatch.setattr(pipeline, "download_bilibili_video", download)
+    monkeypatch.setattr(pipeline, "download_source_audio", download_public)
     monkeypatch.setattr(pipeline, "extract_audio", audio)
     monkeypatch.setattr(pipeline, "transcribe_audio", asr)
     monkeypatch.setattr(pipeline, "PiRunner", forbidden)
-    run = pipeline.create_run(tmp_path, URL, transcript_mode="auto", transcript_only=True)
+    use_preparation = source_error in ("service-login", "no-login", "invalid-view")
+    if use_preparation and source_error != "no-login":
+        monkeypatch.setenv("BILIBILI_SESSDATA", "fixture-session")
+    else:
+        monkeypatch.delenv("BILIBILI_SESSDATA", raising=False)
+    run = pipeline.create_run(
+        tmp_path, URL, transcript_mode="auto", transcript_only=True,
+        source_access=use_preparation,
+        prepared_source=preparation(snapshot("LOGIN_REQUIRED", "LOGIN_REQUIRED"))
+        if use_preparation else None,
+    )
     result = pipeline.generate(run)
     assert result["state"] == "TRANSCRIPT_READY", result
-    assert calls == ["subtitles", "download", "audio", "asr"]
+    expected = ["download", "audio", "asr"]
+    assert calls == (expected if source_error == "no-login" else ["subtitles", *expected])
     assert result["transcript_primary_source"] == "asr"
     assert result["asr_performed"] is True
     assert result["transcript_source_status"]["ocr"]["status"] == "OFF"
