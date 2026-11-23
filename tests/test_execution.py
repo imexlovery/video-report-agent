@@ -39,8 +39,7 @@ def test_worker_completes_without_provider_call(tmp_path):
     Store(tmp_path / "state.sqlite3", initialize=False).metadata(run.name, metadata)
     status = execution.generate(run, timeout=10)
     assert status["state"] == "FAILED"
-    assert status["error_category"] != "EXECUTION_TIMEOUT"
-    assert "Bilibili" in status["error"]
+    assert status["error_category"] == "INPUT_REJECTED"
 
 
 def test_timeout_restores_interrupted_style_before_capturing_documents(tmp_path, monkeypatch):
