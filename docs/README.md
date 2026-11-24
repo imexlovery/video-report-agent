@@ -6,7 +6,7 @@
 - [可选文字稿来源、B站 AI 字幕与 ASR 对照](subtitle-sources.md)
 - [按需术语修正、联网取证与任务容器](term-correction.md)
 - [PLAN：候选方向与待办](PLAN.md)
-- [稀疏画面辅助理解：当前能力与实验候选](sparse-visual-understanding.md)
+- [稀疏画面辅助理解的实验结论](sparse-visual-understanding.md)
 - [DECISIONS：重要选择、原因与代价](DECISIONS.md)
 - [报告与评测口径](PROJECT.md#评测口径)
 - [报告设计偏好](report-design-preferences.md)
