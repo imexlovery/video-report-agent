@@ -85,6 +85,7 @@ def test_auto_captions_stop_without_asr_credentials_media_ocr_or_report(
     assert result["transcript_reused_from"] == runs[0].name
 
 
+@pytest.mark.parametrize("login", ["BILIBILI_SESSDATA", "BILIBILI_SUBTITLE_BROWSER"])
 @pytest.mark.parametrize(
     "prepared,anonymous_author,anonymous_ai,chosen",
     [
@@ -94,10 +95,22 @@ def test_auto_captions_stop_without_asr_credentials_media_ocr_or_report(
     ],
 )
 def test_auto_service_login_supplements_public_source(
-    tmp_path, monkeypatch, prepared, anonymous_author, anonymous_ai, chosen,
+    tmp_path, monkeypatch, login, prepared, anonymous_author, anonymous_ai, chosen,
 ):
     anonymous = snapshot(anonymous_author, anonymous_ai)
-    monkeypatch.setenv("BILIBILI_SESSDATA", "fixture-session")
+    monkeypatch.delenv("BILIBILI_SESSDATA", raising=False)
+    monkeypatch.delenv("BILIBILI_SUBTITLE_BROWSER", raising=False)
+    if login == "BILIBILI_SUBTITLE_BROWSER":
+        monkeypatch.setenv(login, "edge")
+
+        def browser_cookies(browser):
+            assert browser == "edge"
+            return [SimpleNamespace(name="SESSDATA", domain=".bilibili.com",
+                                    value="fixture-session")]
+
+        monkeypatch.setattr("yt_dlp.cookies.extract_cookies_from_browser", browser_cookies)
+    else:
+        monkeypatch.setenv(login, "fixture-session")
     monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
     for name in ("download_source_audio", "transcribe_audio", "PiRunner"):
         monkeypatch.setattr(pipeline, name, forbidden)
@@ -137,6 +150,7 @@ def test_auto_service_login_supplements_public_source(
 )
 def test_auto_reaches_asr_only_after_captions_unavailable(tmp_path, monkeypatch, source_error):
     calls = []
+    monkeypatch.delenv("BILIBILI_SUBTITLE_BROWSER", raising=False)
     monkeypatch.setenv("ASR_BACKEND", "paraformer")
     monkeypatch.setenv("ASR_MODEL", "paraformer-v2")
     monkeypatch.setenv("DASHSCOPE_API_KEY", "test-key")

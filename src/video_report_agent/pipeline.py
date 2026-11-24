@@ -312,7 +312,10 @@ def generate(
                         automatic
                         and isinstance(source, BilibiliSource)
                         and source_cookies is not None
-                        and os.getenv("BILIBILI_SESSDATA", "").strip()
+                        and (
+                            os.getenv("BILIBILI_SESSDATA", "").strip()
+                            or os.getenv("BILIBILI_SUBTITLE_BROWSER", "").strip()
+                        )
                         and not any(
                             track["status"] == "READY"
                             for track in subtitle_snapshot["sources"].values()
