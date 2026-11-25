@@ -85,6 +85,34 @@ def test_standard_navigation_lives_outside_paper_and_hides_for_long_image():
     assert '<span class="report-nav-title">目录</span>' in template
 
 
+def test_standard_table_keeps_short_groups_together_in_data_columns():
+    body = """
+    <table><thead><tr><th scope="col">项目</th><th scope="col">方法</th>
+      <th scope="col">条件</th></tr></thead><tbody>
+      <tr><th scope="row">样品甲</th><td><span class="table-keep">颜色对照</span></td>
+        <td>先用相同试剂处理，等待颜色稳定，再向其中加入
+          <span class="table-keep">2–3 mL</span> 溶液并继续观察两分钟。</td></tr>
+    </tbody></table>
+    """
+    template = TEMPLATE.read_text().replace("{{BODY}}", body)
+    with sync_playwright() as playwright, playwright.chromium.launch() as browser:
+        page = browser.new_page(viewport={"width": 920, "height": 900})
+        page.set_content(template)
+        groups = page.locator("td .table-keep").evaluate_all("""groups => groups.map(group => ({
+            fragments: group.getClientRects().length,
+            wrap: getComputedStyle(group).whiteSpace,
+            fits: group.getBoundingClientRect().right <= group.closest('td').getBoundingClientRect().right
+        }))""")
+        assert groups == [{"fragments": 1, "wrap": "nowrap", "fits": True}] * 2
+        assert page.locator("tbody td").last.evaluate(
+            """cell => {
+                const content = document.createRange();
+                content.selectNodeContents(cell);
+                return content.getBoundingClientRect().height > parseFloat(getComputedStyle(cell).lineHeight);
+            }"""
+        )
+
+
 @pytest.mark.parametrize("width", [390, 1440])
 def test_bar_component_renders_visible_fills_at_declared_ratios(width):
     """Check the actual span geometry, including CSS cascade and mobile layout."""
